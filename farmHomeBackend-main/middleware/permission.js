@@ -210,6 +210,9 @@ module.exports = {
   requireTenantAccess,
   requireResourceOwnership,
   requireFeature,
+  // Backward-compatible aliases
+  superAdminOnly: requireSuperAdmin,
+  adminOnly: requireAdmin,
   requireSuperAdmin,
   requireAdmin,
   requireManager,

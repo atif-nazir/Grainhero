@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Package, Thermometer, Droplets, Wind, AlertCircle } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface Silo {
   _id: string
@@ -34,61 +35,19 @@ export default function SilosPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
 
-  // Mock data for now - replace with actual API call
   useEffect(() => {
-    setTimeout(() => {
-      const mockSilos: Silo[] = [
-        {
-          _id: '1',
-          silo_id: 'SILO-A-001',
-          name: 'Silo A - Main Storage',
-          capacity_kg: 10000,
-          current_occupancy_kg: 7500,
-          status: 'active',
-          current_conditions: {
-            temperature: { value: 22.5, timestamp: '2024-01-25T10:30:00Z' },
-            humidity: { value: 45.2, timestamp: '2024-01-25T10:30:00Z' },
-            co2: { value: 850, timestamp: '2024-01-25T10:30:00Z' }
-          },
-          current_batch_id: {
-            batch_id: 'GH-2024-001',
-            grain_type: 'Wheat'
-          }
-        },
-        {
-          _id: '2',
-          silo_id: 'SILO-B-001',
-          name: 'Silo B - Secondary',
-          capacity_kg: 8000,
-          current_occupancy_kg: 5200,
-          status: 'active',
-          current_conditions: {
-            temperature: { value: 24.1, timestamp: '2024-01-25T10:30:00Z' },
-            humidity: { value: 52.8, timestamp: '2024-01-25T10:30:00Z' },
-            co2: { value: 920, timestamp: '2024-01-25T10:30:00Z' }
-          },
-          current_batch_id: {
-            batch_id: 'GH-2024-002',
-            grain_type: 'Rice'
-          }
-        },
-        {
-          _id: '3',
-          silo_id: 'SILO-C-001',
-          name: 'Silo C - Reserve',
-          capacity_kg: 6000,
-          current_occupancy_kg: 0,
-          status: 'maintenance',
-          current_conditions: {
-            temperature: { value: 20.8, timestamp: '2024-01-25T10:30:00Z' },
-            humidity: { value: 38.5, timestamp: '2024-01-25T10:30:00Z' },
-            co2: { value: 400, timestamp: '2024-01-25T10:30:00Z' }
-          }
-        }
-      ]
-      setSilos(mockSilos)
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ silos: Silo[] }>(`/silos?limit=50`)
+      if (!mounted) return
+      if (res.ok && res.data) {
+        setSilos(res.data.silos as unknown as Silo[])
+      }
       setLoading(false)
-    }, 1000)
+    })()
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const getStatusBadge = (status: string) => {
@@ -112,16 +71,16 @@ export default function SilosPage() {
       co2: { max: 1000, critical_max: 5000 }
     }
     
-    const threshold = thresholds[type]
     if (type === 'co2') {
+      const threshold = thresholds.co2
       if (value > threshold.critical_max) return { status: 'critical', color: 'text-red-600' }
       if (value > threshold.max) return { status: 'warning', color: 'text-yellow-600' }
       return { status: 'normal', color: 'text-green-600' }
-    } else {
-      if (value > threshold.critical_max || value < threshold.min) return { status: 'critical', color: 'text-red-600' }
-      if (value > threshold.max) return { status: 'warning', color: 'text-yellow-600' }
-      return { status: 'normal', color: 'text-green-600' }
     }
+    const threshold = thresholds[type] as { min: number; max: number; critical_max: number }
+    if (value > threshold.critical_max || value < threshold.min) return { status: 'critical', color: 'text-red-600' }
+    if (value > threshold.max) return { status: 'warning', color: 'text-yellow-600' }
+    return { status: 'normal', color: 'text-green-600' }
   }
 
   const filteredSilos = silos.filter(silo =>
@@ -240,9 +199,12 @@ export default function SilosPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredSilos.map((silo) => {
           const occupancyPercentage = getOccupancyPercentage(silo.current_occupancy_kg, silo.capacity_kg)
-          const tempStatus = getConditionStatus(silo.current_conditions.temperature.value, 'temperature')
-          const humidityStatus = getConditionStatus(silo.current_conditions.humidity.value, 'humidity')
-          const co2Status = getConditionStatus(silo.current_conditions.co2.value, 'co2')
+          const tempValue = silo.current_conditions?.temperature?.value
+          const humValue = silo.current_conditions?.humidity?.value
+          const co2Value = silo.current_conditions?.co2?.value
+          const tempStatus = getConditionStatus(typeof tempValue === 'number' ? tempValue : 0, 'temperature')
+          const humidityStatus = getConditionStatus(typeof humValue === 'number' ? humValue : 0, 'humidity')
+          const co2Status = getConditionStatus(typeof co2Value === 'number' ? co2Value : 0, 'co2')
 
           return (
             <Card key={silo._id} className="hover:shadow-lg transition-shadow">
@@ -289,7 +251,7 @@ export default function SilosPage() {
                       <span>Temperature</span>
                     </div>
                     <span className={tempStatus.color}>
-                      {silo.current_conditions.temperature.value}°C
+                      {typeof tempValue === 'number' ? `${tempValue}°C` : 'N/A'}
                     </span>
                   </div>
 
@@ -299,7 +261,7 @@ export default function SilosPage() {
                       <span>Humidity</span>
                     </div>
                     <span className={humidityStatus.color}>
-                      {silo.current_conditions.humidity.value}%
+                      {typeof humValue === 'number' ? `${humValue}%` : 'N/A'}
                     </span>
                   </div>
 
@@ -309,7 +271,7 @@ export default function SilosPage() {
                       <span>CO₂</span>
                     </div>
                     <span className={co2Status.color}>
-                      {silo.current_conditions.co2.value} ppm
+                      {typeof co2Value === 'number' ? `${co2Value} ppm` : 'N/A'}
                     </span>
                   </div>
                 </div>

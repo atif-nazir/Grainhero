@@ -17,6 +17,11 @@ const webhookRoute = require('./routes/webhooks');
 // GrainHero integrated routes
 const grainBatchesRoute = require('./routes/grainBatches');
 const sensorsRoute = require('./routes/sensors');
+const silosRoute = require('./routes/silos');
+
+// Super Admin routes
+const tenantManagementRoute = require('./routes/tenantManagement');
+const planManagementRoute = require('./routes/planManagement');
 
 const Alert = require('./models/Alert');
 
@@ -61,6 +66,11 @@ app.use('/quotes', quotesRoute);
 // GrainHero integrated routes
 app.use('/grain-batches', grainBatchesRoute);
 app.use('/sensors', sensorsRoute);
+app.use('/silos', silosRoute);
+
+// Super Admin routes
+app.use('/api/tenant-management', tenantManagementRoute);
+app.use('/api/plan-management', planManagementRoute);
 
 app.use('/', dashboardRouter);
 

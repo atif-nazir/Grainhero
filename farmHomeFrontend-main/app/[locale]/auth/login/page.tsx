@@ -51,7 +51,7 @@ export default function LoginPage() {
         console.log(data)
         await login(email, password)
         setMessage("Login successful! Redirecting...")
-        setTimeout(() => router.push("/plans"), 1000)
+        setTimeout(() => router.push("/dashboard"), 1000)
       }
     } catch (err) {
       setMessage("Network error. Please try again.")

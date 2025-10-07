@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface SensorDevice {
   _id: string
@@ -38,62 +39,19 @@ export default function SensorsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
 
-  // Mock data for now - replace with actual API call
   useEffect(() => {
-    setTimeout(() => {
-      const mockSensors: SensorDevice[] = [
-        {
-          _id: '1',
-          device_id: 'SENS-001',
-          device_name: 'Silo A - Environmental Sensor',
-          status: 'active',
-          sensor_types: ['temperature', 'humidity', 'co2'],
-          battery_level: 85,
-          signal_strength: -45,
-          silo_id: { name: 'Silo A', silo_id: 'SILO-A-001' },
-          last_reading: '2024-01-25T10:30:00Z',
-          health_metrics: {
-            uptime_percentage: 99.2,
-            error_count: 2,
-            last_heartbeat: '2024-01-25T10:30:00Z'
-          }
-        },
-        {
-          _id: '2',
-          device_id: 'SENS-002',
-          device_name: 'Silo B - Multi Sensor',
-          status: 'active',
-          sensor_types: ['temperature', 'humidity', 'co2', 'voc', 'moisture'],
-          battery_level: 92,
-          signal_strength: -38,
-          silo_id: { name: 'Silo B', silo_id: 'SILO-B-001' },
-          last_reading: '2024-01-25T10:28:00Z',
-          health_metrics: {
-            uptime_percentage: 98.7,
-            error_count: 0,
-            last_heartbeat: '2024-01-25T10:28:00Z'
-          }
-        },
-        {
-          _id: '3',
-          device_id: 'SENS-003',
-          device_name: 'Silo C - Basic Sensor',
-          status: 'offline',
-          sensor_types: ['temperature', 'humidity'],
-          battery_level: 15,
-          signal_strength: -78,
-          silo_id: { name: 'Silo C', silo_id: 'SILO-C-001' },
-          last_reading: '2024-01-24T15:45:00Z',
-          health_metrics: {
-            uptime_percentage: 45.2,
-            error_count: 15,
-            last_heartbeat: '2024-01-24T15:45:00Z'
-          }
-        }
-      ]
-      setSensors(mockSensors)
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
+      if (!mounted) return
+      if (res.ok && res.data) {
+        setSensors(res.data.sensors as unknown as SensorDevice[])
+      }
       setLoading(false)
-    }, 1000)
+    })()
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const getStatusBadge = (status: string) => {

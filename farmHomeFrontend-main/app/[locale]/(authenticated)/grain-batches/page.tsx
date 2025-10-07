@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Search, Filter, Package, QrCode, AlertTriangle } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface GrainBatch {
   _id: string
@@ -34,51 +35,19 @@ export default function GrainBatchesPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [grainTypeFilter, setGrainTypeFilter] = useState('all')
 
-  // Mock data for now - replace with actual API call
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      const mockBatches: GrainBatch[] = [
-        {
-          _id: '1',
-          batch_id: 'GH-2024-001',
-          grain_type: 'Wheat',
-          quantity_kg: 5000,
-          status: 'stored',
-          risk_score: 15,
-          spoilage_label: 'Safe',
-          intake_date: '2024-01-15',
-          silo_id: { name: 'Silo A', silo_id: 'SILO-A-001' },
-          farmer_name: 'Ahmed Khan'
-        },
-        {
-          _id: '2',
-          batch_id: 'GH-2024-002',
-          grain_type: 'Rice',
-          quantity_kg: 3500,
-          status: 'stored',
-          risk_score: 45,
-          spoilage_label: 'Risky',
-          intake_date: '2024-01-20',
-          silo_id: { name: 'Silo B', silo_id: 'SILO-B-001' },
-          farmer_name: 'Fatima Ali'
-        },
-        {
-          _id: '3',
-          batch_id: 'GH-2024-003',
-          grain_type: 'Maize',
-          quantity_kg: 2000,
-          status: 'dispatched',
-          risk_score: 8,
-          spoilage_label: 'Safe',
-          intake_date: '2024-01-10',
-          silo_id: { name: 'Silo C', silo_id: 'SILO-C-001' },
-          farmer_name: 'Muhammad Hassan'
-        }
-      ]
-      setBatches(mockBatches)
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ batches: GrainBatch[] }>(`/grain-batches?limit=50`)
+      if (!mounted) return
+      if (res.ok && res.data) {
+        setBatches(res.data.batches as unknown as GrainBatch[])
+      }
       setLoading(false)
-    }, 1000)
+    })()
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const getStatusBadge = (status: string) => {
