@@ -18,10 +18,14 @@ const webhookRoute = require('./routes/webhooks');
 const grainBatchesRoute = require('./routes/grainBatches');
 const sensorsRoute = require('./routes/sensors');
 const silosRoute = require('./routes/silos');
+const insuranceRoute = require('./routes/insurance');
 
 // Super Admin routes
 const tenantManagementRoute = require('./routes/tenantManagement');
 const planManagementRoute = require('./routes/planManagement');
+
+// User Management routes
+const userManagementRoute = require('./routes/userManagement');
 
 const Alert = require('./models/Alert');
 
@@ -67,10 +71,14 @@ app.use('/quotes', quotesRoute);
 app.use('/grain-batches', grainBatchesRoute);
 app.use('/sensors', sensorsRoute);
 app.use('/silos', silosRoute);
+app.use('/insurance', insuranceRoute);
 
 // Super Admin routes
 app.use('/api/tenant-management', tenantManagementRoute);
 app.use('/api/plan-management', planManagementRoute);
+
+// User Management routes
+app.use('/api/user-management', userManagementRoute);
 
 app.use('/', dashboardRouter);
 

@@ -1,14 +1,5 @@
 import { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
-import { config } from './config';
-
-// Parse backendUrl for protocol, hostname, port
-const url = new URL(config.backendUrl);
-const protocol = url.protocol.replace(':', '') as 'http' | 'https';
-const hostname = url.hostname;
-const port = url.port || '';
-
-// NOTE: If you change backendUrl in config.ts, you must restart the dev server for next.config.ts to pick up the new value.
 
 const nextConfig: NextConfig = {
   images: {
@@ -26,12 +17,22 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
       {
-        protocol,
-        hostname,
-        port,
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3001',
         pathname: '/uploads/**',
       },
     ],
+  },
+  experimental: {
+    turbo: {
+      rules: {
+        '*.svg': {
+          loaders: ['@svgr/webpack'],
+          as: '*.js',
+        },
+      },
+    },
   },
 };
 

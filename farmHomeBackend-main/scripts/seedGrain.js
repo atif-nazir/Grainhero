@@ -15,6 +15,9 @@ const User = require('../models/User');
 const Silo = require('../models/Silo');
 const GrainBatch = require('../models/GrainBatch');
 const SensorDevice = require('../models/SensorDevice');
+const Subscription = require('../models/Subscription');
+const InsurancePolicy = require('../models/InsurancePolicy');
+const InsuranceClaim = require('../models/InsuranceClaim');
 
 async function connect() {
   const uri = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}`;
@@ -238,6 +241,157 @@ async function main() {
 
     const sensors = await seedSensors(tenant, admin, silos);
     console.log(`Sensors seeded: ${sensors.length}`);
+
+    // Seed super admin and a few tenants for Super Admin dashboard
+    let superAdmin = await User.findOne({ role: 'super_admin' });
+    if (!superAdmin) {
+      superAdmin = new User({
+        name: 'Super Admin',
+        email: 'superadmin@example.com',
+        phone: '+920000000001',
+        role: 'super_admin',
+        password: 'SuperAdmin123!'
+      });
+      await superAdmin.save();
+    }
+
+    const existingTenants = await Subscription.countDocuments();
+    if (existingTenants < 3) {
+      const plans = [
+        { name: 'Basic', price: 99, users: 5, devices: 10, storage: 1 },
+        { name: 'Pro', price: 299, users: 25, devices: 50, storage: 10 },
+        { name: 'Enterprise', price: 999, users: 100, devices: 200, storage: 100 },
+      ];
+      for (let i = 1; i <= 3; i++) {
+        const t = new Tenant({
+          name: `Tenant ${i}`,
+          email: `tenant${i}@example.com`,
+          business_type: 'farm',
+          created_by: superAdmin._id,
+          is_active: true,
+        });
+        await t.save();
+        const plan = plans[i - 1];
+        const sub = new Subscription({
+          tenant_id: t._id,
+          plan_name: plan.name,
+          price_per_month: plan.price,
+          price_per_year: plan.price * 10,
+          billing_cycle: 'monthly',
+          start_date: new Date(),
+          end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'active',
+          features: {
+            max_users: plan.users,
+            max_devices: plan.devices,
+            max_storage_gb: plan.storage,
+            max_batches: -1,
+            ai_features: plan.name !== 'Basic',
+            priority_support: plan.name === 'Enterprise',
+            custom_integrations: plan.name === 'Enterprise',
+            advanced_analytics: plan.name !== 'Basic'
+          },
+          created_by: superAdmin._id
+        });
+        await sub.save();
+        t.subscription_id = sub._id;
+        await t.save();
+      }
+      console.log('Super Admin and sample tenants seeded');
+    }
+
+    // Seed insurance policies and claims
+    const existingPolicies = await InsurancePolicy.countDocuments();
+    if (existingPolicies < 2) {
+      const policies = await InsurancePolicy.insertMany([
+        {
+          policy_number: 'POL-2024-001',
+          tenant_id: tenant._id,
+          provider_name: 'AgriShield Insurance',
+          coverage_type: 'Comprehensive',
+          coverage_amount: 500000,
+          premium_amount: 15000,
+          deductible: 5000,
+          start_date: new Date('2024-01-01'),
+          end_date: new Date('2024-12-31'),
+          renewal_date: new Date('2024-12-15'),
+          status: 'active',
+          covered_batches: [
+            {
+              batch_id: batches[0]._id,
+              grain_type: 'Wheat',
+              quantity_kg: 5000,
+              coverage_value: 150000
+            },
+            {
+              batch_id: batches[1]._id,
+              grain_type: 'Rice',
+              quantity_kg: 3500,
+              coverage_value: 175000
+            }
+          ],
+          risk_factors: {
+            fire_risk: 15,
+            theft_risk: 8,
+            spoilage_risk: 25,
+            weather_risk: 12
+          },
+          created_by: admin._id
+        },
+        {
+          policy_number: 'POL-2024-002',
+          tenant_id: tenant._id,
+          provider_name: 'GrainGuard Ltd',
+          coverage_type: 'Fire & Theft',
+          coverage_amount: 300000,
+          premium_amount: 8000,
+          deductible: 3000,
+          start_date: new Date('2024-02-01'),
+          end_date: new Date('2025-01-31'),
+          renewal_date: new Date('2025-01-15'),
+          status: 'active',
+          covered_batches: [
+            {
+              batch_id: batches[2]._id,
+              grain_type: 'Maize',
+              quantity_kg: 2000,
+              coverage_value: 80000
+            }
+          ],
+          risk_factors: {
+            fire_risk: 20,
+            theft_risk: 15,
+            spoilage_risk: 30,
+            weather_risk: 18
+          },
+          created_by: admin._id
+        }
+      ]);
+
+      // Seed sample claim
+      await InsuranceClaim.create({
+        claim_number: 'CLM-2024-001',
+        policy_id: policies[1]._id,
+        tenant_id: tenant._id,
+        claim_type: 'Spoilage',
+        description: 'Grain spoilage due to moisture damage in storage',
+        amount_claimed: 30000,
+        amount_approved: 25000,
+        status: 'approved',
+        incident_date: new Date('2024-01-15'),
+        filed_date: new Date('2024-01-20'),
+        approved_date: new Date('2024-02-05'),
+        batch_affected: {
+          batch_id: batches[2]._id,
+          grain_type: 'Maize',
+          quantity_affected: 500,
+          estimated_value: 30000
+        },
+        created_by: admin._id
+      });
+
+      console.log('Insurance policies and claims seeded');
+    }
   } catch (e) {
     console.error(e);
   } finally {

@@ -24,6 +24,7 @@ import {
 
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
+import { useRouter } from "next/navigation"
 
 type DashboardResponse = {
   stats: Array<{ title: string; value: number | string }>
@@ -33,22 +34,63 @@ type DashboardResponse = {
   suggestions: { criticalStorage: Array<any>; optimization: Array<any> }
 }
 
+interface User {
+  _id: string
+  name: string
+  email: string
+  role: string
+  lastLogin?: string
+}
+
+interface RecentBatch {
+  _id: string
+  batch_id: string
+  grain_type: string
+  quantity_kg: number
+  status: string
+  risk_score: number
+  intake_date: string
+}
+
 export function TenantDashboard() {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+  const [recentBatches, setRecentBatches] = useState<RecentBatch[]>([])
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const res = await api.get<DashboardResponse>("/dashboard")
-      if (!mounted) return
-      if (res.ok && res.data) {
-        setData(res.data)
-      } else {
-        setError(res.error || "Failed to load dashboard")
+      try {
+        const [dashboardRes, usersRes, batchesRes] = await Promise.all([
+          api.get<DashboardResponse>("/dashboard"),
+          api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
+          api.get<{ batches: RecentBatch[] }>("/grain-batches?limit=5")
+        ])
+        
+        if (!mounted) return
+        
+        if (dashboardRes.ok && dashboardRes.data) {
+          setData(dashboardRes.data)
+        } else {
+          setError(dashboardRes.error || "Failed to load dashboard")
+        }
+        
+        if (usersRes.ok && usersRes.data) {
+          setUsers(usersRes.data.users as unknown as User[])
+        }
+        
+        if (batchesRes.ok && batchesRes.data) {
+          setRecentBatches(batchesRes.data.batches as unknown as RecentBatch[])
+        }
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error)
+        setError('Failed to load dashboard data')
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     })()
     return () => {
       mounted = false
@@ -56,8 +98,8 @@ export function TenantDashboard() {
   }, [])
 
   const tenantStats = {
-    totalUsers: 0,
-    totalBatches: 0,
+    totalUsers: users.length,
+    totalBatches: recentBatches.length,
     totalRevenue: 0,
     systemHealth: data?.capacityStats?.utilizationPercentage ?? 0,
     activeAlerts: 0,
@@ -65,19 +107,11 @@ export function TenantDashboard() {
     planUsage: 0
   }
 
-  const recentUsers = [
-    { id: 1, name: "John Manager", role: "manager", status: "active", lastLogin: "2 hours ago" },
-    { id: 2, name: "Sarah Tech", role: "technician", status: "active", lastLogin: "1 hour ago" },
-    { id: 3, name: "Mike Assistant", role: "technician", status: "inactive", lastLogin: "2 days ago" },
-    { id: 4, name: "Lisa Manager", role: "manager", status: "active", lastLogin: "30 min ago" }
-  ]
-
-  const grainBatches = [
-    { id: 1, type: "Wheat", quantity: "500 tons", status: "stored", risk: "low", location: "Silo A" },
-    { id: 2, type: "Rice", quantity: "300 tons", status: "stored", risk: "medium", location: "Silo B" },
-    { id: 3, type: "Maize", quantity: "750 tons", status: "processing", risk: "low", location: "Silo C" },
-    { id: 4, type: "Barley", quantity: "200 tons", status: "stored", risk: "high", location: "Silo D" }
-  ]
+  const getRiskBadge = (riskScore: number) => {
+    if (riskScore < 30) return { color: 'bg-green-100 text-green-800', label: 'Low' }
+    if (riskScore < 70) return { color: 'bg-yellow-100 text-yellow-800', label: 'Medium' }
+    return { color: 'bg-red-100 text-red-800', label: 'High' }
+  }
 
   const systemAlerts = [
     ...(tenantStats.criticalIssues > 0
@@ -255,28 +289,28 @@ export function TenantDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentUsers.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg">
+              {users.map((user) => (
+                <div key={user._id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
                       <h4 className="font-medium">{user.name}</h4>
-                      <Badge variant={user.status === "active" ? "default" : "secondary"}>
+                      <Badge variant="default">
                         {user.role}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Last login: {user.lastLogin}
+                      {user.email}
                     </p>
                   </div>
                   <div className="flex space-x-2">
-                    <Button size="sm" variant="outline">Edit</Button>
+                    <Button size="sm" variant="outline" onClick={() => router.push('/users')}>Edit</Button>
                     <Button size="sm" variant="outline">View</Button>
                   </div>
                 </div>
               ))}
             </div>
             <div className="mt-4">
-              <Button className="w-full">
+              <Button className="w-full" onClick={() => router.push('/users')}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add New User
               </Button>
@@ -297,28 +331,27 @@ export function TenantDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {grainBatches.map((batch) => (
-                <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-medium">{batch.type}</h4>
-                      <Badge variant={
-                        batch.risk === "high" ? "destructive" :
-                        batch.risk === "medium" ? "secondary" :
-                        "default"
-                      }>
-                        {batch.risk} risk
-                      </Badge>
+              {recentBatches.map((batch) => {
+                const riskBadge = getRiskBadge(batch.risk_score)
+                return (
+                  <div key={batch._id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-medium">{batch.grain_type}</h4>
+                        <Badge className={riskBadge.color}>
+                          {riskBadge.label} risk
+                        </Badge>
+                      </div>
+                      <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
+                        <span>{batch.quantity_kg.toLocaleString()} kg</span>
+                        <span className="capitalize">{batch.status}</span>
+                        <span>{batch.batch_id}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
-                      <span>{batch.quantity}</span>
-                      <span>{batch.location}</span>
-                      <span className="capitalize">{batch.status}</span>
-                    </div>
+                    <Button size="sm" variant="outline" onClick={() => router.push('/grain-batches')}>View</Button>
                   </div>
-                  <Button size="sm" variant="outline">View</Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -385,27 +418,50 @@ export function TenantDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => router.push('/users')}
+            >
               <UserPlus className="h-6 w-6" />
               <span>Add User</span>
             </Button>
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
+              variant="outline"
+              onClick={() => router.push('/grain-batches')}
+            >
               <Package className="h-6 w-6" />
               <span>New Batch</span>
             </Button>
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
+              variant="outline"
+              onClick={() => router.push('/sensors')}
+            >
               <Smartphone className="h-6 w-6" />
               <span>Manage Sensors</span>
             </Button>
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
+              variant="outline"
+              onClick={() => router.push('/reports')}
+            >
               <BarChart3 className="h-6 w-6" />
               <span>View Reports</span>
             </Button>
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
+              variant="outline"
+              onClick={() => router.push('/settings')}
+            >
               <Settings className="h-6 w-6" />
               <span>Settings</span>
             </Button>
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
+              variant="outline"
+              onClick={() => router.push('/security')}
+            >
               <Shield className="h-6 w-6" />
               <span>Security</span>
             </Button>

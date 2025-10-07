@@ -69,7 +69,12 @@ export function DataTable({
                   <div key={column.key} className={cn("", column.className)}>
                     {column.render ? 
                       column.render(row[column.key], row) : 
-                      <span>{row[column.key]}</span>
+                      <span>
+                        {typeof row[column.key] === 'object' && row[column.key] !== null
+                          ? JSON.stringify(row[column.key])
+                          : row[column.key]
+                        }
+                      </span>
                     }
                   </div>
                 ))}
