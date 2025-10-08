@@ -11,7 +11,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: "super_admin" | "admin" | "manager" | "assistant"
+  role: "super_admin" | "admin" | "manager" | "technician"
   language: LanguageCode
   phone?: string
   avatarUrl?: string // Add avatarUrl as optional for extensibility
