@@ -7,24 +7,20 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { 
-  Crown, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  DollarSign, 
-  Users, 
-  HardDrive, 
+import {
+  Crown,
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  DollarSign,
+  Users,
+  HardDrive,
   Smartphone,
   CheckCircle,
   XCircle,
   TrendingUp,
-  Activity,
-  Settings,
-  Zap,
-  Shield,
-  BarChart3
+  Settings
 } from "lucide-react"
 import { DataTable } from "@/components/dashboard/DataTable"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -77,9 +73,9 @@ interface Alert {
 export default function PlanManagementPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
+  const [filterStatus] = useState("all")
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
+  //const [editingPlan] = useState<Plan | null>(null)
 
   // Mock data - in real app, this would come from API
   const planStats = {
@@ -91,110 +87,6 @@ export default function PlanManagementPage() {
     growthRate: 15.8
   }
 
-  const mockPlans: Plan[] = [
-    {
-      id: "basic",
-      name: "Basic",
-      description: "Essential tools for small farms to get started.",
-      price: 9,
-      priceFrontend: "$9/mo",
-      priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
-      stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
-      features: [
-        "Animal management",
-        "Basic analytics", 
-        "Role-based access",
-        "Email support"
-      ],
-      limits: {
-        users: 5,
-        devices: 10,
-        storage: 1,
-        batches: 100
-      },
-      features_enabled: {
-        ai_features: false,
-        priority_support: false,
-        custom_integrations: false,
-        advanced_analytics: false,
-        api_access: false,
-        white_label: false
-      },
-      status: "active",
-      subscribers: 856,
-      revenue: 7704,
-      created_at: "2024-01-01",
-      updated_at: "2024-01-15"
-    },
-    {
-      id: "intermediate", 
-      name: "Intermediate",
-      description: "Advanced features for growing farms and teams.",
-      price: 29,
-      priceFrontend: "$29/mo",
-      priceId: "price_1RonmCRYMUmJuwVF0bBYtZJW",
-      stripeLink: "https://buy.stripe.com/test_fZu7sN6aq7MA5W71Xla3u02",
-      features: [
-        "Everything in Basic",
-        "Breeding & health tracking",
-        "Advanced analytics",
-        "Priority email support"
-      ],
-      limits: {
-        users: 25,
-        devices: 50,
-        storage: 10,
-        batches: 500
-      },
-      features_enabled: {
-        ai_features: true,
-        priority_support: true,
-        custom_integrations: false,
-        advanced_analytics: true,
-        api_access: true,
-        white_label: false
-      },
-      status: "active",
-      subscribers: 312,
-      revenue: 9048,
-      created_at: "2024-01-01",
-      updated_at: "2024-01-15"
-    },
-    {
-      id: "pro",
-      name: "Pro",
-      description: "Custom solutions for large operations and enterprises.",
-      price: 99,
-      priceFrontend: "$99/mo",
-      priceId: "price_1RonmYRYMUmJuwVFHKWWflRo",
-      stripeLink: "https://buy.stripe.com/test_4gM3cx9mC6Iw1FR1Xla3u03",
-      features: [
-        "Everything in Intermediate",
-        "Custom integrations",
-        "Dedicated account manager",
-        "24/7 support"
-      ],
-      limits: {
-        users: 100,
-        devices: 200,
-        storage: 100,
-        batches: -1 // unlimited
-      },
-      features_enabled: {
-        ai_features: true,
-        priority_support: true,
-        custom_integrations: true,
-        advanced_analytics: true,
-        api_access: true,
-        white_label: true
-      },
-      status: "active",
-      subscribers: 79,
-      revenue: 7821,
-      created_at: "2024-01-01",
-      updated_at: "2024-01-15"
-    }
-  ]
 
   const criticalAlerts: Alert[] = [
     {
@@ -214,6 +106,118 @@ export default function PlanManagementPage() {
   ]
 
   useEffect(() => {
+    const mockPlans: Plan[] = [
+      {
+        id: "basic",
+        name: "Basic",
+        description: "Essential tools for small farms to get started.",
+        price: 9,
+        priceFrontend: "$9/mo",
+        priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
+        stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
+        features: [
+          "Up to 5 grain batches",
+          "Basic quality monitoring",
+          "Email support",
+          "Mobile app access",
+          "1 silo monitoring"
+        ],
+        limits: {
+          users: 5,
+          devices: 3,
+          storage: 100,
+          batches: 5
+        },
+        features_enabled: {
+          ai_features: false,
+          priority_support: false,
+          custom_integrations: false,
+          advanced_analytics: false,
+          api_access: false,
+          white_label: false
+        },
+        status: "active",
+        subscribers: 847,
+        revenue: 7623,
+        created_at: "2024-01-15",
+        updated_at: "2024-01-15"
+      },
+      {
+        id: "professional",
+        name: "Professional",
+        description: "Advanced features for growing agricultural operations.",
+        price: 29,
+        priceFrontend: "$29/mo",
+        priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
+        stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
+        features: [
+          "Up to 50 grain batches",
+          "Advanced AI monitoring",
+          "Priority support",
+          "API access",
+          "Up to 10 silos",
+          "Custom reports",
+          "Team collaboration"
+        ],
+        limits: {
+          users: 25,
+          devices: 15,
+          storage: 500,
+          batches: 50
+        },
+        features_enabled: {
+          ai_features: true,
+          priority_support: true,
+          custom_integrations: true,
+          advanced_analytics: true,
+          api_access: true,
+          white_label: false
+        },
+        status: "active",
+        subscribers: 312,
+        revenue: 9048,
+        created_at: "2024-01-15",
+        updated_at: "2024-01-15"
+      },
+      {
+        id: "enterprise",
+        name: "Enterprise",
+        description: "Complete solution for large-scale agricultural operations.",
+        price: 99,
+        priceFrontend: "$99/mo",
+        priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
+        stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
+        features: [
+          "Unlimited grain batches",
+          "Full AI suite",
+          "24/7 phone support",
+          "Custom integrations",
+          "Unlimited silos",
+          "Advanced analytics",
+          "White-label options",
+          "Dedicated account manager"
+        ],
+        limits: {
+          users: 100,
+          devices: 50,
+          storage: 2000,
+          batches: 500
+        },
+        features_enabled: {
+          ai_features: true,
+          priority_support: true,
+          custom_integrations: true,
+          advanced_analytics: true,
+          api_access: true,
+          white_label: true
+        },
+        status: "active",
+        subscribers: 88,
+        revenue: 8712,
+        created_at: "2024-01-15",
+        updated_at: "2024-01-15"
+      }
+    ]
     setPlans(mockPlans)
   }, [])
 
@@ -237,8 +241,8 @@ export default function PlanManagementPage() {
 
   const filteredPlans = plans.filter(plan => {
     const matchesSearch = plan.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         plan.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         plan.id.toLowerCase().includes(searchTerm.toLowerCase())
+      plan.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      plan.id.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFilter = filterStatus === "all" || plan.status === filterStatus
     return matchesSearch && matchesFilter
   })
@@ -247,7 +251,7 @@ export default function PlanManagementPage() {
     {
       key: "plan",
       label: "Plan",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
             <Crown className="h-5 w-5 text-yellow-600" />
@@ -262,7 +266,7 @@ export default function PlanManagementPage() {
     {
       key: "pricing",
       label: "Pricing",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div>
           <div className="font-medium">{row.priceFrontend}</div>
           <div className="text-sm text-muted-foreground">${row.price}/month</div>
@@ -272,7 +276,7 @@ export default function PlanManagementPage() {
     {
       key: "status",
       label: "Status",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div className="flex items-center space-x-2">
           {getStatusIcon(row.status)}
           <Badge variant={getStatusColor(row.status)}>
@@ -284,7 +288,7 @@ export default function PlanManagementPage() {
     {
       key: "subscribers",
       label: "Subscribers",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div className="text-center">
           <div className="font-medium">{row.subscribers}</div>
           <div className="text-sm text-muted-foreground">users</div>
@@ -294,7 +298,7 @@ export default function PlanManagementPage() {
     {
       key: "revenue",
       label: "Monthly Revenue",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div className="text-center">
           <div className="font-medium">${row.revenue.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">per month</div>
@@ -304,7 +308,7 @@ export default function PlanManagementPage() {
     {
       key: "limits",
       label: "Limits",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div className="text-sm">
           <div className="flex items-center space-x-1">
             <Users className="h-3 w-3" />
@@ -320,7 +324,7 @@ export default function PlanManagementPage() {
     {
       key: "features",
       label: "Key Features",
-      render: (value: any, row: Plan) => (
+      render: (value: string, row: Plan) => (
         <div className="flex flex-wrap gap-1">
           {row.features_enabled.ai_features && <Badge variant="secondary" className="text-xs">AI</Badge>}
           {row.features_enabled.priority_support && <Badge variant="secondary" className="text-xs">Support</Badge>}
@@ -340,7 +344,7 @@ export default function PlanManagementPage() {
     {
       label: "Edit",
       icon: Edit,
-      onClick: (row: Plan) => setEditingPlan(row),
+      onClick: (row: Plan) => console.log('Edit plan:', row),
       variant: "outline" as const
     },
     {
@@ -479,7 +483,7 @@ export default function PlanManagementPage() {
               </div>
             </CardContent>
             <div className="absolute top-4 right-4">
-              <Button size="sm" variant="outline" onClick={() => setEditingPlan(plan)}>
+              <Button size="sm" variant="outline" onClick={() => console.log('Edit plan:', plan)}>
                 <Edit className="h-3 w-3" />
               </Button>
             </div>
