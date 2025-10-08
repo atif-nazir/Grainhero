@@ -740,9 +740,9 @@ router.post('/create-manager',auth, admin, async (req, res) => {
 
 /**
  * @swagger
- * /auth/create-assistant:
+ * /auth/create-technician:
  *   post:
- *     summary: Create a new assistant (admin only)
+ *     summary: Create a new technician (admin only)
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
@@ -771,13 +771,13 @@ router.post('/create-manager',auth, admin, async (req, res) => {
  *                 type: string
  *     responses:
  *       201:
- *         description: Assistant created successfully
+ *         description: Technician created successfully
  *       400:
  *         description: Bad request
  *       401:
  *         description: Unauthorized
  */
-router.post('/create-assistant', auth,admin, async (req, res) => {
+router.post('/create-technician', auth,admin, async (req, res) => {
   const { name, email, phone, password, location } = req.body;
   try {
     if (!name || !email || !phone || !password || !location) {
@@ -796,7 +796,7 @@ router.post('/create-assistant', auth,admin, async (req, res) => {
       email,
       phone,
       password,
-      role: 'assistant',
+      role: 'technician',
       location
     });
     const salt = await bcrypt.genSalt(10);
@@ -804,7 +804,7 @@ router.post('/create-assistant', auth,admin, async (req, res) => {
     await user.save();
     const userObj = user.toObject();
     delete userObj.password;
-    res.status(201).json({ message: 'Assistant created successfully', user: userObj });
+    res.status(201).json({ message: 'Technician created successfully', user: userObj });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

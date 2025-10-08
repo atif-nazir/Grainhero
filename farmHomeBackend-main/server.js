@@ -22,10 +22,12 @@ const insuranceRoute = require('./routes/insurance');
 
 // Super Admin routes
 const tenantManagementRoute = require('./routes/tenantManagement');
-const planManagementRoute = require('./routes/planManagement');
 
 // User Management routes
 const userManagementRoute = require('./routes/userManagement');
+
+// Plan Management routes
+const planManagementRoute = require('./routes/planManagement');
 
 const Alert = require('./models/Alert');
 

@@ -59,15 +59,18 @@ export function TenantDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [recentBatches, setRecentBatches] = useState<RecentBatch[]>([])
+  const [planInfo, setPlanInfo] = useState<any>(null)
+  const [usageStats, setUsageStats] = useState<any>(null)
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        const [dashboardRes, usersRes, batchesRes] = await Promise.all([
+        const [dashboardRes, usersRes, batchesRes, planRes] = await Promise.all([
           api.get<DashboardResponse>("/dashboard"),
           api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
-          api.get<{ batches: RecentBatch[] }>("/grain-batches?limit=5")
+          api.get<{ batches: RecentBatch[] }>("/grain-batches?limit=5"),
+          api.get<{ plan: any, usage: any }>("/api/plan-management/plan-info")
         ])
         
         if (!mounted) return
@@ -84,6 +87,11 @@ export function TenantDashboard() {
         
         if (batchesRes.ok && batchesRes.data) {
           setRecentBatches(batchesRes.data.batches as unknown as RecentBatch[])
+        }
+
+        if (planRes.ok && planRes.data) {
+          setPlanInfo(planRes.data.plan)
+          setUsageStats(planRes.data.usage)
         }
       } catch (error) {
         console.error('Failed to load dashboard data:', error)
@@ -113,22 +121,52 @@ export function TenantDashboard() {
     return { color: 'bg-red-100 text-red-800', label: 'High' }
   }
 
+  // Use real plan data if available, otherwise fallback to mock data
+  const planDetails = planInfo ? {
+    name: planInfo.name,
+    price: `$${planInfo.price}/${planInfo.billingCycle}`,
+    features: Object.entries(planInfo.features)
+      .filter(([_, enabled]) => enabled)
+      .map(([feature, _]) => feature.replace('_', ' ')),
+    usage: {
+      users: { 
+        used: usageStats?.users?.total || 0, 
+        limit: planInfo.limits.users.total === -1 ? "unlimited" : planInfo.limits.users.total 
+      },
+      batches: { 
+        used: usageStats?.grain_batches || 0, 
+        limit: planInfo.limits.grain_batches === -1 ? "unlimited" : planInfo.limits.grain_batches 
+      },
+      storage: { 
+        used: usageStats?.storage_gb || 0, 
+        limit: planInfo.limits.storage_gb === -1 ? "unlimited" : planInfo.limits.storage_gb 
+      }
+    }
+  } : {
+    name: "Professional Plan",
+    price: "$399/month",
+    features: ["Up to 60 users", "1000 batches", "Advanced AI", "Priority support"],
+    usage: {
+      users: { used: 15, limit: 60 },
+      batches: { used: 156, limit: 1000 },
+      storage: { used: 5.2, limit: 20 }
+    }
+  }
+
   const systemAlerts = [
     ...(tenantStats.criticalIssues > 0
       ? [{ id: 1, type: "critical", message: "Storage near capacity detected", time: "just now", location: "Multiple Silos" }]
       : []),
+    // Add plan-based alerts
+    ...(planDetails && planDetails.usage.users.limit !== "unlimited" && 
+        (planDetails.usage.users.used / planDetails.usage.users.limit) >= 0.9
+      ? [{ id: 2, type: "warning", message: "Approaching user limit", time: "just now", location: "Plan Limits" }]
+      : []),
+    ...(planDetails && planDetails.usage.storage.limit !== "unlimited" && 
+        (planDetails.usage.storage.used / planDetails.usage.storage.limit) >= 0.9
+      ? [{ id: 3, type: "warning", message: "Storage limit nearly reached", time: "just now", location: "Plan Limits" }]
+      : []),
   ] as Array<{ id: number; type: "critical" | "warning" | "info"; message: string; time: string; location?: string }>
-
-  const planDetails = {
-    name: "Pro Plan",
-    price: "$299/month",
-    features: ["Up to 50 users", "Unlimited batches", "Advanced AI", "Priority support"],
-    usage: {
-      users: { used: 24, limit: 50 },
-      batches: { used: 156, limit: "unlimited" },
-      storage: { used: 2.3, limit: 10 }
-    }
-  }
 
   if (isLoading) {
     return (
@@ -165,7 +203,10 @@ export function TenantDashboard() {
             <p className="text-xs text-muted-foreground">
               {planDetails.usage.users.used}/{planDetails.usage.users.limit} limit
             </p>
-            <Progress value={(tenantStats.totalUsers / planDetails.usage.users.limit) * 100} className="mt-2" />
+            <Progress value={
+              planDetails.usage.users.limit === "unlimited" ? 0 : 
+              (tenantStats.totalUsers / planDetails.usage.users.limit) * 100
+            } className="mt-2" />
           </CardContent>
         </Card>
 
@@ -225,25 +266,34 @@ export function TenantDashboard() {
                 <span>Users</span>
                 <span>{planDetails.usage.users.used}/{planDetails.usage.users.limit}</span>
               </div>
-              <Progress value={(planDetails.usage.users.used / planDetails.usage.users.limit) * 100} />
+              <Progress value={
+                planDetails.usage.users.limit === "unlimited" ? 0 :
+                (planDetails.usage.users.used / planDetails.usage.users.limit) * 100
+              } />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Storage</span>
                 <span>{planDetails.usage.storage.used}GB/{planDetails.usage.storage.limit}GB</span>
               </div>
-              <Progress value={(planDetails.usage.storage.used / planDetails.usage.storage.limit) * 100} />
+              <Progress value={
+                planDetails.usage.storage.limit === "unlimited" ? 0 :
+                (planDetails.usage.storage.used / planDetails.usage.storage.limit) * 100
+              } />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Batches</span>
-                <span>{planDetails.usage.batches.used} (unlimited)</span>
+                <span>{planDetails.usage.batches.used}/{planDetails.usage.batches.limit}</span>
               </div>
-              <Progress value={75} />
+              <Progress value={
+                planDetails.usage.batches.limit === "unlimited" ? 0 :
+                (planDetails.usage.batches.used / planDetails.usage.batches.limit) * 100
+              } />
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="sm">Upgrade Plan</Button>
+            <Button size="sm" onClick={() => router.push('/plans')}>Upgrade Plan</Button>
             <Button size="sm" variant="outline">View Usage Details</Button>
             <Button size="sm" variant="outline">Billing</Button>
           </div>
@@ -413,7 +463,7 @@ export function TenantDashboard() {
             Quick Actions
           </CardTitle>
           <CardDescription>
-            Common administrative tasks for your tenant
+            Common administrative tasks for your farm
           </CardDescription>
         </CardHeader>
         <CardContent>
