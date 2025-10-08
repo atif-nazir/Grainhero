@@ -7,7 +7,7 @@ import { Toaster } from "sonner"
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
-import { ChatbotProvider } from "@/components/chatbot-provider"
+// Chatbot removed
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -42,10 +42,8 @@ export default async function LocaleLayout({
     <html lang={locale}>
       <body className={inter.className}>
         <Providers>
-          <ChatbotProvider>
-            <NextIntlClientProvider>{children}</NextIntlClientProvider>
-            <Toaster position="top-right" />
-          </ChatbotProvider>
+          <NextIntlClientProvider>{children}</NextIntlClientProvider>
+          <Toaster position="top-right" />
         </Providers>
       </body>
     </html>
