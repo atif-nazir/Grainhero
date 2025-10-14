@@ -253,26 +253,20 @@ router.post("/signup", async (req, res) => {
           const phoneExists = await User.findOne({ phone });
 
           if (emailExists && phoneExists) {
-            return res
-              .status(400)
-              .json({
-                error:
-                  "Both email and phone number are already in use. Please use different credentials or try logging in.",
-              });
+            return res.status(400).json({
+              error:
+                "Both email and phone number are already in use. Please use different credentials or try logging in.",
+            });
           } else if (emailExists) {
-            return res
-              .status(400)
-              .json({
-                error:
-                  "An account with this email already exists. Please use a different email or try logging in.",
-              });
+            return res.status(400).json({
+              error:
+                "An account with this email already exists. Please use a different email or try logging in.",
+            });
           } else {
-            return res
-              .status(400)
-              .json({
-                error:
-                  "An account with this phone number already exists. Please use a different phone number.",
-              });
+            return res.status(400).json({
+              error:
+                "An account with this phone number already exists. Please use a different phone number.",
+            });
           }
         }
       }
@@ -1027,8 +1021,7 @@ router.post("/create-manager", auth, admin, async (req, res) => {
  *       401:
  *         description: Unauthorized
  */
-router.post("/create-assistant", auth, admin, async (req, res) => {
-router.post('/create-technician', auth,admin, async (req, res) => {
+router.post("/create-technician", auth, admin, async (req, res) => {
   const { name, email, phone, password, location } = req.body;
   try {
     if (!name || !email || !phone || !password || !location) {
@@ -1049,10 +1042,8 @@ router.post('/create-technician', auth,admin, async (req, res) => {
       email,
       phone,
       password,
-      role: "assistant",
+      role: "technician",
       location,
-      role: 'technician',
-      location
     });
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(password, salt);
@@ -1061,8 +1052,7 @@ router.post('/create-technician', auth,admin, async (req, res) => {
     delete userObj.password;
     res
       .status(201)
-      .json({ message: "Assistant created successfully", user: userObj });
-    res.status(201).json({ message: 'Technician created successfully', user: userObj });
+      .json({ message: "Technician created successfully", user: userObj });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

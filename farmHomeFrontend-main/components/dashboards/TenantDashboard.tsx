@@ -57,8 +57,23 @@ export function TenantDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [recentBatches, setRecentBatches] = useState<RecentBatch[]>([])
-  const [planInfo, setPlanInfo] = useState<any>(null)
-  const [usageStats, setUsageStats] = useState<any>(null)
+  const [planInfo, setPlanInfo] = useState<{
+    name: string;
+    price: number;
+    billingCycle: string;
+    features: Record<string, boolean>;
+    limits: {
+      users: { total: number | string };
+      grain_batches: { total: number | string };
+      storage_gb: { total: number | string };
+    };
+  } | null>(null)
+  const [usageStats, setUsageStats] = useState<{
+    users: number;
+    grain_batches: number;
+    storage_gb: number;
+    apiCalls: number;
+  } | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -68,7 +83,25 @@ export function TenantDashboard() {
             api.get<DashboardResponse>("/dashboard"),
             api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
             api.get<{ batches: RecentBatch[] }>("/grain-batches?limit=5"),
-            api.get<{ plan: any, usage: any }>("/api/plan-management/plan-info")
+            api.get<{
+              plan: {
+                name: string;
+                price: number;
+                billingCycle: string;
+                features: Record<string, boolean>;
+                limits: {
+                  users: { total: number | string };
+                  grain_batches: { total: number | string };
+                  storage_gb: { total: number | string };
+                };
+              };
+              usage: {
+                users: number;
+                grain_batches: number;
+                storage_gb: number;
+                apiCalls: number;
+              };
+            }>("/api/plan-management/plan-info")
           ])
 
           if (!mounted) return
@@ -124,20 +157,20 @@ export function TenantDashboard() {
     name: planInfo.name,
     price: `$${planInfo.price}/${planInfo.billingCycle}`,
     features: Object.entries(planInfo.features)
-      .filter(([_, enabled]) => enabled)
-      .map(([feature, _]) => feature.replace('_', ' ')),
+      .filter(([, enabled]) => enabled)
+      .map(([feature]) => feature.replace('_', ' ')),
     usage: {
       users: {
-        used: usageStats?.users?.total || 0,
+        used: usageStats?.users || 0,
         limit: planInfo.limits.users.total === -1 ? "unlimited" : planInfo.limits.users.total
       },
       batches: {
         used: usageStats?.grain_batches || 0,
-        limit: planInfo.limits.grain_batches === -1 ? "unlimited" : planInfo.limits.grain_batches
+        limit: planInfo.limits.grain_batches.total === -1 ? "unlimited" : planInfo.limits.grain_batches.total
       },
       storage: {
         used: usageStats?.storage_gb || 0,
-        limit: planInfo.limits.storage_gb === -1 ? "unlimited" : planInfo.limits.storage_gb
+        limit: planInfo.limits.storage_gb.total === -1 ? "unlimited" : planInfo.limits.storage_gb.total
       }
     }
   } : {
@@ -156,11 +189,11 @@ export function TenantDashboard() {
       ? [{ id: 1, type: "critical", message: "Storage near capacity detected", time: "just now", location: "Multiple Silos" }]
       : []),
     // Add plan-based alerts
-    ...(planDetails && planDetails.usage.users.limit !== "unlimited" &&
+    ...(planDetails && planDetails.usage.users.limit !== "unlimited" && typeof planDetails.usage.users.limit === 'number' &&
       (planDetails.usage.users.used / planDetails.usage.users.limit) >= 0.9
       ? [{ id: 2, type: "warning", message: "Approaching user limit", time: "just now", location: "Plan Limits" }]
       : []),
-    ...(planDetails && planDetails.usage.storage.limit !== "unlimited" &&
+    ...(planDetails && planDetails.usage.storage.limit !== "unlimited" && typeof planDetails.usage.storage.limit === 'number' &&
       (planDetails.usage.storage.used / planDetails.usage.storage.limit) >= 0.9
       ? [{ id: 3, type: "warning", message: "Storage limit nearly reached", time: "just now", location: "Plan Limits" }]
       : []),
@@ -203,7 +236,7 @@ export function TenantDashboard() {
             </p>
             <Progress value={
               planDetails.usage.users.limit === "unlimited" ? 0 :
-                (tenantStats.totalUsers / planDetails.usage.users.limit) * 100
+                typeof planDetails.usage.users.limit === 'number' ? (tenantStats.totalUsers / planDetails.usage.users.limit) * 100 : 0
             } className="mt-2" />
           </CardContent>
         </Card>
@@ -266,7 +299,7 @@ export function TenantDashboard() {
               </div>
               <Progress value={
                 planDetails.usage.users.limit === "unlimited" ? 0 :
-                  (planDetails.usage.users.used / planDetails.usage.users.limit) * 100
+                  typeof planDetails.usage.users.limit === 'number' ? (planDetails.usage.users.used / planDetails.usage.users.limit) * 100 : 0
               } />
             </div>
             <div className="space-y-2">
@@ -276,7 +309,7 @@ export function TenantDashboard() {
               </div>
               <Progress value={
                 planDetails.usage.storage.limit === "unlimited" ? 0 :
-                  (planDetails.usage.storage.used / planDetails.usage.storage.limit) * 100
+                  typeof planDetails.usage.storage.limit === 'number' ? (planDetails.usage.storage.used / planDetails.usage.storage.limit) * 100 : 0
               } />
             </div>
             <div className="space-y-2">
@@ -286,7 +319,7 @@ export function TenantDashboard() {
               </div>
               <Progress value={
                 planDetails.usage.batches.limit === "unlimited" ? 0 :
-                  (planDetails.usage.batches.used / planDetails.usage.batches.limit) * 100
+                  typeof planDetails.usage.batches.limit === 'number' ? (planDetails.usage.batches.used / planDetails.usage.batches.limit) * 100 : 0
               } />
             </div>
           </div>
