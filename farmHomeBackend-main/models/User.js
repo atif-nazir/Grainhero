@@ -75,24 +75,22 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
-    // Tenant association (for multi-tenancy)
-    // Admin creates and owns the tenant, Manager and Technician belong to tenant
-    tenant_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
-      required: function () {
-        return (
-          this.role !== USER_ROLES.SUPER_ADMIN && this.role !== USER_ROLES.ADMIN
-        );
-      },
+    // Plan information (only for Admin users who buy plans)
+    subscription_plan: {
+      type: String,
+      enum: ["basic", "standard", "professional", "enterprise"],
+      default: "basic",
     },
 
-    // For Admin role - they own/manage a tenant instead of belonging to one
-    owned_tenant_id: {
+    // Admin's team members (Managers and Technicians belong to an Admin)
+    admin_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
+      ref: "User",
       required: function () {
-        return this.role === USER_ROLES.ADMIN;
+        return (
+          this.role === USER_ROLES.MANAGER ||
+          this.role === USER_ROLES.TECHNICIAN
+        );
       },
     },
 
