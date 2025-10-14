@@ -30,10 +30,10 @@ interface Silo {
   }
   type?: string
   updated_at?: string
-  current_conditions: {
-    temperature: { value: number; timestamp: string }
-    humidity: { value: number; timestamp: string }
-    co2: { value: number; timestamp: string }
+  current_conditions?: {
+    temperature?: { value: number; timestamp: string }
+    humidity?: { value: number; timestamp: string }
+    co2?: { value: number; timestamp: string }
   }
   current_batch_id?: {
     batch_id: string
@@ -65,22 +65,31 @@ export default function SilosPage() {
     status: 'active'
   })
 
+  const fetchSilos = async () => {
+    try {
+      console.log('Fetching silos from /api/silos?limit=50')
+      const res = await api.get<{ silos: Silo[] }>(`/api/silos?limit=50`)
+      console.log('Silos API response:', res)
+      if (res.ok && res.data) {
+        console.log('Silos data received:', res.data)
+        setSilos(res.data.silos as unknown as Silo[])
+      } else {
+        console.error('Failed to fetch silos:', res.error)
+        toast.error('Failed to fetch silos')
+      }
+    } catch (error) {
+      console.error('Error fetching silos:', error)
+      toast.error('Error fetching silos')
+    }
+  }
+
   useEffect(() => {
     let mounted = true
       ; (async () => {
-        try {
-          const res = await api.get<{ silos: Silo[] }>(`/api/silos?limit=50`)
-          if (!mounted) return
-          if (res.ok && res.data) {
-            setSilos(res.data.silos as unknown as Silo[])
-          } else {
-            console.error('Failed to fetch silos:', res.error)
-          }
-        } catch (error) {
-          console.error('Error fetching silos:', error)
-        }
-        setLoading(false)
-      })()
+        await fetchSilos()
+      if (!mounted) return
+      setLoading(false)
+    })()
     return () => {
       mounted = false
     }
@@ -89,7 +98,12 @@ export default function SilosPage() {
   // CRUD Operations
   const handleAddSilo = async () => {
     try {
-      console.log('Creating silo with data:', formData)
+      // Convert capacity_kg to number
+      const dataToSend = {
+        ...formData,
+        capacity_kg: Number(formData.capacity_kg)
+      }
+      console.log('Creating silo with data:', dataToSend)
 
       const token = localStorage.getItem('token')
       if (!token) {
@@ -97,7 +111,7 @@ export default function SilosPage() {
         return
       }
 
-      const res = await api.post('/api/silos', formData)
+      const res = await api.post('/api/silos', dataToSend)
       console.log('API Response:', res)
 
       if (res.ok) {
@@ -118,7 +132,12 @@ export default function SilosPage() {
   const handleEditSilo = async () => {
     if (!selectedSilo) return
     try {
-      const res = await api.put(`/api/silos/${selectedSilo._id}`, formData)
+      // Convert capacity_kg to number
+      const dataToSend = {
+        ...formData,
+        capacity_kg: Number(formData.capacity_kg)
+      }
+      const res = await api.put(`/api/silos/${selectedSilo._id}`, dataToSend)
       if (res.ok) {
         toast.success('Silo updated successfully')
         setIsEditDialogOpen(false)
@@ -150,16 +169,6 @@ export default function SilosPage() {
     }
   }
 
-  const fetchSilos = async () => {
-    try {
-      const res = await api.get<{ silos: Silo[] }>(`/api/silos?limit=50`)
-      if (res.ok && res.data) {
-        setSilos(res.data.silos as unknown as Silo[])
-      }
-    } catch (error) {
-      console.error('Error fetching silos:', error)
-    }
-  }
 
   const resetForm = () => {
     setFormData({
@@ -220,7 +229,7 @@ export default function SilosPage() {
       humidity: { min: 40, max: 70, critical_max: 80 },
       co2: { max: 1000, critical_max: 5000 }
     }
-
+    
     if (type === 'co2') {
       const threshold = thresholds.co2
       if (value > threshold.critical_max) return { status: 'critical', color: 'text-red-600' }
@@ -317,8 +326,8 @@ export default function SilosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Math.round((silos.reduce((sum, silo) => sum + (silo.current_occupancy_kg || 0), 0) /
-                silos.reduce((sum, silo) => sum + silo.capacity_kg, 0)) * 100)}%
+              {silos.length > 0 ? Math.round((silos.reduce((sum, silo) => sum + (silo.current_occupancy_kg || 0), 0) /
+                silos.reduce((sum, silo) => sum + silo.capacity_kg, 0)) * 100) : 0}%
             </div>
             <p className="text-xs text-muted-foreground">
               Overall capacity used
@@ -394,7 +403,7 @@ export default function SilosPage() {
                 {/* Environmental Conditions */}
                 <div className="space-y-2">
                   <div className="text-sm font-medium">Environmental Conditions</div>
-
+                  
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <Thermometer className="h-4 w-4" />

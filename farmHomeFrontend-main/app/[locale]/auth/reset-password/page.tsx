@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { WheatIcon as Sheep } from "lucide-react"
+import { WheatIcon as Sheep, AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react"
 import { config } from "@/config"
 import { useTranslations } from "next-intl"
+import { validatePassword, validateConfirmPassword, createFieldValidation, type FieldValidation, type PasswordStrength } from "@/lib/validation"
+import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator"
 
 export default function ResetPasswordPage() {
   const t = useTranslations('AuthPage');
@@ -17,26 +19,65 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, feedback: [], isValid: false })
+
+  // Validation state
+  const [passwordValidation, setPasswordValidation] = useState<FieldValidation>(createFieldValidation())
+  const [confirmPasswordValidation, setConfirmPasswordValidation] = useState<FieldValidation>(createFieldValidation())
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
-  console.log(token)
-  console.log(newPassword)
-  console.log(confirmPassword)
+
+  const handlePasswordChange = (value: string) => {
+    setNewPassword(value)
+    const validation = validatePassword(value)
+    setPasswordValidation({
+      value,
+      touched: true,
+      isValid: validation.isValid,
+      message: validation.message
+    })
+    setPasswordStrength(validation.strength)
+
+    // Re-validate confirm password if it exists
+    if (confirmPassword) {
+      const confirmValidation = validateConfirmPassword(value, confirmPassword)
+      setConfirmPasswordValidation({
+        value: confirmPassword,
+        touched: true,
+        isValid: confirmValidation.isValid,
+        message: confirmValidation.message
+      })
+    }
+  }
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value)
+    const validation = validateConfirmPassword(newPassword, value)
+    setConfirmPasswordValidation({
+      value,
+      touched: true,
+      isValid: validation.isValid,
+      message: validation.message
+    })
+  }
+
+  const isFormValid = passwordValidation.isValid && confirmPasswordValidation.isValid && token
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validate form before submission
+    if (!isFormValid) {
+      setMessage("Please fix the errors below before submitting.")
+      return
+    }
+
     setIsLoading(true)
     setMessage(null)
-    if (!token) {
-      setMessage("Invalid or missing token.")
-      setIsLoading(false)
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setMessage("Passwords do not match.")
-      setIsLoading(false)
-      return
-    }
+
     try {
       const res = await fetch(`${config.backendUrl}/auth/reset-password`, {
         method: "POST",
@@ -67,31 +108,90 @@ export default function ResetPasswordPage() {
           <CardDescription>{t('resetPasswordDescription') || "Enter your new password below."}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* New Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password">{t('newPassword') || "New Password"}</Label>
-              <Input
-                id="password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  className={`pr-10 ${passwordValidation.touched && !passwordValidation.isValid ? 'border-red-500 focus:border-red-500' : passwordValidation.touched && passwordValidation.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {passwordValidation.touched && !passwordValidation.isValid && (
+                <p className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {passwordValidation.message}
+                </p>
+              )}
             </div>
+
+            {/* Confirm Password Field */}
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">{t('confirmPassword') || "Confirm Password"}</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
+                  className={`pr-10 ${confirmPasswordValidation.touched && !confirmPasswordValidation.isValid ? 'border-red-500 focus:border-red-500' : confirmPasswordValidation.touched && confirmPasswordValidation.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {confirmPasswordValidation.touched && !confirmPasswordValidation.isValid && (
+                <p className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {confirmPasswordValidation.message}
+                </p>
+              )}
             </div>
-            {message && (
-              <div className="text-center text-sm mt-2 text-red-600">{message}</div>
+
+            {/* Password Strength Indicator */}
+            {newPassword && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Password Strength</Label>
+                <PasswordStrengthIndicator strength={passwordStrength} />
+              </div>
             )}
-            <Button type="submit" className="w-full" disabled={isLoading}>
+
+            {/* Error/Success Message */}
+            {message && (
+              <div className={`text-sm p-3 rounded-md flex items-center gap-2 ${message.includes('successful')
+                  ? 'text-green-700 bg-green-50 border border-green-200'
+                  : 'text-red-600 bg-red-50 border border-red-200'
+                }`}>
+                {message.includes('successful') ? (
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                )}
+                {message}
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <Button type="submit" className="w-full" disabled={isLoading || !isFormValid}>
               {isLoading ? t('resetting') || "Resetting..." : t('resetPassword') || "Reset Password"}
             </Button>
           </form>

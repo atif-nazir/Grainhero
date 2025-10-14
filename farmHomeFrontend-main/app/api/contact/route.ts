@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { name, email, company, phone, inquiry, message, subscribe } = body;
+        const { name, email, company, phone, message } = body;
 
         // Validate required fields
-        if (!name || !email || !message || !inquiry) {
+        if (!name || !email || !message) {
             return NextResponse.json(
                 { success: false, message: 'Missing required fields' },
                 { status: 400 }
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Forward to backend API
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
         const response = await fetch(`${backendUrl}/api/contact`, {
             method: 'POST',
             headers: {
@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
                 email,
                 company,
                 phone,
-                inquiry,
+                inquiry: 'custom_solution', // Default inquiry type for contact form
                 message,
-                subscribe
+                subscribe: false
             }),
         });
 

@@ -14,6 +14,7 @@ const dashboardRouter = require("./routes/dashboard");
 const quotesRoute = require("./routes/quotes");
 const webhookRoute = require("./routes/webhooks");
 const contactRoute = require("./routes/contact");
+const paymentVerificationRoute = require("./routes/payment-verification");
 
 // GrainHero integrated routes
 const grainBatchesRoute = require("./routes/grainBatches");
@@ -42,10 +43,21 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 app.set("io", io);
 
-mongoose.connect(
-  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}`,
-  { useNewUrlParser: true }
+// Try different connection formats
+const connectionString = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}?retryWrites=true&w=majority`;
+
+console.log("Attempting to connect to MongoDB...");
+console.log(
+  "Connection string:",
+  connectionString.replace(process.env.MONGO_PASS, "***")
 );
+
+mongoose.connect(connectionString, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+});
 
 const db = mongoose.connection;
 
@@ -55,7 +67,7 @@ db.once("open", () => {
 });
 
 // Stripe webhook endpoint must use express.raw before express.json
-app.use("/webhook", webhookRoute);
+app.use("/webhook", express.raw({ type: "application/json" }), webhookRoute);
 
 app.use(express.json());
 
@@ -88,6 +100,13 @@ app.use("/api/user-management", userManagementRoute);
 
 // Contact routes
 app.use("/api/contact", contactRoute);
+
+// Payment verification routes
+app.use("/api/payment-verification", paymentVerificationRoute);
+
+// Stripe checkout session routes
+const createCheckoutSessionRoute = require("./routes/create-checkout-session");
+app.use("/api/create-checkout-session", createCheckoutSessionRoute);
 
 app.use("/", dashboardRouter);
 

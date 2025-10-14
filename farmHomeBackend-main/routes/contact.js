@@ -1,6 +1,6 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
 
 /**
  * @swagger
@@ -29,7 +29,7 @@ const nodemailer = require('nodemailer');
  *           description: Phone number (optional)
  *         inquiry:
  *           type: string
- *           enum: [general, sales, technical, integration, partnership, media]
+ *           enum: [general, sales, technical, integration, partnership, media, custom_solution]
  *           description: Type of inquiry
  *         message:
  *           type: string
@@ -68,15 +68,17 @@ const nodemailer = require('nodemailer');
  *       500:
  *         description: Internal server error
  */
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const { name, email, company, phone, inquiry, message, subscribe } = req.body;
+    const { name, email, company, phone, inquiry, message, subscribe } =
+      req.body;
 
     // Validate required fields
     if (!name || !email || !message || !inquiry) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: name, email, message, and inquiry are required'
+        message:
+          "Missing required fields: name, email, message, and inquiry are required",
       });
     }
 
@@ -85,17 +87,17 @@ router.post('/', async (req, res) => {
     if (!emailRegex.test(email)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid email format'
+        message: "Invalid email format",
       });
     }
 
     // Create email transporter
-    const transporter = nodemailer.createTransporter({
-      service: 'gmail',
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER || 'noreply.grainhero1@gmail.com',
-        pass: process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD
-      }
+        user: process.env.EMAIL_USER || "noreply.grainhero1@gmail.com",
+        pass: process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD,
+      },
     });
 
     // Email content
@@ -104,10 +106,10 @@ New Contact Form Submission - GrainHero
 
 Name: ${name}
 Email: ${email}
-Company: ${company || 'Not provided'}
-Phone: ${phone || 'Not provided'}
+Company: ${company || "Not provided"}
+Phone: ${phone || "Not provided"}
 Inquiry Type: ${inquiry}
-Newsletter Subscription: ${subscribe ? 'Yes' : 'No'}
+Newsletter Subscription: ${subscribe ? "Yes" : "No"}
 
 Message:
 ${message}
@@ -118,14 +120,16 @@ Submitted on: ${new Date().toLocaleString()}
 
     // Send email to admin
     const mailOptions = {
-      from: process.env.EMAIL_USER || 'noreply.grainhero1@gmail.com',
-      to: 'noreply.grainhero1@gmail.com',
+      from: process.env.EMAIL_USER || "noreply.grainhero1@gmail.com",
+      to: "noreply.grainhero1@gmail.com",
       subject: `GrainHero Contact: ${inquiry} - ${name}`,
       text: emailContent,
-      replyTo: email
+      replyTo: email,
     };
 
+    console.log("Sending contact email to admin...");
     await transporter.sendMail(mailOptions);
+    console.log("Contact email sent successfully to admin");
 
     // Send auto-reply to user
     const autoReplyContent = `
@@ -143,24 +147,32 @@ GrainHero Team
     `;
 
     const autoReplyOptions = {
-      from: process.env.EMAIL_USER || 'noreply.grainhero1@gmail.com',
+      from: process.env.EMAIL_USER || "noreply.grainhero1@gmail.com",
       to: email,
-      subject: 'Thank you for contacting GrainHero',
-      text: autoReplyContent
+      subject: "Thank you for contacting GrainHero",
+      text: autoReplyContent,
     };
 
+    console.log("Sending auto-reply to user...");
     await transporter.sendMail(autoReplyOptions);
+    console.log("Auto-reply sent successfully to user");
 
     res.status(200).json({
       success: true,
-      message: 'Contact form submitted successfully. We will get back to you within 24 hours.'
+      message:
+        "Contact form submitted successfully. We will get back to you within 24 hours.",
     });
-
   } catch (error) {
-    console.error('Contact form error:', error);
+    console.error("Contact form error:", error);
+    console.error("Error details:", {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
     res.status(500).json({
       success: false,
-      message: 'Failed to submit contact form. Please try again or email us directly.'
+      message:
+        "Failed to submit contact form. Please try again or email us directly.",
     });
   }
 });

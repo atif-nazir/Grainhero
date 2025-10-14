@@ -58,34 +58,34 @@ const dashboardNav = [
 
 // Grain Operations & Management
 const grainOperationsNav = [
-  { 
+  {
     name: "grain-batches",
-    label: "Grain Batches", 
-    href: "/grain-batches", 
+    label: "Grain Batches",
+    href: "/grain-batches",
     icon: Package,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  { 
+  {
     name: "silos",
-    label: "Silos", 
-    href: "/silos", 
+    label: "Silos",
+    href: "/silos",
     icon: Package,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
-  { 
+  {
     name: "buyers",
-    label: "Buyers", 
-    href: "/buyers", 
+    label: "Buyers",
+    href: "/buyers",
     icon: Users,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  { 
+  {
     name: "traceability",
-    label: "Traceability", 
-    href: "/traceability", 
+    label: "Traceability",
+    href: "/traceability",
     icon: QrCode,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
@@ -94,26 +94,26 @@ const grainOperationsNav = [
 
 // IoT Monitoring & Control
 const iotMonitoringNav = [
-  { 
+  {
     name: "sensors",
-    label: "Sensors", 
-    href: "/sensors", 
+    label: "Sensors",
+    href: "/sensors",
     icon: Smartphone,
     roles: ["super_admin", "admin", "technician"],
     badge: undefined
   },
-  { 
+  {
     name: "environmental-data",
-    label: "Environmental Data", 
-    href: "/environmental-data", 
+    label: "Environmental Data",
+    href: "/environmental-data",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
-  { 
+  {
     name: "grain-alerts",
-    label: "Grain Alerts", 
-    href: "/grain-alerts", 
+    label: "Grain Alerts",
+    href: "/grain-alerts",
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
@@ -122,34 +122,34 @@ const iotMonitoringNav = [
 
 // AI and Analytics features
 const aiAnalyticsNav = [
-  { 
+  {
     name: "ai-predictions",
-    label: "AI Predictions", 
-    href: "/ai-predictions", 
+    label: "AI Predictions",
+    href: "/ai-predictions",
     icon: Sparkles,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  { 
+  {
     name: "risk-assessment",
-    label: "Risk Assessment", 
-    href: "/risk-assessment", 
+    label: "Risk Assessment",
+    href: "/risk-assessment",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  { 
+  {
     name: "spoilage-analysis",
-    label: "Spoilage Analysis", 
-    href: "/spoilage-analysis", 
+    label: "Spoilage Analysis",
+    href: "/spoilage-analysis",
     icon: TrendingUp,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  { 
+  {
     name: "environmental-data",
-    label: "Environmental Data", 
-    href: "/environmental-data", 
+    label: "Environmental Data",
+    href: "/environmental-data",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
@@ -158,26 +158,26 @@ const aiAnalyticsNav = [
 
 // Business & Finance
 const businessNav = [
-  { 
+  {
     name: "insurance",
-    label: "Insurance", 
-    href: "/insurance", 
+    label: "Insurance",
+    href: "/insurance",
     icon: FileText,
     roles: ["super_admin", "admin"],
     badge: undefined
   },
-  { 
+  {
     name: "payments",
-    label: "Payments", 
-    href: "/payments", 
+    label: "Payments",
+    href: "/payments",
     icon: CreditCard,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  { 
+  {
     name: "reports",
-    label: "Reports", 
-    href: "/reports", 
+    label: "Reports",
+    href: "/reports",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
@@ -186,75 +186,76 @@ const businessNav = [
 
 // System Administration
 const systemNav = [
+  { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
   { name: "users", label: "Users", href: "/users", icon: Users, roles: ["super_admin", "admin"], badge: undefined },
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 
 // Super Admin Exclusive Features
 const superAdminNav = [
-  { 
-    name: "tenant-management", 
+  {
+    name: "tenant-management",
     label: "Tenant Management",
-    href: "/tenant-management", 
-    icon: Building2, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/tenant-management",
+    icon: Building2,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "plan-management", 
+  {
+    name: "plan-management",
     label: "Plan Management",
-    href: "/plan-management", 
-    icon: Crown, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/plan-management",
+    icon: Crown,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "system-health", 
+  {
+    name: "system-health",
     label: "System Health",
-    href: "/system-health", 
-    icon: Activity, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/system-health",
+    icon: Activity,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "global-analytics", 
+  {
+    name: "global-analytics",
     label: "Global Analytics",
-    href: "/global-analytics", 
-    icon: Globe, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/global-analytics",
+    icon: Globe,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "security-center", 
+  {
+    name: "security-center",
     label: "Security Center",
-    href: "/security-center", 
-    icon: Shield, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/security-center",
+    icon: Shield,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "revenue-management", 
+  {
+    name: "revenue-management",
     label: "Revenue Management",
-    href: "/revenue-management", 
-    icon: DollarSign, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/revenue-management",
+    icon: DollarSign,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "system-logs", 
+  {
+    name: "system-logs",
     label: "System Logs",
-    href: "/system-logs", 
-    icon: Database, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/system-logs",
+    icon: Database,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
-  { 
-    name: "server-monitoring", 
+  {
+    name: "server-monitoring",
     label: "Server Monitoring",
-    href: "/server-monitoring", 
-    icon: Server, 
-    roles: ["super_admin"], 
-    badge: "Super Admin" 
+    href: "/server-monitoring",
+    icon: Server,
+    roles: ["super_admin"],
+    badge: "Super Admin"
   },
 ]
 
@@ -266,6 +267,7 @@ const milestone2Navigation = [
 ]
 
 const adminNavigation = [
+  { name: "team-management", href: "/team-management", icon: Users },
   { name: "users", href: "/users", icon: Users },
   { name: "settings", href: "/settings", icon: Settings },
 ]

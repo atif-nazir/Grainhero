@@ -12,18 +12,13 @@ import {
   Clock,
   Package,
   Search,
-  Filter,
   Eye,
   Download,
   Truck,
   Thermometer,
-  Droplets,
   AlertTriangle,
   CheckCircle,
-  XCircle,
-  Calendar,
-  User,
-  Phone
+  Calendar
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { useEffect, useState } from "react"
@@ -91,6 +86,27 @@ export default function TraceabilityPage() {
     fetchBatches()
   }, [])
 
+  // Refresh data when page becomes visible (handles data sync issues)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBatches()
+      }
+    }
+
+    const handleFocus = () => {
+      fetchBatches()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
   const filteredBatches = batches.filter(batch => {
     const matchesSearch = batch.batch_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       batch.grain_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -116,7 +132,7 @@ export default function TraceabilityPage() {
     }
   }
 
-  const getRiskBadge = (riskScore: number, spoilageLabel: string) => {
+  const getRiskBadge = (riskScore: number) => {
     if (riskScore >= 70) return 'bg-red-100 text-red-800 border-red-200'
     if (riskScore >= 40) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
     return 'bg-green-100 text-green-800 border-green-200'
@@ -130,6 +146,77 @@ export default function TraceabilityPage() {
   const handleQRCodeClick = (batch: GrainBatch) => {
     setSelectedBatch(batch)
     setIsQRDialogOpen(true)
+  }
+
+  const handleExportReport = async () => {
+    try {
+      // Create a comprehensive traceability report
+      const reportData = {
+        title: 'Grain Traceability Report',
+        generatedAt: new Date().toISOString(),
+        summary: {
+          totalBatches: batches.length,
+          stored: batches.filter(b => b.status === 'stored').length,
+          dispatched: batches.filter(b => b.status === 'dispatched').length,
+          highRisk: batches.filter(b => b.risk_score >= 70).length
+        },
+        batches: batches.map(batch => ({
+          batchId: batch.batch_id,
+          grainType: batch.grain_type,
+          quantity: batch.quantity_kg,
+          status: batch.status,
+          riskScore: batch.risk_score,
+          spoilageLabel: batch.spoilage_label,
+          silo: batch.silo_id?.name || 'N/A',
+          farmer: batch.farmer_name || 'N/A',
+          intakeDate: batch.intake_date,
+          dispatchDetails: batch.dispatch_details || null
+        }))
+      }
+
+      // Convert to CSV format
+      const csvHeaders = 'Batch ID,Grain Type,Quantity (kg),Status,Risk Score,Spoilage Label,Silo,Farmer,Intake Date,Buyer,Dispatched Date\n'
+      const csvRows = reportData.batches.map(batch =>
+        `${batch.batchId},${batch.grainType},${batch.quantity},${batch.status},${batch.riskScore},${batch.spoilageLabel},${batch.silo},${batch.farmer},${new Date(batch.intakeDate).toLocaleDateString()},${batch.dispatchDetails?.buyer_name || 'N/A'},${batch.dispatchDetails?.dispatch_date ? new Date(batch.dispatchDetails.dispatch_date).toLocaleDateString() : 'N/A'}`
+      ).join('\n')
+
+      const csvContent = csvHeaders + csvRows
+
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `grain-traceability-report-${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast.success('Traceability report exported successfully')
+    } catch (error) {
+      console.error('Error exporting report:', error)
+      toast.error('Failed to export report')
+    }
+  }
+
+  const handleScanQRCode = () => {
+    // For now, show a modal with instructions for QR scanning
+    // In a real implementation, this would integrate with device camera
+    toast.info('QR Code scanning functionality would integrate with device camera in production')
+
+    // You could implement a file upload for QR code images here
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        // Here you would process the uploaded QR code image
+        toast.info('QR Code image uploaded. In production, this would decode the QR code and fetch batch details.')
+      }
+    }
+    input.click()
   }
 
   if (isLoading) {
@@ -152,11 +239,26 @@ export default function TraceabilityPage() {
           <p className="text-gray-600 mt-1">Complete supply chain tracking from farm to market</p>
         </div>
         <div className="flex items-center space-x-3">
-          <Button className="bg-[#00a63e] hover:bg-[#008a33] text-white">
+          <Button
+            variant="outline"
+            className="border-gray-300 text-gray-600 hover:bg-gray-50"
+            onClick={fetchBatches}
+          >
+            <Search className="mr-2 h-4 w-4" />
+            Refresh Data
+          </Button>
+          <Button
+            className="bg-[#00a63e] hover:bg-[#008a33] text-white"
+            onClick={handleExportReport}
+          >
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
-          <Button variant="outline" className="border-[#00a63e] text-[#00a63e] hover:bg-[#00a63e] hover:text-white">
+          <Button
+            variant="outline"
+            className="border-[#00a63e] text-[#00a63e] hover:bg-[#00a63e] hover:text-white"
+            onClick={handleScanQRCode}
+          >
             <QrCode className="mr-2 h-4 w-4" />
             Scan QR Code
           </Button>
@@ -304,14 +406,14 @@ export default function TraceabilityPage() {
               {/* Risk Assessment */}
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="h-4 w-4 text-gray-400" />
-                <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600">Risk:</span>
-                  <Badge className={getRiskBadge(batch.risk_score, batch.spoilage_label)}>
+                  <Badge className={getRiskBadge(batch.risk_score)}>
                     {batch.spoilage_label} ({batch.risk_score}%)
                   </Badge>
                 </div>
               </div>
-
+              
               {/* Intake Date */}
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-gray-400" />
@@ -319,7 +421,7 @@ export default function TraceabilityPage() {
                   Intake: {new Date(batch.intake_date).toLocaleDateString()}
                 </span>
               </div>
-
+              
               {/* Dispatch Status */}
               {batch.dispatch_details && (
                 <div className="flex items-center space-x-2 p-2 bg-blue-50 rounded">

@@ -113,87 +113,87 @@ router.post(
     console.log("Auth token:", req.headers.authorization);
 
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
         console.log("Validation errors:", errors.array());
-        return res.status(400).json({ errors: errors.array() });
-      }
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-      const {
-        batch_id,
-        silo_id,
-        grain_type,
-        quantity_kg,
-        variety,
-        grade,
-        moisture_content,
-        protein_content,
-        farmer_name,
-        farmer_contact,
-        source_location,
-        harvest_date,
+        const {
+            batch_id,
+            silo_id,
+            grain_type,
+            quantity_kg,
+            variety,
+            grade,
+            moisture_content,
+            protein_content,
+            farmer_name,
+            farmer_contact,
+            source_location,
+            harvest_date,
         notes,
-      } = req.body;
+        } = req.body;
 
-      // Check if silo exists and has capacity
-      const silo = await Silo.findById(silo_id);
-      if (!silo) {
+        // Check if silo exists and has capacity
+        const silo = await Silo.findById(silo_id);
+        if (!silo) {
         return res.status(404).json({ error: "Silo not found" });
-      }
+        }
 
-      if (silo.available_capacity_kg < quantity_kg) {
-        return res.status(400).json({
+        if (silo.available_capacity_kg < quantity_kg) {
+            return res.status(400).json({ 
           error: "Insufficient silo capacity",
-          available: silo.available_capacity_kg,
+                available: silo.available_capacity_kg,
           requested: quantity_kg,
-        });
-      }
+            });
+        }
 
-      // Create batch
-      const batch = new GrainBatch({
-        batch_id,
-        tenant_id: req.user.tenant_id,
-        silo_id,
-        grain_type,
-        quantity_kg,
-        variety,
-        grade,
-        moisture_content,
-        protein_content,
-        farmer_name,
-        farmer_contact,
-        source_location,
-        harvest_date: harvest_date ? new Date(harvest_date) : null,
-        notes,
+        // Create batch
+        const batch = new GrainBatch({
+            batch_id,
+            tenant_id: req.user.tenant_id,
+            silo_id,
+            grain_type,
+            quantity_kg,
+            variety,
+            grade,
+            moisture_content,
+            protein_content,
+            farmer_name,
+            farmer_contact,
+            source_location,
+            harvest_date: harvest_date ? new Date(harvest_date) : null,
+            notes,
         created_by: req.user._id,
-      });
+        });
 
-      // Generate QR code
-      batch.generateQRCode();
+        // Generate QR code
+        batch.generateQRCode();
+        
+        await batch.save();
 
-      await batch.save();
+        // Update silo occupancy
+        await silo.addBatch(batch._id, quantity_kg);
 
-      // Update silo occupancy
-      await silo.addBatch(batch._id, quantity_kg);
+        // Generate QR code image
+        const qrCodeUrl = await QRCode.toDataURL(batch.qr_code);
 
-      // Generate QR code image
-      const qrCodeUrl = await QRCode.toDataURL(batch.qr_code);
-
-      res.status(201).json({
+        res.status(201).json({
         message: "Batch created successfully",
-        batch: {
-          ...batch.toObject(),
+            batch: {
+                ...batch.toObject(),
           qr_code_image: qrCodeUrl,
         },
-      });
+        });
     } catch (error) {
       console.error("Create batch error:", error);
-      if (error.code === 11000) {
+        if (error.code === 11000) {
         return res.status(400).json({ error: "Batch ID already exists" });
       }
       res.status(500).json({ error: "Internal server error" });
+        }
     }
-  }
 );
 
 /**
@@ -236,44 +236,46 @@ router.get(
   [auth, requirePermission("batch.view"), requireTenantAccess],
   async (req, res) => {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const skip = (page - 1) * limit;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
 
-      // Build filter
-      const filter = { tenant_id: req.user.tenant_id };
+        // Build filter
+        const filter = { tenant_id: req.user.tenant_id };
+      console.log("Grain batches filter:", filter);
+      console.log("User tenant_id:", req.user.tenant_id);
+        
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.grain_type) filter.grain_type = req.query.grain_type;
+        if (req.query.silo_id) filter.silo_id = req.query.silo_id;
 
-      if (req.query.status) filter.status = req.query.status;
-      if (req.query.grain_type) filter.grain_type = req.query.grain_type;
-      if (req.query.silo_id) filter.silo_id = req.query.silo_id;
-
-      // Get batches with pagination
-      const [batches, total] = await Promise.all([
-        GrainBatch.find(filter)
+        // Get batches with pagination
+        const [batches, total] = await Promise.all([
+            GrainBatch.find(filter)
           .populate("silo_id", "name silo_id capacity_kg")
           .populate("buyer_id", "name contact_info")
           .populate("created_by", "name email")
-          .sort({ created_at: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
+                .sort({ created_at: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
         GrainBatch.countDocuments(filter),
-      ]);
+        ]);
 
-      res.json({
-        batches,
-        pagination: {
-          current_page: page,
-          total_pages: Math.ceil(total / limit),
-          total_items: total,
+        res.json({
+            batches,
+            pagination: {
+                current_page: page,
+                total_pages: Math.ceil(total / limit),
+                total_items: total,
           items_per_page: limit,
         },
-      });
+        });
     } catch (error) {
       console.error("Get batches error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+    }
 );
 
 /**
@@ -306,13 +308,13 @@ router.get(
   ],
   async (req, res) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-      const batch = await GrainBatch.findOne({
-        _id: req.params.id,
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
         tenant_id: req.user.tenant_id,
       })
         .populate("silo_id")
@@ -320,25 +322,25 @@ router.get(
         .populate("created_by", "name email")
         .populate("updated_by", "name email");
 
-      if (!batch) {
+        if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
-      }
+        }
 
-      // Generate QR code image if needed
-      let qrCodeImage = null;
-      if (batch.qr_code) {
-        qrCodeImage = await QRCode.toDataURL(batch.qr_code);
-      }
+        // Generate QR code image if needed
+        let qrCodeImage = null;
+        if (batch.qr_code) {
+            qrCodeImage = await QRCode.toDataURL(batch.qr_code);
+        }
 
-      res.json({
-        ...batch.toObject(),
+        res.json({
+            ...batch.toObject(),
         qr_code_image: qrCodeImage,
-      });
+        });
     } catch (error) {
       console.error("Get batch error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+    }
 );
 
 /**
@@ -369,22 +371,22 @@ router.put(
   ],
   async (req, res) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-      const batch = await GrainBatch.findOne({
-        _id: req.params.id,
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
         tenant_id: req.user.tenant_id,
-      });
+        });
 
-      if (!batch) {
+        if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
-      }
+        }
 
-      // Update allowed fields
-      const allowedUpdates = [
+        // Update allowed fields
+        const allowedUpdates = [
         "variety",
         "grade",
         "moisture_content",
@@ -400,23 +402,23 @@ router.put(
       ];
 
       allowedUpdates.forEach((field) => {
-        if (req.body[field] !== undefined) {
-          batch[field] = req.body[field];
-        }
-      });
+            if (req.body[field] !== undefined) {
+                batch[field] = req.body[field];
+            }
+        });
 
-      batch.updated_by = req.user._id;
-      await batch.save();
+        batch.updated_by = req.user._id;
+        await batch.save();
 
-      res.json({
+        res.json({
         message: "Batch updated successfully",
         batch,
-      });
+        });
     } catch (error) {
       console.error("Update batch error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+    }
 );
 
 /**
@@ -447,17 +449,17 @@ router.post(
   ],
   async (req, res) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-      const batch = await GrainBatch.findOne({
-        _id: req.params.id,
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
         tenant_id: req.user.tenant_id,
-      });
+        });
 
-      if (!batch) {
+        if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
       }
 
@@ -465,18 +467,18 @@ router.post(
         return res
           .status(400)
           .json({ error: "Only stored batches can be dispatched" });
-      }
+        }
 
-      // Dispatch batch
-      await batch.dispatch(req.body.buyer_id, req.body.dispatch_details);
+        // Dispatch batch
+        await batch.dispatch(req.body.buyer_id, req.body.dispatch_details);
 
-      // Update silo occupancy
-      const silo = await Silo.findById(batch.silo_id);
-      if (silo) {
-        await silo.removeBatch(batch.quantity_kg);
-      }
+        // Update silo occupancy
+        const silo = await Silo.findById(batch.silo_id);
+        if (silo) {
+            await silo.removeBatch(batch.quantity_kg);
+        }
 
-      res.json({
+        res.json({
         message: "Batch dispatched successfully",
         batch,
       });
@@ -582,7 +584,7 @@ router.post(
       console.error("Simple dispatch batch error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+    }
 );
 
 /**
@@ -613,40 +615,40 @@ router.put(
   ],
   async (req, res) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-      const batch = await GrainBatch.findOne({
-        _id: req.params.id,
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
         tenant_id: req.user.tenant_id,
-      });
+        });
 
-      if (!batch) {
+        if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
-      }
+        }
 
       await batch.updateRiskScore(
         req.body.risk_score,
         req.body.confidence || 0.8
       );
 
-      res.json({
+        res.json({
         message: "Risk assessment updated successfully",
-        batch: {
-          _id: batch._id,
-          risk_score: batch.risk_score,
-          spoilage_label: batch.spoilage_label,
-          ai_prediction_confidence: batch.ai_prediction_confidence,
+            batch: {
+                _id: batch._id,
+                risk_score: batch.risk_score,
+                spoilage_label: batch.spoilage_label,
+                ai_prediction_confidence: batch.ai_prediction_confidence,
           last_risk_assessment: batch.last_risk_assessment,
         },
-      });
+        });
     } catch (error) {
       console.error("Update risk assessment error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+    }
 );
 
 /**
@@ -668,26 +670,26 @@ router.put(
  *         description: Batch not found
  */
 router.get("/qr/:qr_code", async (req, res) => {
-  try {
-    const batch = await GrainBatch.findOne({ qr_code: req.params.qr_code })
+    try {
+        const batch = await GrainBatch.findOne({ qr_code: req.params.qr_code })
       .populate("silo_id", "name location capacity_kg")
       .populate("buyer_id", "name contact_info")
       .select(
         "batch_id grain_type quantity_kg status intake_date dispatch_details farmer_name risk_score spoilage_label"
       );
 
-    if (!batch) {
+        if (!batch) {
       return res.status(404).json({ error: "Batch not found" });
-    }
+        }
 
-    res.json({
+        res.json({
       message: "Batch found",
       batch,
-    });
-  } catch (error) {
+        });
+    } catch (error) {
     console.error("Get batch by QR error:", error);
     res.status(500).json({ error: "Internal server error" });
-  }
+    }
 });
 
 /**
@@ -707,26 +709,26 @@ router.get(
   [auth, requirePermission("batch.view"), requireTenantAccess],
   async (req, res) => {
     try {
-      const stats = await GrainBatch.aggregate([
-        { $match: { tenant_id: req.user.tenant_id } },
-        {
-          $group: {
-            _id: null,
-            total_batches: { $sum: 1 },
+        const stats = await GrainBatch.aggregate([
+            { $match: { tenant_id: req.user.tenant_id } },
+            {
+                $group: {
+                    _id: null,
+                    total_batches: { $sum: 1 },
             total_quantity: { $sum: "$quantity_kg" },
-            stored_batches: {
+                    stored_batches: {
               $sum: { $cond: [{ $eq: ["$status", "stored"] }, 1, 0] },
-            },
-            dispatched_batches: {
+                    },
+                    dispatched_batches: {
               $sum: { $cond: [{ $eq: ["$status", "dispatched"] }, 1, 0] },
-            },
-            high_risk_batches: {
+                    },
+                    high_risk_batches: {
               $sum: { $cond: [{ $gte: ["$risk_score", 70] }, 1, 0] },
-            },
+                    },
             avg_risk_score: { $avg: "$risk_score" },
-            avg_storage_duration: {
-              $avg: {
-                $divide: [
+                    avg_storage_duration: {
+                        $avg: {
+                            $divide: [
                   { $subtract: [new Date(), "$intake_date"] },
                   1000 * 60 * 60 * 24, // Convert to days
                 ],
@@ -734,22 +736,22 @@ router.get(
             },
           },
         },
-      ]);
+        ]);
 
-      const grainTypeStats = await GrainBatch.aggregate([
-        { $match: { tenant_id: req.user.tenant_id } },
-        {
-          $group: {
+        const grainTypeStats = await GrainBatch.aggregate([
+            { $match: { tenant_id: req.user.tenant_id } },
+            {
+                $group: {
             _id: "$grain_type",
-            count: { $sum: 1 },
+                    count: { $sum: 1 },
             total_quantity: { $sum: "$quantity_kg" },
             avg_risk_score: { $avg: "$risk_score" },
           },
         },
-      ]);
+        ]);
 
-      res.json({
-        overall_stats: stats[0] || {},
+        res.json({
+            overall_stats: stats[0] || {},
         grain_type_stats: grainTypeStats,
       });
     } catch (error) {

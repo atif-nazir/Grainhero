@@ -7,9 +7,10 @@ const ENVIRONMENTS = {
 
 const USER_ROLES = {
   SUPER_ADMIN: "super_admin",
-  ADMIN: "admin", 
+  ADMIN: "admin",
   MANAGER: "manager",
   TECHNICIAN: "technician", // Changed from assistant to technician
+  PENDING: "pending", // For invitation system
 };
 
 const USER_STATUSES = {

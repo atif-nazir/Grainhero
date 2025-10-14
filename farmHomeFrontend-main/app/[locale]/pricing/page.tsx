@@ -1,21 +1,21 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import pricingData from '../pricing-data.js';
-import {useTranslations} from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { ArrowLeft } from 'lucide-react';
 export const plans = [
   {
-    link:'https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00',
-    priceId:'price_1RoRPZRYMUmJuwVF7aJeMEmm',
-    price:20,
-    duration:'/month'
+    link: 'https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00',
+    priceId: 'price_1RoRPZRYMUmJuwVF7aJeMEmm',
+    price: 20,
+    duration: '/month'
   },
   {
-    link:'https://buy.stripe.com/test_7sYcN7cyO9UI84f59xa3u01',
-    priceId:'price_1RoRUORYMUmJuwVFy0rFzM3G',
-    price:50,
-    duration:'/month'
+    link: 'https://buy.stripe.com/test_7sYcN7cyO9UI84f59xa3u01',
+    priceId: 'price_1RoRUORYMUmJuwVFy0rFzM3G',
+    price: 50,
+    duration: '/month'
   }
 ]
 export default function PricingPage() {
@@ -53,10 +53,21 @@ export default function PricingPage() {
                 </ul>
               </CardContent>
               <CardFooter>
-                <Button className="w-full" variant={plan.id === 'pro' ? 'default' : 'outline'}>
-                  {plan.id === 'enterprise' ? t('contactUs', { defaultMessage: 'Contact Us' }) : t('choosePlan', { defaultMessage: 'Choose Plan' })}
+                <Button
+                  className="w-full"
+                  variant={plan.id === 'pro' ? 'default' : 'outline'}
+                  onClick={() => {
+                    if (plan.id === 'custom') {
+                      window.location.href = plan.link || '#'
+                    } else {
+                      // Redirect to checkout page with selected plan
+                      localStorage.setItem('selectedPlanId', plan.id)
+                      window.location.href = '/checkout'
+                    }
+                  }}
+                >
+                  {plan.id === 'custom' ? t('contactUs', { defaultMessage: 'Contact Us' }) : t('choosePlan', { defaultMessage: 'Choose Plan' })}
                 </Button>
-                
               </CardFooter>
             </Card>
           ))}

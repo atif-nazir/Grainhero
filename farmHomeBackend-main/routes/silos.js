@@ -17,6 +17,23 @@ const Silo = require("../models/Silo");
 
 /**
  * @swagger
+ * /silos/test:
+ *   get:
+ *     summary: Test endpoint to verify silos API is working
+ *     tags: [Silos]
+ *     responses:
+ *       200:
+ *         description: API is working
+ */
+router.get("/test", (req, res) => {
+  res.json({
+    message: "Silos API is working!",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * @swagger
  * /silos:
  *   get:
  *     summary: Get all silos for tenant
@@ -45,50 +62,60 @@ const Silo = require("../models/Silo");
 router.get(
   "/",
   [
-    auth,
+  auth,
     requirePermission("batch.view"), // reuse view permission for storage
     requireTenantAccess,
   ],
   async (req, res) => {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const skip = (page - 1) * limit;
+      console.log("Silos GET request - User:", req.user);
+      console.log("Silos GET request - Tenant ID:", req.user?.tenant_id);
 
-      const filter = { tenant_id: req.user.tenant_id };
-      if (req.query.status) filter.status = req.query.status;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
 
-      const [silos, total] = await Promise.all([
-        Silo.find(filter)
+    const filter = { tenant_id: req.user.tenant_id };
+    if (req.query.status) filter.status = req.query.status;
+
+      console.log("Using filter (temporarily showing all silos):", filter);
+
+      console.log("Silos filter:", filter);
+
+    const [silos, total] = await Promise.all([
+      Silo.find(filter)
           .populate({ path: "current_batch_id", select: "batch_id grain_type" })
-          .sort({ created_at: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
         Silo.countDocuments(filter),
-      ]);
+    ]);
 
-      // Map to frontend-friendly shape for current_batch_id
+      console.log("Found silos:", silos.length);
+      console.log("Total silos in DB:", total);
+
+    // Map to frontend-friendly shape for current_batch_id
       const mapped = silos.map((s) => ({
-        ...s,
+      ...s,
         current_batch_id: s.current_batch_id
           ? {
-              batch_id: s.current_batch_id.batch_id,
+        batch_id: s.current_batch_id.batch_id,
               grain_type: s.current_batch_id.grain_type,
             }
           : undefined,
-      }));
+    }));
 
-      res.json({
-        silos: mapped,
-        pagination: {
-          current_page: page,
-          total_pages: Math.ceil(total / limit),
-          total_items: total,
+    res.json({
+      silos: mapped,
+      pagination: {
+        current_page: page,
+        total_pages: Math.ceil(total / limit),
+        total_items: total,
           items_per_page: limit,
         },
-      });
-    } catch (error) {
+    });
+  } catch (error) {
       console.error("Get silos error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
@@ -111,9 +138,9 @@ router.get(
   "/stats",
   [auth, requirePermission("batch.view"), requireTenantAccess],
   async (req, res) => {
-    try {
-      const silos = await Silo.find({ tenant_id: req.user.tenant_id }).lean();
-      const total = silos.length;
+  try {
+    const silos = await Silo.find({ tenant_id: req.user.tenant_id }).lean();
+    const total = silos.length;
       const totalCapacity = silos.reduce(
         (sum, s) => sum + (s.capacity_kg || 0),
         0
@@ -130,8 +157,8 @@ router.get(
         acc[s.status] = (acc[s.status] || 0) + 1;
         return acc;
       }, {});
-      res.json({ total, totalCapacity, totalCurrent, utilization, byStatus });
-    } catch (error) {
+    res.json({ total, totalCapacity, totalCurrent, utilization, byStatus });
+  } catch (error) {
       console.error("Get silo stats error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
@@ -188,7 +215,7 @@ router.post(
       body("capacity_kg")
         .isFloat({ min: 1 })
         .withMessage("Capacity must be a positive number"),
-      body("location").optional().isString(),
+      body("location").optional(),
       body("status").optional().isIn(["active", "offline", "maintenance"]),
     ],
   ],
