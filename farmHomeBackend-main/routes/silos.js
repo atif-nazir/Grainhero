@@ -74,9 +74,6 @@ router.get(
       const filter = { admin_id: req.user.admin_id };
       if (req.query.status) filter.status = req.query.status;
 
-    const filter = { tenant_id: req.user.tenant_id };
-    if (req.query.status) filter.status = req.query.status;
-
       console.log("Using filter (temporarily showing all silos):", filter);
 
       console.log("Silos filter:", filter);

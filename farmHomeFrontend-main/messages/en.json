@@ -609,7 +609,8 @@
     "analytics": "Analytics",
     "notifications": "Notifications",
     "mobile": "Mobile",
-    "advancedSearch": "Advanced Search"
+    "advancedSearch": "Advanced Search",
+    "team-management": "Team Management"
   },
   "Dashboard": {
     "totalAnimals": "Total Animals",

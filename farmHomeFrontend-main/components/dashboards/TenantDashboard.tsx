@@ -69,10 +69,14 @@ export function TenantDashboard() {
     };
   } | null>(null)
   const [usageStats, setUsageStats] = useState<{
-    users: number;
+    users: {
+      managers: number;
+      technicians: number;
+      total: number;
+    };
     grain_batches: number;
     storage_gb: number;
-    apiCalls: number;
+    api_calls_this_month: number;
   } | null>(null)
 
   useEffect(() => {
@@ -96,10 +100,14 @@ export function TenantDashboard() {
                 };
               };
               usage: {
-                users: number;
+                users: {
+                  managers: number;
+                  technicians: number;
+                  total: number;
+                };
                 grain_batches: number;
                 storage_gb: number;
-                apiCalls: number;
+                api_calls_this_month: number;
               };
             }>("/api/plan-management/plan-info")
           ])
@@ -161,7 +169,7 @@ export function TenantDashboard() {
       .map(([feature]) => feature.replace('_', ' ')),
     usage: {
       users: {
-        used: usageStats?.users || 0,
+        used: usageStats?.users?.total || 0,
         limit: planInfo.limits.users.total === -1 ? "unlimited" : planInfo.limits.users.total
       },
       batches: {
