@@ -145,6 +145,8 @@ const ROLE_FEATURE_ACCESS = {
     "bulk_operations",
     "data_export",
     "system_overrides",
+  ],
+
   [USER_ROLES.SUPER_ADMIN]: [
     // System Administration
     'system.manage',
@@ -342,37 +344,14 @@ const ROLE_HIERARCHY = {
     USER_ROLES.MANAGER,
     USER_ROLES.TECHNICIAN,
   ],
-    // Grain Operations
-    'grain.read',
-    'grain.operate',
-    
-    // Batch Operations
-    'batch.read',
-    'batch.operate',
-    
-    // Silo Operations
-    'silo.read',
-    'silo.operate',
-    
-    // IoT Monitoring
-    'sensor.read',
-    'sensor.monitor',
-    
-    // Actuator Operations
-    'actuator.read',
-    'actuator.operate',
-    
-    // Quality Checks
-    'quality.read',
-    'quality.check',
-    
-    // Basic Reports
-    'report.read.basic',
-    
-    // Environmental Data
-    'environmental.read',
-    'environmental.monitor'
-  ]
+  [USER_ROLES.ADMIN]: [
+    USER_ROLES.MANAGER,
+    USER_ROLES.TECHNICIAN,
+  ],
+  [USER_ROLES.MANAGER]: [
+    USER_ROLES.TECHNICIAN,
+  ],
+  [USER_ROLES.TECHNICIAN]: [],
 };
 
 // Permission inheritance system
@@ -404,29 +383,6 @@ const hasPermission = (role, permission) => {
   const allPermissions = getAllPermissions(role);
   return allPermissions.includes(permission);
 };
-// Helper function to check if a role has a specific permission
-function hasPermission(userRole, permission) {
-  if (!userRole || !permission) return false;
-  
-  // Get direct permissions for the role
-  const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
-  
-  // Check direct permission
-  if (rolePermissions.includes(permission)) {
-    return true;
-  }
-  
-  // Check inherited permissions
-  const inheritedRoles = PERMISSION_INHERITANCE[userRole] || [];
-  for (const inheritedRole of inheritedRoles) {
-    const inheritedPermissions = ROLE_PERMISSIONS[inheritedRole] || [];
-    if (inheritedPermissions.includes(permission)) {
-      return true;
-    }
-  }
-  
-  return false;
-}
 
 // Helper function to get all permissions for a role
 function getRolePermissions(userRole) {

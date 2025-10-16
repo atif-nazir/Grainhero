@@ -152,7 +152,7 @@ router.post(
       // Create batch
       const batch = new GrainBatch({
         batch_id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
         silo_id,
         grain_type,
         quantity_kg,
@@ -241,7 +241,7 @@ router.get(
       const skip = (page - 1) * limit;
 
       // Build filter
-      const filter = { tenant_id: req.user.tenant_id };
+      const filter = { admin_id: req.user.admin_id };
 
       if (req.query.status) filter.status = req.query.status;
       if (req.query.grain_type) filter.grain_type = req.query.grain_type;
@@ -313,7 +313,7 @@ router.get(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       })
         .populate("silo_id")
         .populate("buyer_id")
@@ -376,7 +376,7 @@ router.put(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -454,7 +454,7 @@ router.post(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -537,7 +537,7 @@ router.post(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -620,7 +620,7 @@ router.put(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -708,7 +708,7 @@ router.get(
   async (req, res) => {
     try {
       const stats = await GrainBatch.aggregate([
-        { $match: { tenant_id: req.user.tenant_id } },
+        { $match: { admin_id: req.user.admin_id } },
         {
           $group: {
             _id: null,
@@ -737,7 +737,7 @@ router.get(
       ]);
 
       const grainTypeStats = await GrainBatch.aggregate([
-        { $match: { tenant_id: req.user.tenant_id } },
+        { $match: { admin_id: req.user.admin_id } },
         {
           $group: {
             _id: "$grain_type",
@@ -867,7 +867,7 @@ router.put(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -934,7 +934,7 @@ router.delete(
     try {
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
