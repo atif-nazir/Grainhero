@@ -136,7 +136,7 @@ export default function GrainBatchesPage() {
         if (!token) {
           console.error('No authentication token found')
           toast.error('Please log in to access grain batches')
-          setLoading(false)
+      setLoading(false)
           return
         }
 
@@ -145,7 +145,7 @@ export default function GrainBatchesPage() {
         if (mounted) {
           setLoading(false)
         }
-      })()
+    })()
     return () => {
       mounted = false
     }
@@ -154,7 +154,13 @@ export default function GrainBatchesPage() {
   // CRUD Operations
   const handleAddBatch = async () => {
     try {
-      console.log('Creating batch with data:', formData)
+      // Convert numeric fields to numbers
+      const dataToSend = {
+        ...formData,
+        quantity_kg: Number(formData.quantity_kg),
+        moisture_content: formData.moisture_content ? Number(formData.moisture_content) : undefined
+      }
+      console.log('Creating batch with data:', dataToSend)
 
       // Check if user is authenticated
       const token = localStorage.getItem('token')
@@ -172,7 +178,7 @@ export default function GrainBatchesPage() {
         'Authorization': `Bearer ${token}`
       })
 
-      const res = await api.post('/api/grain-batches', formData)
+      const res = await api.post('/api/grain-batches', dataToSend)
       console.log('Full API Response:', res)
       console.log('Response status:', res.status)
       console.log('Response data:', res.data)
@@ -205,7 +211,13 @@ export default function GrainBatchesPage() {
   const handleEditBatch = async () => {
     if (!selectedBatch) return
     try {
-      const res = await api.put(`/api/grain-batches/${selectedBatch._id}`, formData)
+      // Convert numeric fields to numbers
+      const dataToSend = {
+        ...formData,
+        quantity_kg: Number(formData.quantity_kg),
+        moisture_content: formData.moisture_content ? Number(formData.moisture_content) : undefined
+      }
+      const res = await api.put(`/api/grain-batches/${selectedBatch._id}`, dataToSend)
       if (res.ok) {
         toast.success('Grain batch updated successfully')
         setIsEditDialogOpen(false)
@@ -240,7 +252,12 @@ export default function GrainBatchesPage() {
   const handleDispatchBatch = async () => {
     if (!selectedBatch) return
     try {
-      const res = await api.post(`/api/grain-batches/${selectedBatch._id}/dispatch-simple`, dispatchData)
+      // Convert numeric fields to numbers
+      const dataToSend = {
+        ...dispatchData,
+        quantity_dispatched: Number(dispatchData.quantity_dispatched)
+      }
+      const res = await api.post(`/api/grain-batches/${selectedBatch._id}/dispatch-simple`, dataToSend)
       if (res.ok) {
         toast.success('Grain batch dispatched successfully')
         setIsDispatchDialogOpen(false)
@@ -284,7 +301,7 @@ export default function GrainBatchesPage() {
       batch_id: batch.batch_id,
       grain_type: batch.grain_type,
       quantity_kg: batch.quantity_kg.toString(),
-      silo_id: batch.silo_id._id,
+      silo_id: batch.silo_id?._id || '',
       farmer_name: batch.farmer_name || '',
       farmer_contact: batch.farmer_contact || '',
       moisture_content: batch.moisture_content?.toString() || '',
@@ -346,8 +363,8 @@ export default function GrainBatchesPage() {
 
   const filteredBatches = batches.filter(batch => {
     const matchesSearch = batch.batch_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      batch.farmer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      batch.grain_type.toLowerCase().includes(searchTerm.toLowerCase())
+                         batch.farmer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         batch.grain_type.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || batch.status === statusFilter
     const matchesGrainType = grainTypeFilter === 'all' || batch.grain_type === grainTypeFilter
     return matchesSearch && matchesStatus && matchesGrainType
@@ -377,9 +394,9 @@ export default function GrainBatchesPage() {
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2 bg-black hover:bg-gray-800">
-              <Plus className="h-4 w-4" />
-              Add New Batch
-            </Button>
+          <Plus className="h-4 w-4" />
+          Add New Batch
+        </Button>
           </DialogTrigger>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -706,7 +723,7 @@ export default function GrainBatchesPage() {
                   <TableCell>{batch.grain_type}</TableCell>
                   <TableCell>{batch.quantity_kg.toLocaleString()} kg</TableCell>
                   <TableCell>{batch.farmer_name || 'N/A'}</TableCell>
-                  <TableCell>{batch.silo_id.name}</TableCell>
+                  <TableCell>{batch.silo_id?.name || 'No Silo Assigned'}</TableCell>
                   <TableCell>
                     <Badge className={getStatusBadge(batch.status)}>
                       {batch.status.charAt(0).toUpperCase() + batch.status.slice(1)}
@@ -723,7 +740,7 @@ export default function GrainBatchesPage() {
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                           <MoreVertical className="h-4 w-4" />
-                        </Button>
+                      </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem
@@ -866,7 +883,7 @@ export default function GrainBatchesPage() {
                   <CardContent className="space-y-4">
                     <div>
                       <Label className="font-semibold">Silo</Label>
-                      <p className="text-sm text-muted-foreground">{selectedBatch.silo_id.name}</p>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.silo_id?.name || 'No Silo Assigned'}</p>
                     </div>
                     <div>
                       <Label className="font-semibold">Farmer</Label>
@@ -991,10 +1008,10 @@ export default function GrainBatchesPage() {
                           </span>
                         </div>
                         <p className="text-sm text-purple-700">
-                          Assigned to Silo: {selectedBatch.silo_id.name}
+                          Assigned to Silo: {selectedBatch.silo_id?.name || 'No Silo Assigned'}
                         </p>
                         <p className="text-xs text-purple-600 mt-1">
-                          Storage capacity: {selectedBatch.silo_id.capacity_kg?.toLocaleString() || 'N/A'} kg
+                          Storage capacity: {selectedBatch.silo_id?.capacity_kg?.toLocaleString() || 'N/A'} kg
                         </p>
                       </div>
                     </div>
@@ -1279,7 +1296,7 @@ export default function GrainBatchesPage() {
                         {selectedBatch.grain_type} • {selectedBatch.quantity_kg.toLocaleString()} kg
                       </p>
                       <p className="text-xs text-red-500 mt-1">
-                        Stored in: {selectedBatch.silo_id.name}
+                        Stored in: {selectedBatch.silo_id?.name || 'No Silo Assigned'}
                       </p>
                     </div>
                   </div>

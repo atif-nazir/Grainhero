@@ -67,7 +67,7 @@ function Navigation() {
           {/* Right: actions */}
           <div className="ml-auto hidden md:flex items-center gap-4">
             <Link href="/auth/login" className="text-gray-700 hover:text-[#00a63e] transition-colors">Login</Link>
-            <Link href="/auth/signup" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full transition">Get Started</Link>
+            <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full transition">Get Started</Link>
           </div>
           {/* Mobile: menu button */}
           <button className="md:hidden ml-auto p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle menu">
@@ -85,7 +85,7 @@ function Navigation() {
               ))}
               <div className="flex items-center gap-3 pt-2">
                 <Link href="/auth/login" className="text-gray-700 hover:text-[#00a63e]" onClick={() => setMobileMenuOpen(false)}>Login</Link>
-                <Link href="/auth/signup" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
+                <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
               </div>
             </div>
           </div>
@@ -109,10 +109,10 @@ function Hero() {
             From monitoring to AI predictions, GrainHero has you covered.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
-            <Link href="/auth/signup" className="bg-black text-white px-6 py-3 rounded-full font-semibold hover:opacity-90 transition">
+            <Link href="/checkout" className="bg-black text-white px-6 py-3 rounded-full font-semibold hover:opacity-90 transition">
               Start now
             </Link>
-            <Link href="#plans" className="px-6 py-3 rounded-full font-semibold border border-gray-300 text-gray-900 hover:border-[#00a63e] hover:text-[#00a63e] transition">
+            <Link href="/pricing" className="px-6 py-3 rounded-full font-semibold border border-gray-300 text-gray-900 hover:border-[#00a63e] hover:text-[#00a63e] transition">
               Plans and prices
             </Link>
           </div>
@@ -268,7 +268,7 @@ function CTA() {
         <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to optimize your grain storage?</h2>
         <p className="text-gray-700 mb-8">Join thousands of farmers and grain operators who trust GrainHero to protect their harvest and maximize profits.</p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/auth/signup" className="bg-[#00a63e] hover:bg-[#029238] text-white px-8 py-4 rounded-full text-lg font-semibold transition">Get started</Link>
+          <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-8 py-4 rounded-full text-lg font-semibold transition">Get started</Link>
           <Link href="#contact" className="border-2 border-[#00a63e] text-[#00a63e] hover:bg-[#00a63e] hover:text-white px-8 py-4 rounded-full text-lg font-semibold transition">Contact us</Link>
         </div>
       </div>
