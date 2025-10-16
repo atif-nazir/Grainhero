@@ -11,6 +11,14 @@ const port = url.port || '';
 // NOTE: If you change backendUrl in config.ts, you must restart the dev server for next.config.ts to pick up the new value.
 
 const nextConfig: NextConfig = {
+  // Fix Turbopack workspace root detection issue
+  turbopack: {
+    root: process.cwd(),
+  },
+  // Additional Turbopack configuration if needed
+  // experimental: {
+  //   // Add other experimental features here if needed
+  // },
   images: {
     remotePatterns: [
       {

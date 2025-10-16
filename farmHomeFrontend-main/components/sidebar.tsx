@@ -24,6 +24,8 @@ import {
   QrCode,
   TrendingUp,
   CreditCard,
+  Database,
+  Brain,
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
@@ -105,10 +107,10 @@ const aiAnalyticsNav = [
     badge: "AI"
   },
   { 
-    name: "risk-assessment", 
-    href: "/risk-assessment", 
-    icon: BarChart3,
-    roles: ["super_admin", "admin", "manager"],
+    name: "ai-spoilage", 
+    href: "/ai-spoilage", 
+    icon: OctagonAlert,
+    roles: ["super_admin", "admin", "manager", "technician"],
     badge: "AI"
   },
   { 
@@ -117,6 +119,20 @@ const aiAnalyticsNav = [
     icon: TrendingUp,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
+  },
+  { 
+    name: "model-performance", 
+    href: "/model-performance", 
+    icon: Brain,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "ML"
+  },
+  { 
+    name: "data-management", 
+    href: "/data-management", 
+    icon: Database,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "ML"
   },
   { 
     name: "environmental-data", 

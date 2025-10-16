@@ -221,9 +221,8 @@ const sensorDeviceSchema = new mongoose.Schema({
   versionKey: false 
 });
 
-// Indexes for better query performance
+// Indexes for better query performance (device_id already has unique index)
 sensorDeviceSchema.index({ tenant_id: 1, status: 1 });
-sensorDeviceSchema.index({ device_id: 1 });
 sensorDeviceSchema.index({ silo_id: 1 });
 sensorDeviceSchema.index({ status: 1 });
 sensorDeviceSchema.index({ 'health_metrics.last_heartbeat': 1 });

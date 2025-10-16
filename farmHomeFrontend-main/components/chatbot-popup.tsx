@@ -18,65 +18,83 @@ interface Message {
   role: 'user' | 'assistant'
 }
 
+interface GrainBatch {
+  _id: string
+  batch_id: string
+  grain_type: string
+  silo_name: string
+  quantity: number
+  risk_level: string
+}
+
 export function ChatbotPopup() {
   const { isOpen, setIsOpen } = useChatbot()
   // Remove: const t = useTranslations('Chatbot')
   const [isMinimized, setIsMinimized] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState("")
-  const [animals, setAnimals] = useState<any[]>([])
-  const [animalSearch, setAnimalSearch] = useState("")
-  const [selectedAnimal, setSelectedAnimal] = useState<any | null>(null)
+  const [grainBatches, setGrainBatches] = useState<GrainBatch[]>([])
+  const [batchSearch, setBatchSearch] = useState("")
+  const [selectedBatch, setSelectedBatch] = useState<GrainBatch | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [animalLoading, setAnimalLoading] = useState(false)
-  const [animalError, setAnimalError] = useState<string | null>(null)
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchError, setBatchError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Fetch animals on mount
+  // Fetch grain batches on mount
   useEffect(() => {
-    const fetchAnimals = async () => {
-      setAnimalLoading(true)
-      setAnimalError(null)
+    const fetchGrainBatches = async () => {
+      setBatchLoading(true)
+      setBatchError(null)
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
         if (!token) {
-          setAnimalError("You must be signed in to use the chatbot.")
-          setAnimalLoading(false)
+          setBatchError("You must be signed in to use the chatbot.")
+          setBatchLoading(false)
           return
         }
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"}/animals/all`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"}/ai-spoilage/predictions`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        if (!res.ok) throw new Error("Failed to fetch animals")
+        if (!res.ok) throw new Error("Failed to fetch grain batches")
         const data = await res.json()
-        setAnimals(Array.isArray(data.animals) ? data.animals : [])
+        const batches = (data.predictions || []).map((pred: any) => ({
+          _id: pred._id,
+          batch_id: pred.batch_id?.batch_id || pred.batch_id || 'Unknown',
+          grain_type: pred.grain_factors?.grain_type || pred.grain_type || 'Rice',
+          silo_name: pred.silo_id?.name || 'Unknown Silo',
+          quantity: Math.floor(Math.random() * 5000) + 1000, // Mock quantity
+          risk_level: pred.risk_level || 'low'
+        }))
+        setGrainBatches(batches)
       } catch (err: any) {
-        setAnimalError(err.message || "Failed to fetch animals")
+        setBatchError(err.message || "Failed to fetch grain batches")
       } finally {
-        setAnimalLoading(false)
+        setBatchLoading(false)
       }
     }
-    if (isOpen) fetchAnimals()
+    if (isOpen) fetchGrainBatches()
   }, [isOpen])
 
-  // Filtered animals for search
-  const filteredAnimals = animals.filter(a => {
-    const search = animalSearch.toLowerCase()
+  // Filtered grain batches for search
+  const filteredBatches = grainBatches.filter(batch => {
+    const search = batchSearch.toLowerCase()
     return (
-      (a.breed && a.breed.toLowerCase().includes(search)) ||
-      (a.tagId && a.tagId.toLowerCase().includes(search)) ||
-      (a.name && a.name.toLowerCase().includes(search))
+      (batch.batch_id && batch.batch_id.toLowerCase().includes(search)) ||
+      (batch.grain_type && batch.grain_type.toLowerCase().includes(search)) ||
+      (batch.silo_name && batch.silo_name.toLowerCase().includes(search)) ||
+      (batch.risk_level && batch.risk_level.toLowerCase().includes(search))
     )
   })
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !selectedAnimal || isLoading) return
+    if (!inputValue.trim() || !selectedBatch || isLoading) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputValue.trim(),
       timestamp: new Date(),
-      topic: selectedAnimal.tagId,
+      topic: selectedBatch.batch_id,
       role: 'user',
     }
     setMessages((prev) => [...prev, userMessage])
@@ -89,7 +107,7 @@ export function ChatbotPopup() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...messages, userMessage].map(m => ({ text: m.text, role: m.role })),
-          animal: selectedAnimal,
+          grainBatch: selectedBatch,
         }),
       })
       const data = await response.json()
@@ -97,16 +115,16 @@ export function ChatbotPopup() {
         id: (Date.now() + 1).toString(),
         text: data.aiMessage,
         timestamp: new Date(),
-        topic: selectedAnimal.tagId,
+        topic: selectedBatch.batch_id,
         role: 'assistant',
       }
       setMessages(prev => [...prev, aiMessage])
     } catch (err) {
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
-        text: "Sorry, there was an error contacting the AI.",
+        text: "Sorry, there was an error contacting the AI assistant.",
         timestamp: new Date(),
-        topic: selectedAnimal.tagId,
+        topic: selectedBatch.batch_id,
         role: 'assistant',
       }
       setMessages(prev => [...prev, errorMessage])
@@ -142,7 +160,7 @@ export function ChatbotPopup() {
     <Card className="fixed bottom-6 right-6 w-96 h-[650px] shadow-2xl z-50 flex flex-col rounded-2xl border-0 bg-white overflow-hidden">
       <CardHeader className="flex items-center justify-between space-y-0  rounded-t-2xl bg-gray-900 text-white border-b border-gray-200 ">
         <div className="flex-1 flex items-center justify-center h-full">
-          <CardTitle className="text-lg font-semibold tracking-tight pt-4 w-full">Chat Support</CardTitle>
+          <CardTitle className="text-lg font-semibold tracking-tight pt-4 w-full">GrainHero AI Assistant</CardTitle>
         </div>
         <div className="flex items-center gap-2 ml-auto h-full">
           <Button
@@ -166,18 +184,19 @@ export function ChatbotPopup() {
 
       {!isMinimized && (
         <CardContent className="flex flex-col flex-1 p-0 bg-white h-full min-h-0 overflow-hidden">
-          {/* Animal selection area */}
+          {/* Grain batch selection area */}
           <div className="p-3 border-b border-gray-200 flex-shrink-0">
-            {animalError && <div className="text-red-500 text-sm mb-2">{animalError}</div>}
-            {animalLoading ? (
-              <div className="text-gray-500 text-sm">Loading animals...</div>
-            ) : selectedAnimal ? (
-              <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded px-3 py-2">
+            {batchError && <div className="text-red-500 text-sm mb-2">{batchError}</div>}
+            {batchLoading ? (
+              <div className="text-gray-500 text-sm">Loading grain batches...</div>
+            ) : selectedBatch ? (
+              <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded px-3 py-2">
                 <div>
-                  <span className="font-semibold">{selectedAnimal.name || selectedAnimal.breed}</span>
-                  <span className="text-xs text-gray-500 ml-2">(Tag: {selectedAnimal.tagId})</span>
+                  <span className="font-semibold">{selectedBatch.batch_id}</span>
+                  <span className="text-xs text-gray-500 ml-2">({selectedBatch.grain_type} - {selectedBatch.silo_name})</span>
+                  <div className="text-xs text-gray-500">Risk: {selectedBatch.risk_level.toUpperCase()}</div>
                 </div>
-                <Button size="sm" variant="outline" className="ml-2 px-2 py-1 text-xs" onClick={() => setSelectedAnimal(null)}>
+                <Button size="sm" variant="outline" className="ml-2 px-2 py-1 text-xs" onClick={() => setSelectedBatch(null)}>
                   Change
                 </Button>
               </div>
@@ -185,23 +204,34 @@ export function ChatbotPopup() {
               <>
                 <input
                   type="text"
-                  placeholder="Search animal by name, breed, or tagId..."
-                  value={animalSearch}
-                  onChange={e => setAnimalSearch(e.target.value)}
+                  placeholder="Search grain batch by ID, type, or silo..."
+                  value={batchSearch}
+                  onChange={e => setBatchSearch(e.target.value)}
                   className="w-full mb-2 px-2 py-1 border rounded"
-                  disabled={animalLoading}
+                  disabled={batchLoading}
                 />
                 <div className="max-h-40 overflow-y-auto border rounded">
-                  {filteredAnimals.length === 0 ? (
-                    <div className="text-gray-400 text-sm p-2">No animals found.</div>
+                  {filteredBatches.length === 0 ? (
+                    <div className="text-gray-400 text-sm p-2">No grain batches found.</div>
                   ) : (
-                    filteredAnimals.map(animal => (
+                    filteredBatches.map(batch => (
                       <div
-                        key={animal._id}
-                        className={`cursor-pointer px-3 py-2 hover:bg-blue-50 ${selectedAnimal && selectedAnimal._id === animal._id ? "bg-blue-100" : ""}`}
-                        onClick={() => setSelectedAnimal(animal)}
+                        key={batch._id}
+                        className={`cursor-pointer px-3 py-2 hover:bg-green-50 ${selectedBatch && selectedBatch._id === batch._id ? "bg-green-100" : ""}`}
+                        onClick={() => setSelectedBatch(batch)}
                       >
-                        <span className="font-medium">{animal.name || animal.breed}</span> <span className="text-xs text-gray-500">(Tag: {animal.tagId})</span>
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">{batch.batch_id}</span>
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            batch.risk_level === 'critical' ? 'bg-red-100 text-red-800' :
+                            batch.risk_level === 'high' ? 'bg-orange-100 text-orange-800' :
+                            batch.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {batch.risk_level.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500">{batch.grain_type} - {batch.silo_name}</div>
                       </div>
                     ))
                   )}
@@ -214,8 +244,15 @@ export function ChatbotPopup() {
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4" style={{ background: 'white' }}>
             {messages.length === 0 ? (
               <div className="text-center text-gray-400 mt-8">
-                <p>No messages yet.</p>
-                <p className="text-sm mt-2">Please select an animal to start the conversation.</p>
+                <p>Welcome to GrainHero AI Assistant!</p>
+                <p className="text-sm mt-2">Select a grain batch to get AI-powered insights about spoilage predictions, risk analysis, and storage recommendations.</p>
+                <div className="mt-4 text-xs text-gray-500">
+                  <p>💡 Ask about:</p>
+                  <p>• Current risk levels and predictions</p>
+                  <p>• Environmental conditions</p>
+                  <p>• Storage recommendations</p>
+                  <p>• Preventive measures</p>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -223,8 +260,8 @@ export function ChatbotPopup() {
                   <div key={message.id} className={message.role === 'user' ? "flex flex-col items-end" : "flex flex-col items-start"}>
                     <div className={message.role === 'user' ? "bg-gray-100 rounded-xl p-3 max-w-[80%] self-end shadow border border-gray-200" : "bg-blue-50 rounded-xl p-3 max-w-[80%] self-start shadow border border-blue-200"}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-gray-500">{selectedAnimal ? (selectedAnimal.name || selectedAnimal.breed) : "Animal"}</span>
-                        {message.role === 'assistant' && <span className="ml-2 text-xs text-blue-600 font-semibold">AI</span>}
+                        <span className="text-xs font-medium text-gray-500">{selectedBatch ? selectedBatch.batch_id : "Grain Batch"}</span>
+                        {message.role === 'assistant' && <span className="ml-2 text-xs text-green-600 font-semibold">AI Assistant</span>}
                         {message.role === 'user' && <span className="ml-2 text-xs text-gray-400 font-semibold">You</span>}
                       </div>
                       <p className="text-sm text-gray-900 whitespace-pre-line break-words">{message.text}</p>
@@ -264,13 +301,13 @@ export function ChatbotPopup() {
                     handleSendMessage();
                   }
                 }}
-                placeholder="Type your message here..."
+                placeholder="Ask about grain storage, spoilage predictions, or risk analysis..."
                 className="flex-1 bg-gray-50 border-0 text-gray-900 placeholder-gray-400 focus:ring-0 focus:outline-none"
-                disabled={!selectedAnimal || isLoading}
+                disabled={!selectedBatch || isLoading}
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || !selectedAnimal || isLoading}
+                disabled={!inputValue.trim() || !selectedBatch || isLoading}
                 size="sm"
                 className="px-3 bg-gray-900 text-white border-0 hover:bg-gray-800 rounded-md"
               >

@@ -323,9 +323,8 @@ const siloSchema = new mongoose.Schema({
   versionKey: false 
 });
 
-// Indexes for better query performance
+// Indexes for better query performance (silo_id already has unique index)
 siloSchema.index({ tenant_id: 1, status: 1 });
-siloSchema.index({ silo_id: 1 });
 siloSchema.index({ farmhouse_id: 1 });
 siloSchema.index({ current_batch_id: 1 });
 siloSchema.index({ status: 1 });

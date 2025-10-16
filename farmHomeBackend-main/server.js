@@ -17,6 +17,12 @@ const webhookRoute = require('./routes/webhooks');
 // GrainHero integrated routes
 const grainBatchesRoute = require('./routes/grainBatches');
 const sensorsRoute = require('./routes/sensors');
+const aiRoute = require('./routes/ai');
+const aiSpoilageRoute = require('./routes/aiSpoilage');
+const actuatorsRoute = require('./routes/actuators');
+const dualProbeRoute = require('./routes/dualProbeMonitoring');
+const deviceHealthRoute = require('./routes/deviceHealth');
+const iotRoute = require('./routes/iot');
 
 const Alert = require('./models/Alert');
 
@@ -32,7 +38,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 app.set('io', io);
 
-mongoose.connect(`mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}`, { useNewUrlParser: true })
+mongoose.connect(`mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}`)
 
 const db = mongoose.connection;
 
@@ -61,6 +67,12 @@ app.use('/quotes', quotesRoute);
 // GrainHero integrated routes
 app.use('/grain-batches', grainBatchesRoute);
 app.use('/sensors', sensorsRoute);
+app.use('/ai', aiRoute);
+app.use('/ai-spoilage', aiSpoilageRoute);
+app.use('/actuators', actuatorsRoute);
+app.use('/dual-probe', dualProbeRoute);
+app.use('/device-health', deviceHealthRoute);
+app.use('/iot', iotRoute);
 
 app.use('/', dashboardRouter);
 

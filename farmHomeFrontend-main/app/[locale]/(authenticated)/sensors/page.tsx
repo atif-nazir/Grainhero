@@ -38,62 +38,38 @@ export default function SensorsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
 
-  // Mock data for now - replace with actual API call
+  // Load sensors from backend
   useEffect(() => {
-    setTimeout(() => {
-      const mockSensors: SensorDevice[] = [
-        {
-          _id: '1',
-          device_id: 'SENS-001',
-          device_name: 'Silo A - Environmental Sensor',
-          status: 'active',
-          sensor_types: ['temperature', 'humidity', 'co2'],
-          battery_level: 85,
-          signal_strength: -45,
-          silo_id: { name: 'Silo A', silo_id: 'SILO-A-001' },
-          last_reading: '2024-01-25T10:30:00Z',
-          health_metrics: {
-            uptime_percentage: 99.2,
-            error_count: 2,
-            last_heartbeat: '2024-01-25T10:30:00Z'
-          }
-        },
-        {
-          _id: '2',
-          device_id: 'SENS-002',
-          device_name: 'Silo B - Multi Sensor',
-          status: 'active',
-          sensor_types: ['temperature', 'humidity', 'co2', 'voc', 'moisture'],
-          battery_level: 92,
-          signal_strength: -38,
-          silo_id: { name: 'Silo B', silo_id: 'SILO-B-001' },
-          last_reading: '2024-01-25T10:28:00Z',
-          health_metrics: {
-            uptime_percentage: 98.7,
-            error_count: 0,
-            last_heartbeat: '2024-01-25T10:28:00Z'
-          }
-        },
-        {
-          _id: '3',
-          device_id: 'SENS-003',
-          device_name: 'Silo C - Basic Sensor',
-          status: 'offline',
-          sensor_types: ['temperature', 'humidity'],
-          battery_level: 15,
-          signal_strength: -78,
-          silo_id: { name: 'Silo C', silo_id: 'SILO-C-001' },
-          last_reading: '2024-01-24T15:45:00Z',
-          health_metrics: {
-            uptime_percentage: 45.2,
-            error_count: 15,
-            last_heartbeat: '2024-01-24T15:45:00Z'
-          }
+    const run = async () => {
+      try {
+        const backendUrl = (await import('@/config')).config.backendUrl
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const res = await fetch(`${backendUrl}/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
+            _id: s._id,
+            device_id: s.device_id || s._id,
+            device_name: s.device_name,
+            status: s.health_status === 'healthy' ? 'active' : (s.health_status || s.status || 'active'),
+            sensor_types: s.sensor_types || [],
+            battery_level: s.battery_level || s.device_metrics?.battery_level || 100,
+            signal_strength: s.signal_strength || s.device_metrics?.signal_strength || -50,
+            silo_id: s.silo_id ? { name: s.silo_id.name || 'Silo', silo_id: s.silo_id._id || '' } : { name: '-', silo_id: '' },
+            last_reading: s.health_metrics?.last_heartbeat || new Date().toISOString(),
+            health_metrics: s.health_metrics || { uptime_percentage: 99, error_count: 0, last_heartbeat: new Date().toISOString() }
+          }))
+          setSensors(mapped)
+        } else {
+          setSensors([])
         }
-      ]
-      setSensors(mockSensors)
-      setLoading(false)
-    }, 1000)
+      } catch {
+        setSensors([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    run()
   }, [])
 
   const getStatusBadge = (status: string) => {

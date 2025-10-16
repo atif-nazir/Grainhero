@@ -28,6 +28,7 @@ import {
   Smartphone
 } from "lucide-react"
 import { useAuth } from "@/app/[locale]/providers"
+import { useState, useEffect } from 'react'
 
 // Mock data for dashboard
 const dashboardData = {
@@ -88,6 +89,29 @@ const dashboardData = {
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const [aiStats, setAiStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAIData = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+        const res = await fetch(`${backendUrl}/ai-spoilage/statistics`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setAiStats(data)
+        }
+      } catch (error) {
+        console.error('Error fetching AI stats:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAIData()
+  }, [])
   const userRole = user?.role || "technician"
 
   const getStatusColor = (status: string) => {
@@ -138,7 +162,7 @@ export default function DashboardPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.overview.totalBatches}</div>
+            <div className="text-2xl font-bold">{aiStats?.total_predictions || dashboardData.overview.totalBatches}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+12%</span> from last month
             </p>
@@ -178,7 +202,7 @@ export default function DashboardPage() {
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{dashboardData.overview.activeAlerts}</div>
+            <div className="text-2xl font-bold text-orange-600">{aiStats?.high_risk_predictions || dashboardData.overview.activeAlerts}</div>
             <p className="text-xs text-muted-foreground">
               {dashboardData.alerts.filter(a => a.severity === "High").length} critical
             </p>

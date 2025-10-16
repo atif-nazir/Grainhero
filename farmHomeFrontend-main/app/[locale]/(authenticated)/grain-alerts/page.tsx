@@ -41,73 +41,40 @@ export default function GrainAlertsPage() {
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
 
-  // Mock data for now - replace with actual API call
+  // Load alerts from backend (uses public endpoint to avoid role-specific logic here)
   useEffect(() => {
-    setTimeout(() => {
-      const mockAlerts: GrainAlert[] = [
-        {
-          _id: '1',
-          alert_id: 'AL-001',
-          title: 'High Temperature Alert',
-          message: 'Temperature exceeded critical threshold in Silo A',
-          priority: 'critical',
-          status: 'pending',
-          source: 'sensor',
-          sensor_type: 'temperature',
-          triggered_at: '2024-01-25T10:30:00Z',
-          silo_id: { name: 'Silo A', silo_id: 'SILO-A-001' },
-          trigger_conditions: {
-            threshold_type: 'critical_max',
-            threshold_value: 35,
-            actual_value: 38.5
-          }
-        },
-        {
-          _id: '2',
-          alert_id: 'AL-002',
-          title: 'High Humidity Warning',
-          message: 'Humidity levels above recommended range in Silo B',
-          priority: 'high',
-          status: 'acknowledged',
-          source: 'sensor',
-          sensor_type: 'humidity',
-          triggered_at: '2024-01-25T09:15:00Z',
-          acknowledged_at: '2024-01-25T09:45:00Z',
-          silo_id: { name: 'Silo B', silo_id: 'SILO-B-001' },
-          trigger_conditions: {
-            threshold_type: 'max',
-            threshold_value: 70,
-            actual_value: 75.2
-          }
-        },
-        {
-          _id: '3',
-          alert_id: 'AL-003',
-          title: 'AI Risk Prediction',
-          message: 'AI model predicts increased spoilage risk for batch GH-2024-001',
-          priority: 'medium',
-          status: 'resolved',
-          source: 'ai',
-          triggered_at: '2024-01-24T14:20:00Z',
-          acknowledged_at: '2024-01-24T14:30:00Z',
-          resolved_at: '2024-01-24T16:15:00Z',
-          silo_id: { name: 'Silo A', silo_id: 'SILO-A-001' }
-        },
-        {
-          _id: '4',
-          alert_id: 'AL-004',
-          title: 'Sensor Offline',
-          message: 'Environmental sensor in Silo C has gone offline',
-          priority: 'high',
-          status: 'pending',
-          source: 'system',
-          triggered_at: '2024-01-25T08:00:00Z',
-          silo_id: { name: 'Silo C', silo_id: 'SILO-C-001' }
+    const run = async () => {
+      try {
+        const backendUrl = (await import('@/config')).config.backendUrl
+        const res = await fetch(`${backendUrl}/alerts/all-public`)
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: GrainAlert[] = (data || []).map((a: any) => ({
+            _id: a._id,
+            alert_id: a._id?.slice(-6) || 'AL',
+            title: a.title || a.category || 'Alert',
+            message: a.description || a.message || '',
+            priority: a.priority || 'medium',
+            status: a.status || 'pending',
+            source: a.source || 'system',
+            sensor_type: a.sensor_type,
+            triggered_at: a.createdAt || new Date().toISOString(),
+            acknowledged_at: a.acknowledged_at,
+            resolved_at: a.resolved_at,
+            silo_id: a.silo_id ? { name: a.silo_id.name || 'Silo', silo_id: String(a.silo_id) } : { name: '-', silo_id: '-' },
+            trigger_conditions: a.trigger_conditions,
+          }))
+          setAlerts(mapped)
+        } else {
+          setAlerts([])
         }
-      ]
-      setAlerts(mockAlerts)
-      setLoading(false)
-    }, 1000)
+      } catch {
+        setAlerts([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    run()
   }, [])
 
   const getPriorityBadge = (priority: string) => {

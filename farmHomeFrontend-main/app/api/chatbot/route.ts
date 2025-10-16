@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const { messages, animal } = await req.json();
+  const { messages, grainBatch } = await req.json();
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json({ error: "OpenAI API key not set" }, { status: 500 });
   }
 
-  // Add the full animal object as a JSON string in the system prompt
-  const animalInfo = animal ? `\nAnimal details (JSON):\n${JSON.stringify(animal, null, 2)}` : '';
-  const systemPrompt = `You are a helpful farm assistant AI. The user is interested in the following animal. Answer their questions conversationally and informatively, always considering the animal context. If the user asks about something else, gently redirect to the animal topic.${animalInfo}`;
+  // Add the full grain batch object as a JSON string in the system prompt
+  const grainBatchInfo = grainBatch ? `\nGrain Batch details (JSON):\n${JSON.stringify(grainBatch, null, 2)}` : '';
+  const systemPrompt = `You are GrainHero AI Assistant, an expert in grain storage management, spoilage prediction, and agricultural technology. You help farmers and storage managers optimize grain storage conditions, predict spoilage risks, and provide actionable recommendations.
+
+Your expertise includes:
+- Grain storage best practices (temperature, humidity, moisture control)
+- Spoilage prediction and risk assessment
+- Environmental monitoring and IoT sensors
+- Preventive measures and corrective actions
+- Storage optimization strategies
+- Quality management and traceability
+
+Always provide practical, actionable advice based on scientific principles and industry best practices. Be conversational but professional.${grainBatchInfo}`;
 
   const openaiMessages = [
     { role: "system", content: systemPrompt },
