@@ -149,22 +149,22 @@ router.post(
             });
         }
 
-        // Create batch
-        const batch = new GrainBatch({
-            batch_id,
-            tenant_id: req.user.tenant_id,
-            silo_id,
-            grain_type,
-            quantity_kg,
-            variety,
-            grade,
-            moisture_content,
-            protein_content,
-            farmer_name,
-            farmer_contact,
-            source_location,
-            harvest_date: harvest_date ? new Date(harvest_date) : null,
-            notes,
+      // Create batch
+      const batch = new GrainBatch({
+        batch_id,
+        admin_id: req.user.admin_id,
+        silo_id,
+        grain_type,
+        quantity_kg,
+        variety,
+        grade,
+        moisture_content,
+        protein_content,
+        farmer_name,
+        farmer_contact,
+        source_location,
+        harvest_date: harvest_date ? new Date(harvest_date) : null,
+        notes,
         created_by: req.user._id,
         });
 
@@ -236,22 +236,20 @@ router.get(
   [auth, requirePermission("batch.view"), requireTenantAccess],
   async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const skip = (page - 1) * limit;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
 
-        // Build filter
-        const filter = { tenant_id: req.user.tenant_id };
-      console.log("Grain batches filter:", filter);
-      console.log("User tenant_id:", req.user.tenant_id);
-        
-        if (req.query.status) filter.status = req.query.status;
-        if (req.query.grain_type) filter.grain_type = req.query.grain_type;
-        if (req.query.silo_id) filter.silo_id = req.query.silo_id;
+      // Build filter
+      const filter = { admin_id: req.user.admin_id };
 
-        // Get batches with pagination
-        const [batches, total] = await Promise.all([
-            GrainBatch.find(filter)
+      if (req.query.status) filter.status = req.query.status;
+      if (req.query.grain_type) filter.grain_type = req.query.grain_type;
+      if (req.query.silo_id) filter.silo_id = req.query.silo_id;
+
+      // Get batches with pagination
+      const [batches, total] = await Promise.all([
+        GrainBatch.find(filter)
           .populate("silo_id", "name silo_id capacity_kg")
           .populate("buyer_id", "name contact_info")
           .populate("created_by", "name email")
@@ -313,9 +311,9 @@ router.get(
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const batch = await GrainBatch.findOne({
-            _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+      const batch = await GrainBatch.findOne({
+        _id: req.params.id,
+        admin_id: req.user.admin_id,
       })
         .populate("silo_id")
         .populate("buyer_id")
@@ -376,10 +374,10 @@ router.put(
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const batch = await GrainBatch.findOne({
-            _id: req.params.id,
-        tenant_id: req.user.tenant_id,
-        });
+      const batch = await GrainBatch.findOne({
+        _id: req.params.id,
+        admin_id: req.user.admin_id,
+      });
 
         if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
@@ -454,10 +452,10 @@ router.post(
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const batch = await GrainBatch.findOne({
-            _id: req.params.id,
-        tenant_id: req.user.tenant_id,
-        });
+      const batch = await GrainBatch.findOne({
+        _id: req.params.id,
+        admin_id: req.user.admin_id,
+      });
 
         if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
@@ -539,7 +537,7 @@ router.post(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -620,10 +618,10 @@ router.put(
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const batch = await GrainBatch.findOne({
-            _id: req.params.id,
-        tenant_id: req.user.tenant_id,
-        });
+      const batch = await GrainBatch.findOne({
+        _id: req.params.id,
+        admin_id: req.user.admin_id,
+      });
 
         if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
@@ -709,12 +707,12 @@ router.get(
   [auth, requirePermission("batch.view"), requireTenantAccess],
   async (req, res) => {
     try {
-        const stats = await GrainBatch.aggregate([
-            { $match: { tenant_id: req.user.tenant_id } },
-            {
-                $group: {
-                    _id: null,
-                    total_batches: { $sum: 1 },
+      const stats = await GrainBatch.aggregate([
+        { $match: { admin_id: req.user.admin_id } },
+        {
+          $group: {
+            _id: null,
+            total_batches: { $sum: 1 },
             total_quantity: { $sum: "$quantity_kg" },
                     stored_batches: {
               $sum: { $cond: [{ $eq: ["$status", "stored"] }, 1, 0] },
@@ -738,10 +736,10 @@ router.get(
         },
         ]);
 
-        const grainTypeStats = await GrainBatch.aggregate([
-            { $match: { tenant_id: req.user.tenant_id } },
-            {
-                $group: {
+      const grainTypeStats = await GrainBatch.aggregate([
+        { $match: { admin_id: req.user.admin_id } },
+        {
+          $group: {
             _id: "$grain_type",
                     count: { $sum: 1 },
             total_quantity: { $sum: "$quantity_kg" },
@@ -869,7 +867,7 @@ router.put(
 
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {
@@ -936,7 +934,7 @@ router.delete(
     try {
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!batch) {

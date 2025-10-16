@@ -86,8 +86,8 @@ const requireRole = (roles) => {
 };
 
 /**
- * Tenant-based access control
- * Ensures user can only access resources from their tenant
+ * Admin-based access control
+ * Ensures user can only access resources from their admin's team
  */
 const requireTenantAccess = (req, res, next) => {
   try {
@@ -95,37 +95,40 @@ const requireTenantAccess = (req, res, next) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    // Super admin can access all tenants
+    // Super admin can access all admins and their teams
     if (req.user.role === USER_ROLES.SUPER_ADMIN) {
       return next();
     }
 
-    // Extract tenant_id from request (params, body, or query)
-    const requestTenantId =
-      req.params.tenant_id ||
-      req.body.tenant_id ||
-      req.query.tenant_id ||
-      req.user.tenant_id;
-
-    if (!requestTenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
+    // Determine admin_id based on user role
+    let userAdminId;
+    console.log("=== TENANT ACCESS MIDDLEWARE ===");
+    console.log("User role:", req.user.role);
+    console.log("User ID:", req.user._id);
+    console.log("User admin_id:", req.user.admin_id);
+    
+    if (req.user.role === USER_ROLES.ADMIN) {
+      // Admin users are their own admin
+      userAdminId = req.user._id;
+      console.log("Admin user - using own ID as admin_id:", userAdminId);
+    } else if (req.user.role === USER_ROLES.MANAGER || req.user.role === USER_ROLES.TECHNICIAN) {
+      // Managers and technicians belong to their admin
+      userAdminId = req.user.admin_id;
+      console.log("Manager/Technician - using admin_id:", userAdminId);
     }
 
-    // Check if user belongs to the requested tenant
-    if (
-      req.user.tenant_id &&
-      req.user.tenant_id.toString() !== requestTenantId.toString()
-    ) {
-      return res.status(403).json({
-        error: "Access denied. Cannot access resources from other tenants",
-        user_tenant: req.user.tenant_id,
-        requested_tenant: requestTenantId,
-      });
+    if (!userAdminId) {
+      console.log("ERROR: No admin_id determined");
+      return res.status(400).json({ error: "Admin ID required" });
     }
+
+    // Set the admin_id in the request for use by route handlers
+    req.user.admin_id = userAdminId;
+    console.log("Final admin_id set to:", req.user.admin_id);
 
     next();
   } catch (error) {
-    console.error("Tenant access middleware error:", error);
+    console.error("Admin access middleware error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
