@@ -141,6 +141,13 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
+  { 
+    name: "data-visualization", 
+    href: "/data-visualization", 
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "NEW"
+  },
 ]
 
 // Business & Finance

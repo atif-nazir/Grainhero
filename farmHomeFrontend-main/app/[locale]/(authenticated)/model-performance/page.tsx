@@ -24,6 +24,7 @@ import {
   ArrowDown,
   Minus
 } from 'lucide-react'
+import { formatAccuracy, formatF1Score, formatPrecision, formatTrend } from '@/lib/percentageUtils';
 
 interface ModelPerformance {
   performance_summary: {
@@ -307,13 +308,13 @@ export default function ModelPerformancePage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {(latest_metrics.accuracy * 100).toFixed(1)}%
+                  {formatAccuracy(latest_metrics.accuracy)}
                 </div>
                 <div className="text-xs text-gray-500">Accuracy</div>
                 {overall_improvement.accuracy_improvement_pct && (
                   <div className={`text-xs flex items-center mt-1 ${getImprovementColor(overall_improvement.accuracy_improvement_pct)}`}>
                     {getImprovementIcon(overall_improvement.accuracy_improvement_pct)}
-                    <span className="ml-1">{overall_improvement.accuracy_improvement_pct.toFixed(2)}%</span>
+                    <span className="ml-1">{formatTrend(overall_improvement.accuracy_improvement_pct)}</span>
                   </div>
                 )}
               </div>
@@ -327,13 +328,13 @@ export default function ModelPerformancePage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {(latest_metrics.f1_score * 100).toFixed(1)}%
+                  {formatF1Score(latest_metrics.f1_score)}
                 </div>
                 <div className="text-xs text-gray-500">F1 Score</div>
                 {overall_improvement.f1_score_improvement_pct && (
                   <div className={`text-xs flex items-center mt-1 ${getImprovementColor(overall_improvement.f1_score_improvement_pct)}`}>
                     {getImprovementIcon(overall_improvement.f1_score_improvement_pct)}
-                    <span className="ml-1">{overall_improvement.f1_score_improvement_pct.toFixed(2)}%</span>
+                    <span className="ml-1">{formatTrend(overall_improvement.f1_score_improvement_pct)}</span>
                   </div>
                 )}
               </div>
@@ -361,7 +362,7 @@ export default function ModelPerformancePage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {(best_performance.best_accuracy?.value * 100).toFixed(1)}%
+                  {formatAccuracy(best_performance.best_accuracy?.value)}
                 </div>
                 <div className="text-xs text-gray-500">Best Accuracy</div>
               </div>
@@ -392,23 +393,23 @@ export default function ModelPerformancePage() {
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Precision</span>
-                    <span className="font-medium">{(latest_metrics.precision * 100).toFixed(1)}%</span>
+                    <span className="font-medium">{formatPrecision(latest_metrics.precision)}</span>
                   </div>
-                  <Progress value={latest_metrics.precision * 100} className="h-2" />
+                  <Progress value={latest_metrics.precision} className="h-2" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Recall</span>
-                    <span className="font-medium">{(latest_metrics.recall * 100).toFixed(1)}%</span>
+                    <span className="font-medium">{formatPrecision(latest_metrics.recall)}</span>
                   </div>
-                  <Progress value={latest_metrics.recall * 100} className="h-2" />
+                  <Progress value={latest_metrics.recall} className="h-2" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Cross-Validation</span>
-                    <span className="font-medium">{(latest_metrics.cv_mean * 100).toFixed(1)}%</span>
+                    <span className="font-medium">{formatPrecision(latest_metrics.cv_mean)}</span>
                   </div>
-                  <Progress value={latest_metrics.cv_mean * 100} className="h-2" />
+                  <Progress value={latest_metrics.cv_mean} className="h-2" />
                 </div>
               </CardContent>
             </Card>

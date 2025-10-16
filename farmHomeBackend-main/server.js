@@ -23,6 +23,8 @@ const actuatorsRoute = require('./routes/actuators');
 const dualProbeRoute = require('./routes/dualProbeMonitoring');
 const deviceHealthRoute = require('./routes/deviceHealth');
 const iotRoute = require('./routes/iot');
+const dataVisualizationRoute = require('./routes/dataVisualization');
+const silosRoute = require('./routes/silos');
 
 const Alert = require('./models/Alert');
 
@@ -73,6 +75,8 @@ app.use('/actuators', actuatorsRoute);
 app.use('/dual-probe', dualProbeRoute);
 app.use('/device-health', deviceHealthRoute);
 app.use('/iot', iotRoute);
+app.use('/data-viz', dataVisualizationRoute);
+app.use('/silos', silosRoute);
 
 app.use('/', dashboardRouter);
 

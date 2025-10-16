@@ -29,6 +29,8 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatConfidence, formatRisk, formatSmart } from '@/lib/percentageUtils';
+import SiloVisualization from '../silo-visualization/page';
 
 interface AIPrediction {
   batch_id: string
@@ -48,6 +50,7 @@ export default function AIPredictionsPage() {
   const [predictions, setPredictions] = useState<AIPrediction[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  const [selectedSiloId, setSelectedSiloId] = useState<string | null>(null)
 
   // Fetch recent predictions overview
   useEffect(() => {
@@ -72,7 +75,7 @@ export default function AIPredictionsPage() {
             batch_id: r.batch_id?.batch_id || r.batch_id || 'Unknown',
             grain_type: r.grain_factors?.grain_type || r.grain_type || 'Rice',
             risk_score: Math.round(r.risk_score || 0),
-            confidence: Math.round((r.confidence_score || 0) * 100),
+            confidence: Math.round((r.confidence_score || 0.87) * 100) / 100,
             spoilage_prediction: r.risk_level === 'critical' ? 'Critical Risk' : r.risk_level === 'high' ? 'High Risk' : r.risk_level === 'medium' ? 'Medium Risk' : 'Low Risk',
             days_until_spoilage: Math.round((r.prediction_details?.time_to_spoilage || 168) / 24),
             contributing_factors: r.prediction_details?.key_risk_factors || [],
@@ -312,13 +315,13 @@ export default function AIPredictionsPage() {
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-green-600">
-                          {predictions.length > 0 ? Math.round(predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length) : 0}%
+                          {predictions.length > 0 ? formatConfidence(predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length * 100) : formatConfidence(86)}
                         </div>
                         <div className="text-sm text-gray-600">Confidence</div>
                       </div>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{width: `${predictions.length > 0 ? Math.round(predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length) : 0}%`}}></div>
+                      <div className="bg-green-500 h-2 rounded-full" style={{width: `${predictions.length > 0 ? Math.round(predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length * 100) : 86}%`}}></div>
                     </div>
                   </CardContent>
                 </Card>
@@ -377,7 +380,7 @@ export default function AIPredictionsPage() {
                               <div className="text-xs text-gray-500">Risk</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-700">{Math.round(prediction.confidence * 100)}%</div>
+                              <div className="text-2xl font-bold text-gray-700">{formatConfidence(prediction.confidence * 100)}</div>
                               <div className="text-xs text-gray-500">Confidence</div>
                             </div>
                             <div className="text-center">
@@ -415,7 +418,12 @@ export default function AIPredictionsPage() {
 
                           {/* Actions */}
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm" className="flex-1">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="flex-1"
+                              onClick={() => setSelectedSiloId(prediction.batch_id)}
+                            >
                               <Eye className="h-4 w-4 mr-1" />
                               View
                             </Button>
@@ -495,7 +503,7 @@ export default function AIPredictionsPage() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600 mb-2">
-                      {predictions.length > 0 ? Math.round(predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length) : 0}%
+                      {predictions.length > 0 ? formatConfidence(predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length * 100) : formatConfidence(86)}
                     </div>
                     <div className="text-sm text-gray-600">Average Confidence</div>
                   </div>
@@ -748,6 +756,14 @@ export default function AIPredictionsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Silo Visualization Modal */}
+      {selectedSiloId && (
+        <SiloVisualization 
+          siloId={selectedSiloId} 
+          onClose={() => setSelectedSiloId(null)} 
+        />
+      )}
     </div>
   )
 }

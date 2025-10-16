@@ -572,6 +572,8 @@
     "spoilage-analysis": "Spoilage Analysis",
     "model-performance": "Model Performance",
     "data-management": "Data Management",
+    "data-visualization": "Data Visualization",
+    "environmental-data": "Environmental Data",
     "traceability": "Traceability",
     "notifications": "Notifications",
     "analytics": "Analytics",
@@ -610,6 +612,24 @@
     "animalsDueForCheckups": "Some animals are due for health checkups.",
     "cullingSuggestion": "Culling Suggestion",
     "considerCulling": "Consider culling animals with poor health or low productivity."
+  },
+  "EnvironmentalData": {
+    "title": "Environmental Data",
+    "subtitle": "Real-time environmental monitoring and sensor data",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "airflow": "Airflow",
+    "pressure": "Pressure",
+    "co2": "CO2",
+    "moisture": "Moisture",
+    "lastUpdated": "Last Updated",
+    "refresh": "Refresh",
+    "selectSilo": "Select Silo",
+    "allSilos": "All Silos",
+    "sensorReadings": "Sensor Readings",
+    "environmentalTrends": "Environmental Trends",
+    "dataQuality": "Data Quality",
+    "sensorStatus": "Sensor Status"
   },
   "PricingPage": {
     "title": "Pricing Plans",
