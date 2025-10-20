@@ -1,33 +1,7 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Package, 
-  Warehouse, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  Users, 
-  DollarSign,
-  Thermometer,
-  Droplets,
-  Wind,
-  Eye,
-  Calendar,
-  BarChart3,
-  PieChart,
-  Activity,
-  Zap,
-  Shield,
-  Clock,
-  MapPin,
-  Smartphone
-} from "lucide-react"
 import { useAuth } from "@/app/[locale]/providers"
+<<<<<<< HEAD
 import { useState, useEffect } from 'react'
 
 // Mock data for dashboard
@@ -86,6 +60,15 @@ const dashboardData = {
     { id: "CO2-001", type: "CO2", value: 420, unit: "ppm", status: "Normal", location: "Silo B" }
   ]
 }
+=======
+import { SuperAdminDashboard } from "@/components/dashboards/SuperAdminDashboard"
+import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
+import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
+import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+>>>>>>> main
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -114,46 +97,43 @@ export default function DashboardPage() {
   }, [])
   const userRole = user?.role || "technician"
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "optimal": case "normal": case "low": return "default"
-      case "warning": case "medium": return "secondary" 
-      case "critical": case "high": return "destructive"
-      default: return "outline"
-    }
-  }
-
-  const getRiskColor = (risk: string) => {
-    switch (risk.toLowerCase()) {
-      case "low": return "text-green-600"
-      case "medium": return "text-yellow-600"
-      case "high": return "text-red-600"
-      default: return "text-gray-600"
+  // Render role-specific dashboard
+  const renderDashboard = () => {
+    switch (userRole) {
+      case "super_admin":
+        return <SuperAdminDashboard />
+      case "admin":
+        return <TenantDashboard />
+      case "manager":
+        return <ManagerDashboard />
+      case "technician":
+        return <TechnicianDashboard />
+      default:
+        return (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Unknown user role. Please contact your administrator.
+            </AlertDescription>
+          </Alert>
+        )
     }
   }
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      {/* Header */}
       <div className="flex items-center justify-between space-y-2">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Grain Management Dashboard</h2>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Welcome back, {user?.name || "User"}!
+          </h2>
           <p className="text-muted-foreground">
-            Welcome back, {user?.name || "User"}! Here's what's happening with your grain operations.
+            Here's what's happening with your {userRole.replace('_', ' ')} dashboard today.
           </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Calendar className="mr-2 h-4 w-4" />
-            Last 30 days
-            </Button>
-          <Button size="sm">
-            <Activity className="mr-2 h-4 w-4" />
-            Real-time View
-          </Button>
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Key Metrics Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -534,6 +514,9 @@ export default function DashboardPage() {
           </TabsContent>
         )}
       </Tabs>
+=======
+      {renderDashboard()}
+>>>>>>> main
     </div>
   )
 }

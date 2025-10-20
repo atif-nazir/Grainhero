@@ -80,18 +80,36 @@ export default function PlansPage() {
         </h1>
         <p className="text-center text-gray-600 mb-12">
           {t("subtitle", {
-            defaultMessage: "Choose the plan that fits your farm best.",
+            defaultMessage: "Choose the grain management plan that fits your operation best.",
           })}
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {pricingData.map((p) => (
             <Card
               key={p.id}
-              className={`flex flex-col h-full ${
+              className={`flex flex-col h-full relative ${
                 plan === p.id ? "ring-2 ring-green-500" : ""
+              } ${
+                p.id === 'custom' ? "border-2 border-purple-200 bg-gradient-to-b from-purple-50 to-white" : ""
+              } ${
+                p.id === 'pro' ? "border-2 border-blue-200 bg-gradient-to-b from-blue-50 to-white" : ""
               }`}
             >
               <CardHeader>
+                {p.id === 'custom' && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-purple-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      Most Flexible
+                    </span>
+                  </div>
+                )}
+                {p.id === 'pro' && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      Most Popular
+                    </span>
+                  </div>
+                )}
                 <CardTitle className="text-2xl text-center flex items-center justify-center gap-2">
                   {p.name}
                   {plan === p.id && (
@@ -117,16 +135,26 @@ export default function PlansPage() {
               </CardContent>
               <CardFooter>
                 <div className="w-full">
-                  <Button
-                    className="w-full"
-                    variant={user?.hasAccess === p.id  ? "outline" : "default"}
-                    onClick={() =>
-                      router.push(p.link + "?prefilled_email=" + email)
-                    }
-                    disabled={user?.hasAccess === p.id}
-                  >
-                    {user?.hasAccess === p.id ? "Subscribed" : "Buy"}
-                  </Button>
+                  {p.id === 'custom' ? (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => window.open(p.link, '_blank')}
+                    >
+                      Contact Sales
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      variant={user?.hasAccess === p.id ? "outline" : "default"}
+                      onClick={() =>
+                        router.push(p.link + "?prefilled_email=" + email)
+                      }
+                      disabled={user?.hasAccess === p.id}
+                    >
+                      {user?.hasAccess === p.id ? "Subscribed" : "Get Started"}
+                    </Button>
+                  )}
                 </div>
               </CardFooter>
             </Card>

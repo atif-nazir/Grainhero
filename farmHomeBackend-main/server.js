@@ -1,20 +1,23 @@
-const express = require('express')
-const mongoose = require('mongoose')
-const http = require('http');
-const WebSocket = require('ws');
-const { Server } = require('socket.io');
+const express = require("express");
+const mongoose = require("mongoose");
+const http = require("http");
+const WebSocket = require("ws");
+const { Server } = require("socket.io");
 
-const authRoute = require('./routes/auth');
-const maintenanceRoute = require('./routes/maintenance');
-const incidentsRoute = require('./routes/incidents');
-const productsRoute = require('./routes/products');
-const ordersRoute = require('./routes/orders');
-const alertsRoute = require('./routes/alerts');
-const dashboardRouter = require('./routes/dashboard');
-const quotesRoute = require('./routes/quotes');
-const webhookRoute = require('./routes/webhooks');
+const authRoute = require("./routes/auth");
+const maintenanceRoute = require("./routes/maintenance");
+const incidentsRoute = require("./routes/incidents");
+const productsRoute = require("./routes/products");
+const ordersRoute = require("./routes/orders");
+const alertsRoute = require("./routes/alerts");
+const dashboardRouter = require("./routes/dashboard");
+const quotesRoute = require("./routes/quotes");
+const webhookRoute = require("./routes/webhooks");
+const contactRoute = require("./routes/contact");
+const paymentVerificationRoute = require("./routes/payment-verification");
 
 // GrainHero integrated routes
+<<<<<<< HEAD
 const grainBatchesRoute = require('./routes/grainBatches');
 const sensorsRoute = require('./routes/sensors');
 const aiRoute = require('./routes/ai');
@@ -25,48 +28,82 @@ const deviceHealthRoute = require('./routes/deviceHealth');
 const iotRoute = require('./routes/iot');
 const dataVisualizationRoute = require('./routes/dataVisualization');
 const silosRoute = require('./routes/silos');
+=======
+const grainBatchesRoute = require("./routes/grainBatches");
+const sensorsRoute = require("./routes/sensors");
+const silosRoute = require("./routes/silos");
+const insuranceRoute = require("./routes/insurance");
+>>>>>>> main
 
-const Alert = require('./models/Alert');
+// Super Admin routes
+const tenantManagementRoute = require("./routes/tenantManagement");
+const planManagementRoute = require("./routes/planManagement");
 
-const cors = require('cors');
-require('dotenv').config()
+// User Management routes
+const userManagementRoute = require("./routes/userManagement");
 
-const swaggerUi = require('swagger-ui-express');
-const swaggerJsdoc = require('swagger-jsdoc');
+const Alert = require("./models/Alert");
 
-const app = express()
-app.use('/uploads', express.static('uploads'));
+const cors = require("cors");
+require("dotenv").config();
+
+const swaggerUi = require("swagger-ui-express");
+const swaggerJsdoc = require("swagger-jsdoc");
+
+const app = express();
+app.use("/uploads", express.static("uploads"));
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-app.set('io', io);
+const io = new Server(server, { cors: { origin: "*" } });
+app.set("io", io);
 
+<<<<<<< HEAD
 mongoose.connect(`mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}`)
+=======
+// Try different connection formats
+const connectionString = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}?retryWrites=true&w=majority`;
+
+console.log("Attempting to connect to MongoDB...");
+console.log(
+  "Connection string:",
+  connectionString.replace(process.env.MONGO_PASS, "***")
+);
+
+mongoose.connect(connectionString, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+});
+>>>>>>> main
 
 const db = mongoose.connection;
 
-db.on('error', console.error.bind(console, 'connection error: '));
-db.once('open', ()=>{
-    console.log("MongoDB Connection Successfull");
+db.on("error", console.error.bind(console, "connection error: "));
+db.once("open", () => {
+  console.log("MongoDB Connection Successfull");
 });
 
 // Stripe webhook endpoint must use express.raw before express.json
-app.use('/webhook', webhookRoute);
+app.use("/webhook", express.raw({ type: "application/json" }), webhookRoute);
 
 app.use(express.json());
 
-app.use(cors({
-  origin: '*'
-}));
+app.use(
+  cors({
+    origin: "*",
+  })
+);
 // ✅ Use this instead
-app.use('/auth', authRoute);
-app.use('/maintenance', maintenanceRoute);
-app.use('/incidents', incidentsRoute);
-app.use('/products', productsRoute);
-app.use('/orders', ordersRoute);
-app.use('/alerts', alertsRoute);
-app.use('/quotes', quotesRoute);
+app.use("/auth", authRoute);
+app.use("/maintenance", maintenanceRoute);
+app.use("/incidents", incidentsRoute);
+app.use("/products", productsRoute);
+app.use("/orders", ordersRoute);
+app.use("/alerts", alertsRoute);
+app.use("/quotes", quotesRoute);
 
 // GrainHero integrated routes
+<<<<<<< HEAD
 app.use('/grain-batches', grainBatchesRoute);
 app.use('/sensors', sensorsRoute);
 app.use('/ai', aiRoute);
@@ -77,16 +114,39 @@ app.use('/device-health', deviceHealthRoute);
 app.use('/iot', iotRoute);
 app.use('/data-viz', dataVisualizationRoute);
 app.use('/silos', silosRoute);
+=======
+app.use("/api/grain-batches", grainBatchesRoute);
+app.use("/api/sensors", sensorsRoute);
+app.use("/api/silos", silosRoute);
+app.use("/api/insurance", insuranceRoute);
+>>>>>>> main
 
-app.use('/', dashboardRouter);
+// Super Admin routes
+app.use("/api/tenant-management", tenantManagementRoute);
+app.use("/api/plan-management", planManagementRoute);
+
+// User Management routes
+app.use("/api/user-management", userManagementRoute);
+
+// Contact routes
+app.use("/api/contact", contactRoute);
+
+// Payment verification routes
+app.use("/api/payment-verification", paymentVerificationRoute);
+
+// Stripe checkout session routes
+const createCheckoutSessionRoute = require("./routes/create-checkout-session");
+app.use("/api/create-checkout-session", createCheckoutSessionRoute);
+
+app.use("/", dashboardRouter);
 
 const swaggerOptions = {
   swaggerDefinition: {
-    openapi: '3.0.0',
+    openapi: "3.0.0",
     info: {
-      title: 'Farm Home Backend API',
-      version: '1.0.0',
-      description: 'API documentation for Farm Home Backend',
+      title: "Farm Home Backend API",
+      version: "1.0.0",
+      description: "API documentation for Farm Home Backend",
     },
     servers: [
       {
@@ -96,9 +156,9 @@ const swaggerOptions = {
     components: {
       securitySchemes: {
         bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
         },
       },
     },
@@ -108,19 +168,19 @@ const swaggerOptions = {
       },
     ],
   },
-  apis: ['./routes/*.js'],
+  apis: ["./routes/*.js"],
 };
- 
+
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.get('/status', (req, res)=> {
-    res.status(200).json({
-        status: 'Up',
-        frontend: process.env.FRONT_END_URL
-    })
-})
+app.get("/status", (req, res) => {
+  res.status(200).json({
+    status: "Up",
+    frontend: process.env.FRONT_END_URL,
+  });
+});
 
 // Helper: get filtered alerts for a user by role
 async function getFilteredAlerts(role, userId) {
@@ -132,7 +192,7 @@ async function getFilteredAlerts(role, userId) {
 
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', async function connection(ws, req) {
+wss.on("connection", async function connection(ws, req) {
   // Parse the URL to get role and userId
   const url = req.url;
   const match = url.match(/^\/alerts\/(admin|manager|assistant)\/(\w+)$/);
@@ -152,16 +212,23 @@ wss.on('connection', async function connection(ws, req) {
 
   // Listen for new alerts (using Mongoose change streams)
   const alertChangeStream = Alert.watch();
-  alertChangeStream.on('change', async (change) => {
-    if (change.operationType === 'insert' || change.operationType === 'update' || change.operationType === 'replace' || change.operationType === 'delete') {
+  alertChangeStream.on("change", async (change) => {
+    if (
+      change.operationType === "insert" ||
+      change.operationType === "update" ||
+      change.operationType === "replace" ||
+      change.operationType === "delete"
+    ) {
       await sendAlerts();
     }
   });
 
-  ws.on('close', () => {
+  ws.on("close", () => {
     alertChangeStream.close();
   });
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server & WebSocket running on port ${PORT}`));
+server.listen(PORT, () =>
+  console.log(`Server & WebSocket running on port ${PORT}`)
+);

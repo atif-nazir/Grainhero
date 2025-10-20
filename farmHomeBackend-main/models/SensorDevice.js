@@ -21,11 +21,11 @@ const sensorDeviceSchema = new mongoose.Schema({
     match: [/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/, 'Invalid MAC address format']
   },
   
-  // Tenant and location
-  tenant_id: {
+  // Admin and location
+  admin_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
+    ref: 'User',
+    required: [true, "Admin ID is required"],
     index: true
   },
   silo_id: {
@@ -221,8 +221,14 @@ const sensorDeviceSchema = new mongoose.Schema({
   versionKey: false 
 });
 
+<<<<<<< HEAD
 // Indexes for better query performance (device_id already has unique index)
 sensorDeviceSchema.index({ tenant_id: 1, status: 1 });
+=======
+// Indexes for better query performance
+sensorDeviceSchema.index({ admin_id: 1, status: 1 });
+sensorDeviceSchema.index({ device_id: 1 });
+>>>>>>> main
 sensorDeviceSchema.index({ silo_id: 1 });
 sensorDeviceSchema.index({ status: 1 });
 sensorDeviceSchema.index({ 'health_metrics.last_heartbeat': 1 });

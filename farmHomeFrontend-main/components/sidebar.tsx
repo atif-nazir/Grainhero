@@ -24,8 +24,22 @@ import {
   QrCode,
   TrendingUp,
   CreditCard,
+<<<<<<< HEAD
   Database,
   Brain,
+=======
+  Building2,
+  Crown,
+  Shield,
+  Globe,
+  Zap,
+  Database,
+  Server,
+  Activity,
+  DollarSign,
+  UserCheck,
+  AlertTriangle,
+>>>>>>> main
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
@@ -35,37 +49,48 @@ import { useRouter } from "next/navigation"
 import { useLanguage } from "@/app/[locale]/providers"
 // Removed usePlan import
 
+// Helper to humanize route keys when translations are missing
+function humanizeName(key: string) {
+  return key
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // Core dashboard
 const dashboardNav = [
-  { name: "dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
+  { name: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
 ]
 
 // Grain Operations & Management
 const grainOperationsNav = [
-  { 
-    name: "grain-batches", 
-    href: "/grain-batches", 
+  {
+    name: "grain-batches",
+    label: "Grain Batches",
+    href: "/grain-batches",
     icon: Package,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  { 
-    name: "silos", 
-    href: "/silos", 
+  {
+    name: "silos",
+    label: "Silos",
+    href: "/silos",
     icon: Package,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
-  { 
-    name: "buyers", 
-    href: "/buyers", 
+  {
+    name: "buyers",
+    label: "Buyers",
+    href: "/buyers",
     icon: Users,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  { 
-    name: "traceability", 
-    href: "/traceability", 
+  {
+    name: "traceability",
+    label: "Traceability",
+    href: "/traceability",
     icon: QrCode,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
@@ -74,23 +99,26 @@ const grainOperationsNav = [
 
 // IoT Monitoring & Control
 const iotMonitoringNav = [
-  { 
-    name: "sensors", 
-    href: "/sensors", 
+  {
+    name: "sensors",
+    label: "Sensors",
+    href: "/sensors",
     icon: Smartphone,
     roles: ["super_admin", "admin", "technician"],
     badge: undefined
   },
-  { 
-    name: "environmental-data", 
-    href: "/environmental-data", 
+  {
+    name: "environmental-data",
+    label: "Environmental Data",
+    href: "/environmental-data",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
-  { 
-    name: "grain-alerts", 
-    href: "/grain-alerts", 
+  {
+    name: "grain-alerts",
+    label: "Grain Alerts",
+    href: "/grain-alerts",
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
@@ -99,27 +127,39 @@ const iotMonitoringNav = [
 
 // AI and Analytics features
 const aiAnalyticsNav = [
-  { 
-    name: "ai-predictions", 
-    href: "/ai-predictions", 
+  {
+    name: "ai-predictions",
+    label: "AI Predictions",
+    href: "/ai-predictions",
     icon: Sparkles,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
+<<<<<<< HEAD
   { 
     name: "ai-spoilage", 
     href: "/ai-spoilage", 
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
+=======
+  {
+    name: "risk-assessment",
+    label: "Risk Assessment",
+    href: "/risk-assessment",
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+>>>>>>> main
     badge: "AI"
   },
-  { 
-    name: "spoilage-analysis", 
-    href: "/spoilage-analysis", 
+  {
+    name: "spoilage-analysis",
+    label: "Spoilage Analysis",
+    href: "/spoilage-analysis",
     icon: TrendingUp,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
+<<<<<<< HEAD
   { 
     name: "model-performance", 
     href: "/model-performance", 
@@ -137,6 +177,12 @@ const aiAnalyticsNav = [
   { 
     name: "environmental-data", 
     href: "/environmental-data", 
+=======
+  {
+    name: "environmental-data",
+    label: "Environmental Data",
+    href: "/environmental-data",
+>>>>>>> main
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
@@ -152,23 +198,26 @@ const aiAnalyticsNav = [
 
 // Business & Finance
 const businessNav = [
-  { 
-    name: "insurance", 
-    href: "/insurance", 
+  {
+    name: "insurance",
+    label: "Insurance",
+    href: "/insurance",
     icon: FileText,
     roles: ["super_admin", "admin"],
     badge: undefined
   },
-  { 
-    name: "payments", 
-    href: "/payments", 
+  {
+    name: "payments",
+    label: "Payments",
+    href: "/payments",
     icon: CreditCard,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  { 
-    name: "reports", 
-    href: "/reports", 
+  {
+    name: "reports",
+    label: "Reports",
+    href: "/reports",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
@@ -177,8 +226,77 @@ const businessNav = [
 
 // System Administration
 const systemNav = [
-  { name: "users", href: "/users", icon: Users, roles: ["super_admin", "admin"], badge: undefined },
-  { name: "settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
+  { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
+  { name: "users", label: "Users", href: "/users", icon: Users, roles: ["super_admin", "admin"], badge: undefined },
+  { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
+]
+
+// Super Admin Exclusive Features
+const superAdminNav = [
+  {
+    name: "tenant-management",
+    label: "Tenant Management",
+    href: "/tenant-management",
+    icon: Building2,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "plan-management",
+    label: "Plan Management",
+    href: "/plan-management",
+    icon: Crown,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "system-health",
+    label: "System Health",
+    href: "/system-health",
+    icon: Activity,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "global-analytics",
+    label: "Global Analytics",
+    href: "/global-analytics",
+    icon: Globe,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "security-center",
+    label: "Security Center",
+    href: "/security-center",
+    icon: Shield,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "revenue-management",
+    label: "Revenue Management",
+    href: "/revenue-management",
+    icon: DollarSign,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "system-logs",
+    label: "System Logs",
+    href: "/system-logs",
+    icon: Database,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
+  {
+    name: "server-monitoring",
+    label: "Server Monitoring",
+    href: "/server-monitoring",
+    icon: Server,
+    roles: ["super_admin"],
+    badge: "Super Admin"
+  },
 ]
 
 const milestone2Navigation = [
@@ -189,6 +307,7 @@ const milestone2Navigation = [
 ]
 
 const adminNavigation = [
+  { name: "team-management", href: "/team-management", icon: Users },
   { name: "users", href: "/users", icon: Users },
   { name: "settings", href: "/settings", icon: Settings },
 ]
@@ -209,12 +328,15 @@ export function Sidebar() {
     return item.roles.includes(userRole);
   };
 
-  const visibleDashboardNav = dashboardNav.filter(hasAccess);
-  const visibleGrainOpsNav = grainOperationsNav.filter(hasAccess);
-  const visibleIoTNav = iotMonitoringNav.filter(hasAccess);
-  const visibleAINav = aiAnalyticsNav.filter(hasAccess);
-  const visibleBusinessNav = businessNav.filter(hasAccess);
-  const visibleSystemNav = systemNav.filter(hasAccess);
+  const showOnlySuperAdmin = userRole === "super_admin";
+
+  const visibleDashboardNav = showOnlySuperAdmin ? dashboardNav.filter(hasAccess) : dashboardNav.filter(hasAccess);
+  const visibleGrainOpsNav = showOnlySuperAdmin ? [] : grainOperationsNav.filter(hasAccess);
+  const visibleIoTNav = showOnlySuperAdmin ? [] : iotMonitoringNav.filter(hasAccess);
+  const visibleAINav = showOnlySuperAdmin ? [] : aiAnalyticsNav.filter(hasAccess);
+  const visibleBusinessNav = showOnlySuperAdmin ? [] : businessNav.filter(hasAccess);
+  const visibleSystemNav = showOnlySuperAdmin ? [] : systemNav.filter(hasAccess);
+  const visibleSuperAdminNav = superAdminNav.filter(hasAccess);
 
   return (
     <div className="flex h-full w-72 flex-col bg-white border-r border-gray-200">
@@ -241,7 +363,7 @@ export function Sidebar() {
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -267,7 +389,7 @@ export function Sidebar() {
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -293,7 +415,7 @@ export function Sidebar() {
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant={item.badge === "AI" ? "default" : "secondary"} className="ml-auto text-xs">
                           {item.badge}
@@ -319,7 +441,7 @@ export function Sidebar() {
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -345,7 +467,33 @@ export function Sidebar() {
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Super Admin Exclusive Features */}
+          {visibleSuperAdminNav.length > 0 && (
+            <div className="space-y-1">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Super Admin</div>
+              {visibleSuperAdminNav.map((item) => {
+                const isActive = pathname === `/${currentLanguage}${item.href}`;
+                return (
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                    <Button
+                      variant={isActive ? "secondary" : "ghost"}
+                      className={cn("w-full justify-start", isActive && "bg-red-50 text-red-700 border-red-200")}
+                    >
+                      <item.icon className="mr-3 h-4 w-4" />
                       {t(`${item.name}`)}
+                      {item.badge && (
+                        <Badge variant="destructive" className="ml-auto text-xs">
+                          {item.badge}
+                        </Badge>
+                      )}
                     </Button>
                   </Link>
                 )
@@ -375,87 +523,91 @@ export function Sidebar() {
           )}
 
           {/* Milestone 2 Features */}
-          <div className="space-y-1">
-            <Button
-              variant="ghost"
-              className="w-full justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
-              onClick={() => setMilestone2Expanded(!milestone2Expanded)}
-            >
-              <span>Advanced Features</span>
-              {milestone2Expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            </Button>
-            {milestone2Expanded && (
-              <div className="space-y-1 pl-2">
-                {milestone2Navigation.map((item) => {
-                  const isActive = pathname === `/${currentLanguage}${item.href}`;
-                  return (
-                    <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
-                      >
-                        <item.icon className="mr-3 h-4 w-4" />
-                        <span className="flex-1 text-left">{t(`${item.name}`)}</span>
-                        {item.badge && (
-                          <Badge variant="secondary" className="ml-2 text-xs">
-                            {item.badge}
-                          </Badge>
-                        )}
-                      </Button>
-                    </Link>
-                  )
-                })}
+          {!showOnlySuperAdmin && (
+            <div className="space-y-1">
+              <Button
+                variant="ghost"
+                className="w-full justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                onClick={() => setMilestone2Expanded(!milestone2Expanded)}
+              >
+                <span>Advanced Features</span>
+                {milestone2Expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </Button>
+              {milestone2Expanded && (
+                <div className="space-y-1 pl-2">
+                  {milestone2Navigation.map((item) => {
+                    const isActive = pathname === `/${currentLanguage}${item.href}`;
+                    return (
+                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                        <Button
+                          variant={isActive ? "secondary" : "ghost"}
+                          className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
+                        >
+                          <item.icon className="mr-3 h-4 w-4" />
+                          <span className="flex-1 text-left">{t(`${item.name}`)}</span>
+                          {item.badge && (
+                            <Badge variant="secondary" className="ml-2 text-xs">
+                              {item.badge}
+                            </Badge>
+                          )}
+                        </Button>
+                      </Link>
+                    )
+                  })}
 
-                {/* Advanced Search */}
-                <div className="px-3 py-2">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Search className="h-4 w-4 text-gray-600" />
-                      <span className="text-sm font-medium text-gray-700">{t("advancedSearch")}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        New
-                      </Badge>
+                  {/* Advanced Search */}
+                  <div className="px-3 py-2">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Search className="h-4 w-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">{t("advancedSearch")}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          New
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-2">Search across all modules with complex filters</p>
+                      <Button variant="outline" size="sm" className="w-full bg-transparent">
+                        <Search className="h-3 w-3 mr-2" />
+                        Open Search
+                      </Button>
                     </div>
-                    <p className="text-xs text-gray-500 mb-2">Search across all modules with complex filters</p>
-                    <Button variant="outline" size="sm" className="w-full bg-transparent">
-                      <Search className="h-3 w-3 mr-2" />
-                      Open Search
-                    </Button>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Admin Features */}
-          <div className="space-y-1">
-            <Button
-              variant="ghost"
-              className="w-full justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
-              onClick={() => setAdminExpanded(!adminExpanded)}
-            >
-              <span>Administration</span>
-              {adminExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            </Button>
-            {adminExpanded && (
-              <div className="space-y-1 pl-2">
-                {adminNavigation.map((item) => {
-                  const isActive = pathname === `/${currentLanguage}${item.href}`;
-                  return (
-                    <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
-                      >
-                        <item.icon className="mr-3 h-4 w-4" />
-                        {t(`${item.name}`)}
-                      </Button>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+          {!showOnlySuperAdmin && (
+            <div className="space-y-1">
+              <Button
+                variant="ghost"
+                className="w-full justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                onClick={() => setAdminExpanded(!adminExpanded)}
+              >
+                <span>Administration</span>
+                {adminExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </Button>
+              {adminExpanded && (
+                <div className="space-y-1 pl-2">
+                  {adminNavigation.map((item) => {
+                    const isActive = pathname === `/${currentLanguage}${item.href}`;
+                    return (
+                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                        <Button
+                          variant={isActive ? "secondary" : "ghost"}
+                          className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
+                        >
+                          <item.icon className="mr-3 h-4 w-4" />
+                          {t(`${item.name}`)}
+                        </Button>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
       </ScrollArea>
 

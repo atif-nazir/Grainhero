@@ -11,7 +11,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: "super_admin" | "admin" | "manager" | "assistant"
+  role: "super_admin" | "admin" | "manager" | "technician"
   language: LanguageCode
   phone?: string
   avatarUrl?: string // Add avatarUrl as optional for extensibility
@@ -234,9 +234,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
       if (!res.ok) throw new Error("Login failed")
       const data = await res.json()
+<<<<<<< HEAD
       // Persist token for authenticated API calls
       if (data.token) {
         localStorage.setItem('token', data.token)
+=======
+      // Persist JWT for authenticated API calls
+      if (data.token) {
+        localStorage.setItem("token", data.token)
+>>>>>>> main
       }
       // Save encrypted hasAccess
       if (data.hasAccess) {
@@ -257,6 +263,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       localStorage.setItem("farm-home-user", JSON.stringify(userObj))
     } catch (err) {
       setUser(null)
+      localStorage.removeItem("token")
     }
     setIsLoading(false)
   }
@@ -265,7 +272,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setUser(null)
     localStorage.removeItem("farm-home-user")
     localStorage.removeItem("farm-home-access")
+<<<<<<< HEAD
     localStorage.removeItem('token')
+=======
+    localStorage.removeItem("token")
+>>>>>>> main
   }
 
   const updateLanguage = (language: LanguageCode) => {

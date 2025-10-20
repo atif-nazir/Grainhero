@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface SensorDevice {
   _id: string
@@ -38,6 +39,7 @@ export default function SensorsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
 
+<<<<<<< HEAD
   // Load sensors from backend
   useEffect(() => {
     const run = async () => {
@@ -70,6 +72,21 @@ export default function SensorsPage() {
       }
     }
     run()
+=======
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
+      if (!mounted) return
+      if (res.ok && res.data) {
+        setSensors(res.data.sensors as unknown as SensorDevice[])
+      }
+      setLoading(false)
+    })()
+    return () => {
+      mounted = false
+    }
+>>>>>>> main
   }, [])
 
   const getStatusBadge = (status: string) => {

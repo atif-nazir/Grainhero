@@ -15,11 +15,11 @@ const siloSchema = new mongoose.Schema({
     trim: true
   },
   
-  // Tenant and location
-  tenant_id: {
+  // Admin and location
+  admin_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
+    ref: 'User',
+    required: [true, "Admin ID is required"],
     index: true
   },
   farmhouse_id: {
@@ -323,8 +323,14 @@ const siloSchema = new mongoose.Schema({
   versionKey: false 
 });
 
+<<<<<<< HEAD
 // Indexes for better query performance (silo_id already has unique index)
 siloSchema.index({ tenant_id: 1, status: 1 });
+=======
+// Indexes for better query performance
+siloSchema.index({ admin_id: 1, status: 1 });
+siloSchema.index({ silo_id: 1 });
+>>>>>>> main
 siloSchema.index({ farmhouse_id: 1 });
 siloSchema.index({ current_batch_id: 1 });
 siloSchema.index({ status: 1 });

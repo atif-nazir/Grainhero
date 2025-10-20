@@ -1,14 +1,21 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, Filter, Package, QrCode, AlertTriangle } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Plus, Search, Package, QrCode, AlertTriangle, Edit, Trash2, Eye, MoreVertical, Truck } from 'lucide-react'
+import { api } from '@/lib/api'
+import { config } from '@/config'
+import { toast } from 'sonner'
+import QRCodeDisplay from '@/components/QRCodeDisplay'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface GrainBatch {
   _id: string
@@ -20,66 +27,321 @@ interface GrainBatch {
   spoilage_label: string
   intake_date: string
   silo_id: {
+    _id: string
     name: string
     silo_id: string
+    capacity_kg: number
   }
   farmer_name?: string
+  farmer_contact?: string
+  moisture_content?: number
+  qr_code?: string
+  variety?: string
+  grade?: string
+  harvest_date?: string
+  notes?: string
+  dispatch_details?: {
+    buyer_name: string
+    buyer_contact: string
+    quantity: number
+    dispatch_date: string
+    notes?: string
+  }
+}
+
+interface Silo {
+  _id: string
+  name: string
+  silo_id: string
+  capacity_kg: number
+  current_occupancy_kg: number
 }
 
 export default function GrainBatchesPage() {
-  const t = useTranslations('GrainBatches')
   const [batches, setBatches] = useState<GrainBatch[]>([])
+  const [silos, setSilos] = useState<Silo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [grainTypeFilter, setGrainTypeFilter] = useState('all')
 
-  // Mock data for now - replace with actual API call
+  // Dialog states
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isQRDialogOpen, setIsQRDialogOpen] = useState(false)
+  const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false)
+  const [selectedBatch, setSelectedBatch] = useState<GrainBatch | null>(null)
+
+  // Form states
+  const [formData, setFormData] = useState({
+    batch_id: '',
+    grain_type: '',
+    quantity_kg: '',
+    silo_id: '',
+    farmer_name: '',
+    farmer_contact: '',
+    moisture_content: '',
+    variety: '',
+    grade: 'Standard',
+    harvest_date: '',
+    notes: ''
+  })
+
+  // Dispatch form data
+  const [dispatchData, setDispatchData] = useState({
+    buyer_name: '',
+    buyer_contact: '',
+    quantity_dispatched: '',
+    dispatch_date: '',
+    notes: ''
+  })
+
+  const fetchBatches = async () => {
+    try {
+      console.log('Fetching batches...')
+      const res = await api.get<{ batches: GrainBatch[] }>(`/api/grain-batches?limit=50`)
+      console.log('Fetch response:', res)
+
+      if (res.ok && res.data) {
+        setBatches(res.data.batches as unknown as GrainBatch[])
+        console.log('Batches loaded:', res.data.batches.length)
+      } else {
+        console.error('Fetch error:', res.error)
+        toast.error(`Failed to fetch grain batches: ${res.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error fetching batches:', error)
+      toast.error(`Failed to fetch grain batches: ${(error as Error).message || 'Network error'}`)
+    }
+  }
+
+  const fetchSilos = async () => {
+    try {
+      const res = await api.get<{ silos: Silo[] }>(`/api/silos`)
+      if (res.ok && res.data) {
+        setSilos(res.data.silos as unknown as Silo[])
+      }
+    } catch (error) {
+      console.error('Error fetching silos:', error)
+    }
+  }
+
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      const mockBatches: GrainBatch[] = [
-        {
-          _id: '1',
-          batch_id: 'GH-2024-001',
-          grain_type: 'Wheat',
-          quantity_kg: 5000,
-          status: 'stored',
-          risk_score: 15,
-          spoilage_label: 'Safe',
-          intake_date: '2024-01-15',
-          silo_id: { name: 'Silo A', silo_id: 'SILO-A-001' },
-          farmer_name: 'Ahmed Khan'
-        },
-        {
-          _id: '2',
-          batch_id: 'GH-2024-002',
-          grain_type: 'Rice',
-          quantity_kg: 3500,
-          status: 'stored',
-          risk_score: 45,
-          spoilage_label: 'Risky',
-          intake_date: '2024-01-20',
-          silo_id: { name: 'Silo B', silo_id: 'SILO-B-001' },
-          farmer_name: 'Fatima Ali'
-        },
-        {
-          _id: '3',
-          batch_id: 'GH-2024-003',
-          grain_type: 'Maize',
-          quantity_kg: 2000,
-          status: 'dispatched',
-          risk_score: 8,
-          spoilage_label: 'Safe',
-          intake_date: '2024-01-10',
-          silo_id: { name: 'Silo C', silo_id: 'SILO-C-001' },
-          farmer_name: 'Muhammad Hassan'
-        }
-      ]
-      setBatches(mockBatches)
+    let mounted = true
+      ; (async () => {
+        // Check if user is authenticated
+        const token = localStorage.getItem('token')
+        if (!token) {
+          console.error('No authentication token found')
+          toast.error('Please log in to access grain batches')
       setLoading(false)
-    }, 1000)
+          return
+        }
+
+        console.log('User authenticated, fetching data...')
+        await Promise.all([fetchBatches(), fetchSilos()])
+        if (mounted) {
+          setLoading(false)
+        }
+    })()
+    return () => {
+      mounted = false
+    }
   }, [])
+
+  // CRUD Operations
+  const handleAddBatch = async () => {
+    try {
+      // Convert numeric fields to numbers
+      const dataToSend = {
+        ...formData,
+        quantity_kg: Number(formData.quantity_kg),
+        moisture_content: formData.moisture_content ? Number(formData.moisture_content) : undefined
+      }
+      console.log('Creating batch with data:', dataToSend)
+
+      // Check if user is authenticated
+      const token = localStorage.getItem('token')
+      console.log('Token from localStorage:', token ? 'Token exists' : 'No token found')
+
+      if (!token) {
+        toast.error('Please log in to create grain batches')
+        return
+      }
+
+      // Log the full request details
+      console.log('Making API request to:', `${config.backendUrl}/grain-batches`)
+      console.log('Request headers:', {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      })
+
+      const res = await api.post('/api/grain-batches', dataToSend)
+      console.log('Full API Response:', res)
+      console.log('Response status:', res.status)
+      console.log('Response data:', res.data)
+      console.log('Response error:', res.error)
+
+      if (res.ok) {
+        toast.success('Grain batch created successfully')
+        setIsAddDialogOpen(false)
+        resetForm()
+        await fetchBatches()
+      } else {
+        console.error('API Error Details:', {
+          status: res.status,
+          error: res.error,
+          response: res
+        })
+        toast.error(`Failed to create grain batch: ${res.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Network/Request Error:', error)
+      console.error('Error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        name: (error as Error).name
+      })
+      toast.error(`Failed to create grain batch: ${(error as Error).message || 'Network error'}`)
+    }
+  }
+
+  const handleEditBatch = async () => {
+    if (!selectedBatch) return
+    try {
+      // Convert numeric fields to numbers
+      const dataToSend = {
+        ...formData,
+        quantity_kg: Number(formData.quantity_kg),
+        moisture_content: formData.moisture_content ? Number(formData.moisture_content) : undefined
+      }
+      const res = await api.put(`/api/grain-batches/${selectedBatch._id}`, dataToSend)
+      if (res.ok) {
+        toast.success('Grain batch updated successfully')
+        setIsEditDialogOpen(false)
+        resetForm()
+        await fetchBatches()
+      } else {
+        toast.error('Failed to update grain batch')
+      }
+    } catch (error) {
+      console.error('Error updating batch:', error)
+      toast.error('Failed to update grain batch')
+    }
+  }
+
+  const handleDeleteBatch = async () => {
+    if (!selectedBatch) return
+    try {
+      const res = await api.delete(`/api/grain-batches/${selectedBatch._id}`)
+      if (res.ok) {
+        toast.success('Grain batch deleted successfully')
+        setIsDeleteDialogOpen(false)
+        await fetchBatches()
+      } else {
+        toast.error('Failed to delete grain batch')
+      }
+    } catch (error) {
+      console.error('Error deleting batch:', error)
+      toast.error('Failed to delete grain batch')
+    }
+  }
+
+  const handleDispatchBatch = async () => {
+    if (!selectedBatch) return
+    try {
+      // Convert numeric fields to numbers
+      const dataToSend = {
+        ...dispatchData,
+        quantity_dispatched: Number(dispatchData.quantity_dispatched)
+      }
+      const res = await api.post(`/api/grain-batches/${selectedBatch._id}/dispatch-simple`, dataToSend)
+      if (res.ok) {
+        toast.success('Grain batch dispatched successfully')
+        setIsDispatchDialogOpen(false)
+        setDispatchData({
+          buyer_name: '',
+          buyer_contact: '',
+          quantity_dispatched: '',
+          dispatch_date: '',
+          notes: ''
+        })
+        await fetchBatches()
+      } else {
+        toast.error('Failed to dispatch grain batch')
+      }
+    } catch (error) {
+      console.error('Error dispatching batch:', error)
+      toast.error('Failed to dispatch grain batch')
+    }
+  }
+
+  const openDispatchDialog = (batch: GrainBatch) => {
+    setSelectedBatch(batch)
+    setDispatchData({
+      buyer_name: '',
+      buyer_contact: '',
+      quantity_dispatched: batch.quantity_kg.toString(),
+      dispatch_date: new Date().toISOString().split('T')[0],
+      notes: ''
+    })
+    setIsDispatchDialogOpen(true)
+  }
+
+  const handleViewBatch = (batch: GrainBatch) => {
+    setSelectedBatch(batch)
+    setIsViewDialogOpen(true)
+  }
+
+  const handleEditClick = (batch: GrainBatch) => {
+    setSelectedBatch(batch)
+    setFormData({
+      batch_id: batch.batch_id,
+      grain_type: batch.grain_type,
+      quantity_kg: batch.quantity_kg.toString(),
+      silo_id: batch.silo_id?._id || '',
+      farmer_name: batch.farmer_name || '',
+      farmer_contact: batch.farmer_contact || '',
+      moisture_content: batch.moisture_content?.toString() || '',
+      variety: batch.variety || '',
+      grade: batch.grade || 'Standard',
+      harvest_date: batch.harvest_date || '',
+      notes: batch.notes || ''
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleDeleteClick = (batch: GrainBatch) => {
+    setSelectedBatch(batch)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleQRCodeClick = (batch: GrainBatch) => {
+    if (batch.qr_code) {
+      setSelectedBatch(batch)
+      setIsQRDialogOpen(true)
+    } else {
+      toast.error('No QR code available for this batch')
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      batch_id: '',
+      grain_type: '',
+      quantity_kg: '',
+      silo_id: '',
+      farmer_name: '',
+      farmer_contact: '',
+      moisture_content: '',
+      variety: '',
+      grade: 'Standard',
+      harvest_date: '',
+      notes: ''
+    })
+  }
 
   const getStatusBadge = (status: string) => {
     const statusColors = {
@@ -129,10 +391,196 @@ export default function GrainBatchesPage() {
             Manage and track grain batches with AI-powered quality monitoring
           </p>
         </div>
-        <Button className="gap-2">
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2 bg-black hover:bg-gray-800">
           <Plus className="h-4 w-4" />
           Add New Batch
         </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-black" />
+                Add New Grain Batch
+              </DialogTitle>
+              <DialogDescription>
+                Create a new grain batch with comprehensive quality monitoring and tracking
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6">
+              {/* Basic Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Basic Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="batch_id" className="text-sm font-medium">Batch ID</Label>
+                      <Input
+                        id="batch_id"
+                        value={formData.batch_id}
+                        onChange={(e) => setFormData({ ...formData, batch_id: e.target.value })}
+                        placeholder="e.g., GH-2024-001"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="grain_type" className="text-sm font-medium">Grain Type</Label>
+                      <Select value={formData.grain_type} onValueChange={(value) => setFormData({ ...formData, grain_type: value })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select grain type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Wheat">Wheat</SelectItem>
+                          <SelectItem value="Rice">Rice</SelectItem>
+                          <SelectItem value="Maize">Maize</SelectItem>
+                          <SelectItem value="Corn">Corn</SelectItem>
+                          <SelectItem value="Barley">Barley</SelectItem>
+                          <SelectItem value="Sorghum">Sorghum</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              {/* Storage Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Storage Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="quantity_kg" className="text-sm font-medium">Quantity (kg)</Label>
+                      <Input
+                        id="quantity_kg"
+                        type="number"
+                        value={formData.quantity_kg}
+                        onChange={(e) => setFormData({ ...formData, quantity_kg: e.target.value })}
+                        placeholder="Enter quantity"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="silo_id" className="text-sm font-medium">Silo Assignment</Label>
+                      <Select value={formData.silo_id} onValueChange={(value) => setFormData({ ...formData, silo_id: value })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select silo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {silos.map((silo) => (
+                            <SelectItem key={silo._id} value={silo._id}>
+                              {silo.name} (Available: {(silo.capacity_kg - (silo.current_occupancy_kg || 0)).toLocaleString()} kg)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Farmer Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Farmer Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="farmer_name" className="text-sm font-medium">Farmer Name</Label>
+                      <Input
+                        id="farmer_name"
+                        value={formData.farmer_name}
+                        onChange={(e) => setFormData({ ...formData, farmer_name: e.target.value })}
+                        placeholder="Enter farmer name"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="farmer_contact" className="text-sm font-medium">Contact Number</Label>
+                      <Input
+                        id="farmer_contact"
+                        value={formData.farmer_contact}
+                        onChange={(e) => setFormData({ ...formData, farmer_contact: e.target.value })}
+                        placeholder="Enter contact number"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Quality Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Quality Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="moisture_content" className="text-sm font-medium">Moisture Content (%)</Label>
+                      <Input
+                        id="moisture_content"
+                        type="number"
+                        step="0.1"
+                        value={formData.moisture_content}
+                        onChange={(e) => setFormData({ ...formData, moisture_content: e.target.value })}
+                        placeholder="Enter moisture %"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="grade" className="text-sm font-medium">Grade</Label>
+                      <Select value={formData.grade} onValueChange={(value) => setFormData({ ...formData, grade: value })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select grade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Premium">Premium</SelectItem>
+                          <SelectItem value="Standard">Standard</SelectItem>
+                          <SelectItem value="A">Grade A</SelectItem>
+                          <SelectItem value="B">Grade B</SelectItem>
+                          <SelectItem value="C">Grade C</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Additional Notes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Additional Notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div>
+                    <Label htmlFor="notes" className="text-sm font-medium">Notes</Label>
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      placeholder="Additional notes about this batch"
+                      className="mt-1"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddBatch} className="bg-black hover:bg-gray-800 text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Batch
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats Cards */}
@@ -275,7 +723,7 @@ export default function GrainBatchesPage() {
                   <TableCell>{batch.grain_type}</TableCell>
                   <TableCell>{batch.quantity_kg.toLocaleString()} kg</TableCell>
                   <TableCell>{batch.farmer_name || 'N/A'}</TableCell>
-                  <TableCell>{batch.silo_id.name}</TableCell>
+                  <TableCell>{batch.silo_id?.name || 'No Silo Assigned'}</TableCell>
                   <TableCell>
                     <Badge className={getStatusBadge(batch.status)}>
                       {batch.status.charAt(0).toUpperCase() + batch.status.slice(1)}
@@ -288,14 +736,51 @@ export default function GrainBatchesPage() {
                   </TableCell>
                   <TableCell>{new Date(batch.intake_date).toLocaleDateString()}</TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm">
-                        <QrCode className="h-4 w-4" />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm">
-                        View
-                      </Button>
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          onClick={() => handleQRCodeClick(batch)}
+                          className="cursor-pointer"
+                        >
+                          <QrCode className="h-4 w-4 mr-2" />
+                          View QR Code
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleViewBatch(batch)}
+                          className="cursor-pointer"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleEditClick(batch)}
+                          className="cursor-pointer"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit Batch
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => openDispatchDialog(batch)}
+                          className="cursor-pointer"
+                          disabled={batch.status === 'dispatched' || batch.status === 'sold'}
+                        >
+                          <Truck className="h-4 w-4 mr-2" />
+                          Dispatch Batch
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteClick(batch)}
+                          className="cursor-pointer text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Batch
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -309,6 +794,658 @@ export default function GrainBatchesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* View Batch Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Batch Details - {selectedBatch?.batch_id}
+            </DialogTitle>
+            <DialogDescription>
+              Complete information about this grain batch
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBatch && (
+            <div className="space-y-6 py-4">
+              {/* Status Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Status</p>
+                        <Badge className={getStatusBadge(selectedBatch.status)}>
+                          {selectedBatch.status.charAt(0).toUpperCase() + selectedBatch.status.slice(1)}
+                        </Badge>
+                      </div>
+                      <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Risk Level</p>
+                        <Badge className={getRiskBadge(selectedBatch.risk_score, selectedBatch.spoilage_label)}>
+                          {selectedBatch.spoilage_label} ({selectedBatch.risk_score}%)
+                        </Badge>
+                      </div>
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Quantity</p>
+                        <p className="text-lg font-semibold">{selectedBatch.quantity_kg.toLocaleString()} kg</p>
+                      </div>
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Main Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Batch Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label className="font-semibold">Batch ID</Label>
+                      <p className="text-sm text-muted-foreground font-mono">{selectedBatch.batch_id}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Grain Type</Label>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.grain_type}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Grade</Label>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.grade || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Moisture Content</Label>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.moisture_content ? `${selectedBatch.moisture_content}%` : 'N/A'}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Storage & Contact</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label className="font-semibold">Silo</Label>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.silo_id?.name || 'No Silo Assigned'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Farmer</Label>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.farmer_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Farmer Contact</Label>
+                      <p className="text-sm text-muted-foreground">{selectedBatch.farmer_contact || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Intake Date</Label>
+                      <p className="text-sm text-muted-foreground">{new Date(selectedBatch.intake_date).toLocaleDateString()}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* QR Code Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">QR Code</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-mono text-muted-foreground">{selectedBatch.qr_code || 'Not generated'}</p>
+                    </div>
+                    {selectedBatch.qr_code && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsViewDialogOpen(false)
+                          handleQRCodeClick(selectedBatch)
+                        }}
+                      >
+                        <QrCode className="h-4 w-4 mr-2" />
+                        View QR Code
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Notes Section */}
+              {selectedBatch.notes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Notes</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">{selectedBatch.notes}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Batch History/Traceability Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Package className="h-5 w-5" />
+                    Batch History & Traceability
+                  </CardTitle>
+                  <CardDescription>
+                    Complete timeline of events for this grain batch
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Intake Event */}
+                    <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                        <Package className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-blue-900">Batch Intake</h4>
+                          <span className="text-xs text-blue-600">
+                            {new Date(selectedBatch.intake_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-blue-700">
+                          Batch {selectedBatch.batch_id} created with {selectedBatch.quantity_kg.toLocaleString()} kg of {selectedBatch.grain_type}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Farmer: {selectedBatch.farmer_name || 'N/A'} • Contact: {selectedBatch.farmer_contact || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quality Recording Event */}
+                    <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                        <AlertTriangle className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-green-900">Quality Assessment</h4>
+                          <span className="text-xs text-green-600">
+                            {new Date(selectedBatch.intake_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-green-700">
+                          Moisture Content: {selectedBatch.moisture_content || 'N/A'}% • Grade: {selectedBatch.grade || 'N/A'}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          Quality tests recorded during intake
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Storage Assignment Event */}
+                    <div className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="flex-shrink-0 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+                        <Package className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-purple-900">Storage Assignment</h4>
+                          <span className="text-xs text-purple-600">
+                            {new Date(selectedBatch.intake_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-purple-700">
+                          Assigned to Silo: {selectedBatch.silo_id?.name || 'No Silo Assigned'}
+                        </p>
+                        <p className="text-xs text-purple-600 mt-1">
+                          Storage capacity: {selectedBatch.silo_id?.capacity_kg?.toLocaleString() || 'N/A'} kg
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Risk Assessment Event */}
+                    <div className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <div className="flex-shrink-0 w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center">
+                        <AlertTriangle className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-orange-900">Risk Assessment</h4>
+                          <span className="text-xs text-orange-600">
+                            {new Date(selectedBatch.intake_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-orange-700">
+                          Risk Level: {selectedBatch.spoilage_label} ({selectedBatch.risk_score}%)
+                        </p>
+                        <p className="text-xs text-orange-600 mt-1">
+                          Current status: {selectedBatch.status}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Dispatch Event (if dispatched) */}
+                    {selectedBatch.dispatch_details && (
+                      <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                          <Truck className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium text-green-900">Batch Dispatch</h4>
+                            <span className="text-xs text-green-600">
+                              {selectedBatch.dispatch_details.dispatch_date ?
+                                new Date(selectedBatch.dispatch_details.dispatch_date).toLocaleDateString() :
+                                'N/A'
+                              }
+                            </span>
+                          </div>
+                          <p className="text-sm text-green-700">
+                            Dispatched to: {selectedBatch.dispatch_details.buyer_name || 'N/A'}
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            Quantity: {selectedBatch.dispatch_details.quantity || 'N/A'} kg •
+                            Contact: {selectedBatch.dispatch_details.buyer_contact || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No additional events message */}
+                    {!selectedBatch.dispatch_details && (
+                      <div className="text-center py-4 text-muted-foreground">
+                        <p className="text-sm">No additional events recorded yet</p>
+                        <p className="text-xs">Dispatch and other events will appear here</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Batch Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-blue-600" />
+              Edit Grain Batch
+            </DialogTitle>
+            <DialogDescription>
+              Update grain batch information with comprehensive details and quality metrics
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Basic Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Basic Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit_batch_id" className="text-sm font-medium">Batch ID</Label>
+                    <Input
+                      id="edit_batch_id"
+                      value={formData.batch_id}
+                      onChange={(e) => setFormData({ ...formData, batch_id: e.target.value })}
+                      placeholder="e.g., GH-2024-001"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_grain_type" className="text-sm font-medium">Grain Type</Label>
+                    <Select value={formData.grain_type} onValueChange={(value) => setFormData({ ...formData, grain_type: value })}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select grain type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Wheat">Wheat</SelectItem>
+                        <SelectItem value="Rice">Rice</SelectItem>
+                        <SelectItem value="Maize">Maize</SelectItem>
+                        <SelectItem value="Corn">Corn</SelectItem>
+                        <SelectItem value="Barley">Barley</SelectItem>
+                        <SelectItem value="Sorghum">Sorghum</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Storage Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Storage Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit_quantity_kg" className="text-sm font-medium">Quantity (kg)</Label>
+                    <Input
+                      id="edit_quantity_kg"
+                      type="number"
+                      value={formData.quantity_kg}
+                      onChange={(e) => setFormData({ ...formData, quantity_kg: e.target.value })}
+                      placeholder="Enter quantity"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_silo_id" className="text-sm font-medium">Silo Assignment</Label>
+                    <Select value={formData.silo_id} onValueChange={(value) => setFormData({ ...formData, silo_id: value })}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select silo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {silos.map((silo) => (
+                          <SelectItem key={silo._id} value={silo._id}>
+                            {silo.name} (Available: {(silo.capacity_kg - (silo.current_occupancy_kg || 0)).toLocaleString()} kg)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Farmer Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Farmer Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit_farmer_name" className="text-sm font-medium">Farmer Name</Label>
+                    <Input
+                      id="edit_farmer_name"
+                      value={formData.farmer_name}
+                      onChange={(e) => setFormData({ ...formData, farmer_name: e.target.value })}
+                      placeholder="Enter farmer name"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_farmer_contact" className="text-sm font-medium">Contact Number</Label>
+                    <Input
+                      id="edit_farmer_contact"
+                      value={formData.farmer_contact}
+                      onChange={(e) => setFormData({ ...formData, farmer_contact: e.target.value })}
+                      placeholder="Enter contact number"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quality Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Quality Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit_moisture_content" className="text-sm font-medium">Moisture Content (%)</Label>
+                    <Input
+                      id="edit_moisture_content"
+                      type="number"
+                      step="0.1"
+                      value={formData.moisture_content}
+                      onChange={(e) => setFormData({ ...formData, moisture_content: e.target.value })}
+                      placeholder="Enter moisture %"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_grade" className="text-sm font-medium">Grade</Label>
+                    <Select value={formData.grade} onValueChange={(value) => setFormData({ ...formData, grade: value })}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Premium">Premium</SelectItem>
+                        <SelectItem value="Standard">Standard</SelectItem>
+                        <SelectItem value="A">Grade A</SelectItem>
+                        <SelectItem value="B">Grade B</SelectItem>
+                        <SelectItem value="C">Grade C</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Additional Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Additional Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div>
+                  <Label htmlFor="edit_notes" className="text-sm font-medium">Notes</Label>
+                  <Textarea
+                    id="edit_notes"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    placeholder="Additional notes about this batch"
+                    className="mt-1"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditBatch} className="bg-black hover:bg-gray-800 text-white">
+              <Edit className="h-4 w-4 mr-2" />
+              Update Batch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Batch Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Delete Grain Batch
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the grain batch and remove it from storage.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBatch && (
+            <div className="py-4">
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-100 rounded-full">
+                      <Package className="h-4 w-4 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-red-800">Batch {selectedBatch.batch_id}</p>
+                      <p className="text-sm text-red-600">
+                        {selectedBatch.grain_type} • {selectedBatch.quantity_kg.toLocaleString()} kg
+                      </p>
+                      <p className="text-xs text-red-500 mt-1">
+                        Stored in: {selectedBatch.silo_id?.name || 'No Silo Assigned'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteBatch} className="bg-red-600 hover:bg-red-700">
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Batch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* QR Code Dialog */}
+      {/* Dispatch Batch Dialog */}
+      <Dialog open={isDispatchDialogOpen} onOpenChange={setIsDispatchDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <Truck className="h-5 w-5" />
+              Dispatch Grain Batch
+            </DialogTitle>
+            <DialogDescription>
+              Record the dispatch of this grain batch to a buyer. This will update the batch status and reduce silo occupancy.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBatch && (
+            <div className="py-4 space-y-6">
+              {/* Batch Information Card */}
+              <Card className="border-green-200 bg-green-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <Package className="h-8 w-8 text-green-600" />
+                    <div>
+                      <h4 className="font-semibold text-green-800">Batch Information</h4>
+                      <p className="text-sm text-green-600">
+                        {selectedBatch.batch_id} - {selectedBatch.grain_type} ({selectedBatch.quantity_kg.toLocaleString()} kg)
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Dispatch Form */}
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Dispatch Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="buyer_name">Buyer Name *</Label>
+                        <Input
+                          id="buyer_name"
+                          value={dispatchData.buyer_name}
+                          onChange={(e) => setDispatchData({ ...dispatchData, buyer_name: e.target.value })}
+                          placeholder="Enter buyer name"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="buyer_contact">Buyer Contact *</Label>
+                        <Input
+                          id="buyer_contact"
+                          value={dispatchData.buyer_contact}
+                          onChange={(e) => setDispatchData({ ...dispatchData, buyer_contact: e.target.value })}
+                          placeholder="Email or phone number"
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="quantity_dispatched">Quantity Dispatched (kg) *</Label>
+                        <Input
+                          id="quantity_dispatched"
+                          type="number"
+                          value={dispatchData.quantity_dispatched}
+                          onChange={(e) => setDispatchData({ ...dispatchData, quantity_dispatched: e.target.value })}
+                          placeholder="Enter quantity"
+                          max={selectedBatch.quantity_kg}
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Available: {selectedBatch.quantity_kg.toLocaleString()} kg
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dispatch_date">Dispatch Date *</Label>
+                        <Input
+                          id="dispatch_date"
+                          type="date"
+                          value={dispatchData.dispatch_date}
+                          onChange={(e) => setDispatchData({ ...dispatchData, dispatch_date: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="dispatch_notes">Notes</Label>
+                      <Textarea
+                        id="dispatch_notes"
+                        value={dispatchData.notes}
+                        onChange={(e) => setDispatchData({ ...dispatchData, notes: e.target.value })}
+                        placeholder="Additional dispatch information..."
+                        className="mt-1"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsDispatchDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDispatchBatch}
+              className="bg-black hover:bg-gray-800 text-white"
+              disabled={!dispatchData.buyer_name || !dispatchData.buyer_contact || !dispatchData.quantity_dispatched || !dispatchData.dispatch_date}
+            >
+              <Truck className="h-4 w-4 mr-2" />
+              Dispatch Batch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {selectedBatch && (
+        <QRCodeDisplay
+          qrCode={selectedBatch.qr_code || ''}
+          batchId={selectedBatch.batch_id}
+          grainType={selectedBatch.grain_type}
+          isOpen={isQRDialogOpen}
+          onClose={() => setIsQRDialogOpen(false)}
+        />
+      )}
     </div>
   )
 }

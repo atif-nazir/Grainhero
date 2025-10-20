@@ -76,7 +76,7 @@ router.post('/', [
         // Check if silo exists
         const silo = await Silo.findOne({
             _id: req.body.silo_id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!silo) {
@@ -85,7 +85,7 @@ router.post('/', [
 
         const sensor = new SensorDevice({
             ...req.body,
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id,
             created_by: req.user._id
         });
 
@@ -133,7 +133,7 @@ router.get('/', [
         const limit = parseInt(req.query.limit) || 20;
         const skip = (page - 1) * limit;
 
-        const filter = { tenant_id: req.user.tenant_id };
+        const filter = { admin_id: req.user.admin_id };
         
         if (req.query.status) filter.status = req.query.status;
         if (req.query.silo_id) filter.silo_id = req.query.silo_id;
@@ -189,7 +189,7 @@ router.get('/:id', [
     try {
         const sensor = await SensorDevice.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         }).populate('silo_id');
 
         if (!sensor) {
@@ -235,7 +235,7 @@ router.put('/:id', [
     try {
         const sensor = await SensorDevice.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!sensor) {
@@ -311,7 +311,7 @@ router.post('/:id/readings', [
         // Create sensor reading
         const reading = new SensorReading({
             device_id: req.params.id,
-            tenant_id: sensor.tenant_id,
+             admin_id: sensor.admin_id,
             silo_id: sensor.silo_id._id,
             timestamp: req.body.timestamp ? new Date(req.body.timestamp) : new Date(),
             ...req.body
@@ -427,7 +427,7 @@ router.post('/:id/calibrate', [
     try {
         const sensor = await SensorDevice.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!sensor) {
@@ -533,7 +533,7 @@ function checkThresholds(reading, thresholds) {
 async function createAlert(sensor, reading, violation) {
     try {
         const alert = new GrainAlert({
-            tenant_id: sensor.tenant_id,
+             admin_id: sensor.admin_id,
             silo_id: sensor.silo_id,
             device_id: sensor._id,
             title: `${violation.sensor_type.toUpperCase()} ${violation.severity.toUpperCase()}`,
