@@ -167,6 +167,36 @@ const grainBatchSchema = new mongoose.Schema({
   notes: String,
   tags: [String],
   
+  // Insurance and spoilage events
+  spoilage_events: [{
+    event_id: String,
+    event_type: {
+      type: String,
+      enum: ['mold', 'insect', 'moisture', 'contamination', 'other']
+    },
+    severity: {
+      type: String,
+      enum: ['minor', 'moderate', 'severe', 'total_loss']
+    },
+    description: String,
+    estimated_loss_kg: Number,
+    estimated_value_loss: Number,
+    detected_date: { type: Date, default: Date.now },
+    reported_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    photos: [{
+      filename: String,
+      original_name: String,
+      path: String,
+      size: Number,
+      upload_date: { type: Date, default: Date.now }
+    }],
+    environmental_conditions: {
+      temperature: Number,
+      humidity: Number,
+      moisture_content: Number
+    }
+  }],
+  
   // Audit trail
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -189,10 +219,15 @@ const grainBatchSchema = new mongoose.Schema({
   versionKey: false 
 });
 
+<<<<<<< HEAD
+// Indexes for better query performance (batch_id and qr_code already have unique indexes)
+grainBatchSchema.index({ tenant_id: 1, status: 1 });
+=======
 // Indexes for better query performance
 grainBatchSchema.index({ admin_id: 1, status: 1 });
 grainBatchSchema.index({ batch_id: 1 });
 grainBatchSchema.index({ qr_code: 1 });
+>>>>>>> main
 grainBatchSchema.index({ silo_id: 1 });
 grainBatchSchema.index({ grain_type: 1 });
 grainBatchSchema.index({ intake_date: -1 });

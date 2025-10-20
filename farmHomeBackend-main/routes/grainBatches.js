@@ -1,5 +1,44 @@
 const express = require("express");
 const router = express.Router();
+<<<<<<< HEAD
+const GrainBatch = require('../models/GrainBatch');
+const Silo = require('../models/Silo');
+const { auth } = require('../middleware/auth');
+const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { body, validationResult, param, query } = require('express-validator');
+const QRCode = require('qrcode');
+const PDFKit = require('pdfkit');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for photo uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = 'uploads/spoilage-events';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `spoilage-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: function (req, file, cb) {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+=======
 const GrainBatch = require("../models/GrainBatch");
 const Silo = require("../models/Silo");
 const { auth } = require("../middleware/auth");
@@ -9,6 +48,7 @@ const {
 } = require("../middleware/permission");
 const { body, validationResult, param, query } = require("express-validator");
 const QRCode = require("qrcode");
+>>>>>>> main
 
 /**
  * @swagger
@@ -958,5 +998,286 @@ router.delete(
     }
   }
 );
+
+// ============= INSURANCE & LOSS CLAIM SUPPORT =============
+
+/**
+ * @swagger
+ * /grain-batches/{id}/spoilage-event:
+ *   post:
+ *     summary: Log a spoilage event for insurance claim
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/:id/spoilage-event', [
+    auth,
+    requirePermission('insurance.create'),
+    requireTenantAccess,
+    upload.array('photos', 10), // Allow up to 10 photos
+    param('id').isMongoId().withMessage('Valid batch ID is required'),
+    [
+        body('event_type').isIn(['mold', 'insect', 'moisture', 'contamination', 'other']).withMessage('Invalid event type'),
+        body('severity').isIn(['minor', 'moderate', 'severe', 'total_loss']).withMessage('Invalid severity level'),
+        body('description').notEmpty().withMessage('Event description is required'),
+        body('estimated_loss_kg').isFloat({ min: 0 }).withMessage('Estimated loss must be positive'),
+        body('estimated_value_loss').optional().isFloat({ min: 0 }).withMessage('Estimated value loss must be positive')
+    ]
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
+            tenant_id: req.user.tenant_id
+        });
+
+        if (!batch) {
+            return res.status(404).json({ error: 'Batch not found' });
+        }
+
+        // Create spoilage event object
+        const spoilageEvent = {
+            event_id: `SPEV-${Date.now()}`,
+            event_type: req.body.event_type,
+            severity: req.body.severity,
+            description: req.body.description,
+            estimated_loss_kg: req.body.estimated_loss_kg,
+            estimated_value_loss: req.body.estimated_value_loss,
+            detected_date: new Date(),
+            reported_by: req.user._id,
+            photos: req.files ? req.files.map(file => ({
+                filename: file.filename,
+                original_name: file.originalname,
+                path: file.path,
+                size: file.size,
+                upload_date: new Date()
+            })) : [],
+            environmental_conditions: {
+                temperature: req.body.temperature,
+                humidity: req.body.humidity,
+                moisture_content: batch.moisture_content
+            }
+        };
+
+        // Add to batch's spoilage events array (we need to add this field to the model)
+        if (!batch.spoilage_events) batch.spoilage_events = [];
+        batch.spoilage_events.push(spoilageEvent);
+
+        // Update batch status if severe damage
+        if (req.body.severity === 'total_loss') {
+            batch.status = 'damaged';
+        }
+
+        await batch.save();
+
+        res.status(201).json({
+            message: 'Spoilage event logged successfully',
+            event_id: spoilageEvent.event_id,
+            batch_id: batch.batch_id,
+            photos_uploaded: spoilageEvent.photos.length
+        });
+
+    } catch (error) {
+        console.error('Log spoilage event error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /grain-batches/{id}/insurance-report:
+ *   get:
+ *     summary: Generate insurance report PDF for batch
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/:id/insurance-report', [
+    auth,
+    requirePermission('insurance.view'),
+    requireTenantAccess,
+    param('id').isMongoId().withMessage('Valid batch ID is required')
+], async (req, res) => {
+    try {
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
+            tenant_id: req.user.tenant_id
+        }).populate('silo_id').populate('created_by', 'name email');
+
+        if (!batch) {
+            return res.status(404).json({ error: 'Batch not found' });
+        }
+
+        // Create PDF document
+        const doc = new PDFKit();
+        const filename = `insurance-report-${batch.batch_id}-${Date.now()}.pdf`;
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        doc.pipe(res);
+
+        // PDF Header
+        doc.fontSize(20).text('GrainHero Insurance Report', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(`Report Generated: ${new Date().toLocaleDateString()}`, { align: 'right' });
+        doc.moveDown(2);
+
+        // Batch Information
+        doc.fontSize(16).text('Batch Information', { underline: true });
+        doc.fontSize(12);
+        doc.text(`Batch ID: ${batch.batch_id}`);
+        doc.text(`Grain Type: ${batch.grain_type}`);
+        doc.text(`Quantity: ${batch.quantity_kg} kg`);
+        doc.text(`Intake Date: ${batch.intake_date?.toLocaleDateString()}`);
+        doc.text(`Storage Location: ${batch.silo_id?.name || 'N/A'}`);
+        doc.text(`Insurance Policy: ${batch.insurance_policy_number || 'N/A'}`);
+        doc.text(`Insured Value: ₨${batch.insurance_value || 'N/A'}`);
+        doc.moveDown();
+
+        // Risk Assessment
+        doc.fontSize(16).text('Risk Assessment', { underline: true });
+        doc.fontSize(12);
+        doc.text(`Current Risk Score: ${batch.risk_score || 'N/A'}%`);
+        doc.text(`Spoilage Label: ${batch.spoilage_label || 'N/A'}`);
+        doc.text(`Last Assessment: ${batch.last_risk_assessment?.toLocaleDateString() || 'N/A'}`);
+        doc.moveDown();
+
+        // Spoilage Events
+        if (batch.spoilage_events && batch.spoilage_events.length > 0) {
+            doc.fontSize(16).text('Spoilage Events', { underline: true });
+            doc.fontSize(12);
+            
+            batch.spoilage_events.forEach((event, index) => {
+                doc.text(`Event ${index + 1}:`);
+                doc.text(`  Type: ${event.event_type}`);
+                doc.text(`  Severity: ${event.severity}`);
+                doc.text(`  Date: ${event.detected_date?.toLocaleDateString()}`);
+                doc.text(`  Estimated Loss: ${event.estimated_loss_kg} kg`);
+                doc.text(`  Value Loss: ₨${event.estimated_value_loss || 'N/A'}`);
+                doc.text(`  Description: ${event.description}`);
+                doc.text(`  Photos: ${event.photos?.length || 0} attached`);
+                doc.moveDown();
+            });
+        }
+
+        // Footer
+        doc.fontSize(10);
+        doc.text('This report is generated by GrainHero AI-Powered Storage Management System', { align: 'center' });
+        doc.text('Contact: support@grainhero.com', { align: 'center' });
+        
+        doc.end();
+
+    } catch (error) {
+        console.error('Generate insurance report error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /grain-batches/{id}/export-insurance:
+ *   get:
+ *     summary: Export batch data in insurance company format
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/:id/export-insurance', [
+    auth,
+    requirePermission('insurance.manage'),
+    requireTenantAccess,
+    param('id').isMongoId().withMessage('Valid batch ID is required')
+], async (req, res) => {
+    try {
+        const { format } = req.query; // efu, adamjee, ztbl
+        const batch = await GrainBatch.findOne({
+            _id: req.params.id,
+            tenant_id: req.user.tenant_id
+        }).populate('silo_id').populate('created_by', 'name email');
+
+        if (!batch) {
+            return res.status(404).json({ error: 'Batch not found' });
+        }
+
+        let exportData = {};
+
+        // Format data according to insurance company requirements
+        switch (format) {
+            case 'efu':
+                exportData = {
+                    policy_number: batch.insurance_policy_number,
+                    commodity_type: batch.grain_type,
+                    quantity_metric_tons: (batch.quantity_kg / 1000).toFixed(2),
+                    storage_location: batch.silo_id?.name,
+                    intake_date: batch.intake_date?.toISOString().split('T')[0],
+                    risk_assessment: batch.risk_score,
+                    claim_events: batch.spoilage_events?.map(event => ({
+                        event_type: event.event_type,
+                        severity: event.severity,
+                        loss_quantity: event.estimated_loss_kg,
+                        loss_value: event.estimated_value_loss,
+                        event_date: event.detected_date?.toISOString().split('T')[0]
+                    })) || []
+                };
+                break;
+                
+            case 'adamjee':
+                exportData = {
+                    InsurancePolicy: batch.insurance_policy_number,
+                    CommodityName: batch.grain_type,
+                    StoredQuantityKG: batch.quantity_kg,
+                    StorageLocation: batch.silo_id?.name,
+                    StorageDate: batch.intake_date?.toISOString(),
+                    RiskScore: batch.risk_score,
+                    SpoilageLabel: batch.spoilage_label,
+                    Events: batch.spoilage_events || []
+                };
+                break;
+                
+            case 'ztbl':
+                exportData = {
+                    batch_reference: batch.batch_id,
+                    grain_commodity: batch.grain_type,
+                    weight_kg: batch.quantity_kg,
+                    storage_facility: batch.silo_id?.name,
+                    deposit_date: batch.intake_date,
+                    current_condition: batch.spoilage_label,
+                    ai_risk_assessment: batch.risk_score,
+                    damage_reports: batch.spoilage_events?.map(event => ({
+                        damage_type: event.event_type,
+                        severity_level: event.severity,
+                        quantity_affected: event.estimated_loss_kg,
+                        estimated_loss: event.estimated_value_loss,
+                        inspection_date: event.detected_date
+                    })) || []
+                };
+                break;
+                
+            default:
+                exportData = {
+                    batch_id: batch.batch_id,
+                    grain_type: batch.grain_type,
+                    quantity_kg: batch.quantity_kg,
+                    risk_score: batch.risk_score,
+                    spoilage_events: batch.spoilage_events || []
+                };
+        }
+
+        res.json({
+            format: format || 'standard',
+            export_date: new Date().toISOString(),
+            data: exportData
+        });
+
+    } catch (error) {
+        console.error('Export insurance data error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 module.exports = router;

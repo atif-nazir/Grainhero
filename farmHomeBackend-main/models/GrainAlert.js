@@ -277,10 +277,9 @@ const grainAlertSchema = new mongoose.Schema({
   versionKey: false 
 });
 
-// Indexes for better query performance
+// Indexes for better query performance (alert_id already has unique index)
 grainAlertSchema.index({ tenant_id: 1, status: 1, triggered_at: -1 });
 grainAlertSchema.index({ silo_id: 1, status: 1 });
-grainAlertSchema.index({ alert_id: 1 });
 grainAlertSchema.index({ priority: 1, status: 1 });
 grainAlertSchema.index({ triggered_at: -1 });
 grainAlertSchema.index({ assigned_to: 1, status: 1 });

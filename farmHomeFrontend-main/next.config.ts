@@ -2,6 +2,14 @@ import { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const nextConfig: NextConfig = {
+  // Fix Turbopack workspace root detection issue
+  turbopack: {
+    root: process.cwd(),
+  },
+  // Additional Turbopack configuration if needed
+  // experimental: {
+  //   // Add other experimental features here if needed
+  // },
   images: {
     remotePatterns: [
       {

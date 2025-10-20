@@ -4,6 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+<<<<<<< HEAD
+    "dev:turbo": "next dev --turbopack",
+=======
+>>>>>>> main
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -27,6 +31,17 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dom-to-image": "^2.6.0",
+<<<<<<< HEAD
+    "framer-motion": "^12.23.6",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "lucide-react": "^0.525.0",
+    "next": "^15.5.4",
+    "next-intl": "^4.3.4",
+    "react": "^19.0.0",
+    "react-day-picker": "^9.8.0",
+    "react-dom": "^19.0.0",
+=======
     "framer-motion": "^12.23.22",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
@@ -37,6 +52,7 @@
     "react": "^19.2.0",
     "react-day-picker": "^9.11.0",
     "react-dom": "^19.2.0",
+>>>>>>> main
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1"

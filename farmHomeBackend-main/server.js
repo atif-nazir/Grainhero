@@ -17,10 +17,23 @@ const contactRoute = require("./routes/contact");
 const paymentVerificationRoute = require("./routes/payment-verification");
 
 // GrainHero integrated routes
+<<<<<<< HEAD
+const grainBatchesRoute = require('./routes/grainBatches');
+const sensorsRoute = require('./routes/sensors');
+const aiRoute = require('./routes/ai');
+const aiSpoilageRoute = require('./routes/aiSpoilage');
+const actuatorsRoute = require('./routes/actuators');
+const dualProbeRoute = require('./routes/dualProbeMonitoring');
+const deviceHealthRoute = require('./routes/deviceHealth');
+const iotRoute = require('./routes/iot');
+const dataVisualizationRoute = require('./routes/dataVisualization');
+const silosRoute = require('./routes/silos');
+=======
 const grainBatchesRoute = require("./routes/grainBatches");
 const sensorsRoute = require("./routes/sensors");
 const silosRoute = require("./routes/silos");
 const insuranceRoute = require("./routes/insurance");
+>>>>>>> main
 
 // Super Admin routes
 const tenantManagementRoute = require("./routes/tenantManagement");
@@ -43,6 +56,9 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 app.set("io", io);
 
+<<<<<<< HEAD
+mongoose.connect(`mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}`)
+=======
 // Try different connection formats
 const connectionString = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.ycda7xy.mongodb.net/${process.env.DATABASE_NAME}?retryWrites=true&w=majority`;
 
@@ -58,6 +74,7 @@ mongoose.connect(connectionString, {
   serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
   socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
 });
+>>>>>>> main
 
 const db = mongoose.connection;
 
@@ -86,10 +103,23 @@ app.use("/alerts", alertsRoute);
 app.use("/quotes", quotesRoute);
 
 // GrainHero integrated routes
+<<<<<<< HEAD
+app.use('/grain-batches', grainBatchesRoute);
+app.use('/sensors', sensorsRoute);
+app.use('/ai', aiRoute);
+app.use('/ai-spoilage', aiSpoilageRoute);
+app.use('/actuators', actuatorsRoute);
+app.use('/dual-probe', dualProbeRoute);
+app.use('/device-health', deviceHealthRoute);
+app.use('/iot', iotRoute);
+app.use('/data-viz', dataVisualizationRoute);
+app.use('/silos', silosRoute);
+=======
 app.use("/api/grain-batches", grainBatchesRoute);
 app.use("/api/sensors", sensorsRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
+>>>>>>> main
 
 // Super Admin routes
 app.use("/api/tenant-management", tenantManagementRoute);

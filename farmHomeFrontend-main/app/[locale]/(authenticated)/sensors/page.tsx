@@ -39,6 +39,40 @@ export default function SensorsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
 
+<<<<<<< HEAD
+  // Load sensors from backend
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const backendUrl = (await import('@/config')).config.backendUrl
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const res = await fetch(`${backendUrl}/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
+            _id: s._id,
+            device_id: s.device_id || s._id,
+            device_name: s.device_name,
+            status: s.health_status === 'healthy' ? 'active' : (s.health_status || s.status || 'active'),
+            sensor_types: s.sensor_types || [],
+            battery_level: s.battery_level || s.device_metrics?.battery_level || 100,
+            signal_strength: s.signal_strength || s.device_metrics?.signal_strength || -50,
+            silo_id: s.silo_id ? { name: s.silo_id.name || 'Silo', silo_id: s.silo_id._id || '' } : { name: '-', silo_id: '' },
+            last_reading: s.health_metrics?.last_heartbeat || new Date().toISOString(),
+            health_metrics: s.health_metrics || { uptime_percentage: 99, error_count: 0, last_heartbeat: new Date().toISOString() }
+          }))
+          setSensors(mapped)
+        } else {
+          setSensors([])
+        }
+      } catch {
+        setSensors([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    run()
+=======
   useEffect(() => {
     let mounted = true
     ;(async () => {
@@ -52,6 +86,7 @@ export default function SensorsPage() {
     return () => {
       mounted = false
     }
+>>>>>>> main
   }, [])
 
   const getStatusBadge = (status: string) => {
