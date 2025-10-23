@@ -234,15 +234,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
       if (!res.ok) throw new Error("Login failed")
       const data = await res.json()
-<<<<<<< HEAD
-      // Persist token for authenticated API calls
-      if (data.token) {
-        localStorage.setItem('token', data.token)
-=======
       // Persist JWT for authenticated API calls
       if (data.token) {
         localStorage.setItem("token", data.token)
->>>>>>> main
       }
       // Save encrypted hasAccess
       if (data.hasAccess) {
@@ -272,11 +266,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setUser(null)
     localStorage.removeItem("farm-home-user")
     localStorage.removeItem("farm-home-access")
-<<<<<<< HEAD
-    localStorage.removeItem('token')
-=======
     localStorage.removeItem("token")
->>>>>>> main
   }
 
   const updateLanguage = (language: LanguageCode) => {

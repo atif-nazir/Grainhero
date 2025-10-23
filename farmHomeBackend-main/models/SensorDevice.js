@@ -25,8 +25,7 @@ const sensorDeviceSchema = new mongoose.Schema({
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, "Admin ID is required"],
-    index: true
+    required: [true, "Admin ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -221,14 +220,9 @@ const sensorDeviceSchema = new mongoose.Schema({
   versionKey: false 
 });
 
-<<<<<<< HEAD
-// Indexes for better query performance (device_id already has unique index)
-sensorDeviceSchema.index({ tenant_id: 1, status: 1 });
-=======
 // Indexes for better query performance
 sensorDeviceSchema.index({ admin_id: 1, status: 1 });
 sensorDeviceSchema.index({ device_id: 1 });
->>>>>>> main
 sensorDeviceSchema.index({ silo_id: 1 });
 sensorDeviceSchema.index({ status: 1 });
 sensorDeviceSchema.index({ 'health_metrics.last_heartbeat': 1 });

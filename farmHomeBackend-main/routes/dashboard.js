@@ -1,28 +1,18 @@
 const express = require("express");
 const router = express.Router();
-<<<<<<< HEAD
-const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
-const { body } = require('express-validator');
-const GrainBatch = require('../models/GrainBatch');
-const Silo = require('../models/Silo');
-const Incident = require('../models/Incident');
-const User = require('../models/User');
-const SensorReading = require('../models/SensorReading');
-const SensorDevice = require('../models/SensorDevice');
-const Alert = require('../models/Alert');
-const PDFKit = require('pdfkit');
-const json2csv = require('json2csv').parse;
-const fs = require('fs');
-=======
 const { auth } = require("../middleware/auth");
+const { requirePermission, requireTenantAccess } = require("../middleware/permission");
+const { body } = require("express-validator");
 const GrainBatch = require("../models/GrainBatch");
 const Silo = require("../models/Silo");
 const Incident = require("../models/Incident");
 const User = require("../models/User");
 const SensorReading = require("../models/SensorReading");
+const SensorDevice = require("../models/SensorDevice");
 const Alert = require("../models/Alert");
->>>>>>> main
+const PDFKit = require("pdfkit");
+const json2csv = require("json2csv").parse;
+const fs = require("fs");
 
 // Helper: Storage status calculation
 function getStorageStatus(capacity, currentQuantity) {
@@ -261,7 +251,6 @@ router.get("/dashboard", auth, async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 // ============= ENHANCED DASHBOARD & REPORTING =============
 
 /**
@@ -1065,6 +1054,4 @@ function getDeviceHealthStatus(device) {
     return 'healthy';
 }
 
-=======
->>>>>>> main
 module.exports = router;

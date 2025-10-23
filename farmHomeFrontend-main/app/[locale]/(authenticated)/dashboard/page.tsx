@@ -1,8 +1,72 @@
 "use client"
 
 import { useAuth } from "@/app/[locale]/providers"
-<<<<<<< HEAD
 import { useState, useEffect } from 'react'
+import { SuperAdminDashboard } from "@/components/dashboards/SuperAdminDashboard"
+import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
+import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
+import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { 
+  AlertCircle, 
+  Package, 
+  TrendingUp, 
+  Users, 
+  Activity, 
+  Warehouse, 
+  DollarSign, 
+  AlertTriangle, 
+  PieChart, 
+  Shield, 
+  Thermometer, 
+  Droplets, 
+  Wind,
+  BarChart3,
+  Clock
+} from "lucide-react"
+
+// Helper function for status colors
+const getStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'active':
+    case 'optimal':
+    case 'normal':
+    case 'stored':
+    case 'excellent':
+      return 'default'
+    case 'warning':
+    case 'medium':
+    case 'processing':
+      return 'secondary'
+    case 'critical':
+    case 'high':
+    case 'dispatched':
+      return 'destructive'
+    case 'low':
+    case 'quality check':
+      return 'outline'
+    default:
+      return 'default'
+  }
+}
+
+// Helper function for risk colors
+const getRiskColor = (risk: string) => {
+  switch (risk.toLowerCase()) {
+    case 'low':
+      return 'text-green-600'
+    case 'medium':
+      return 'text-yellow-600'
+    case 'high':
+      return 'text-red-600'
+    default:
+      return 'text-gray-600'
+  }
+}
 
 // Mock data for dashboard
 const dashboardData = {
@@ -60,15 +124,6 @@ const dashboardData = {
     { id: "CO2-001", type: "CO2", value: 420, unit: "ppm", status: "Normal", location: "Silo B" }
   ]
 }
-=======
-import { SuperAdminDashboard } from "@/components/dashboards/SuperAdminDashboard"
-import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
-import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
-import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
->>>>>>> main
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -133,7 +188,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-<<<<<<< HEAD
       {/* Key Metrics Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -514,9 +568,7 @@ export default function DashboardPage() {
           </TabsContent>
         )}
       </Tabs>
-=======
       {renderDashboard()}
->>>>>>> main
     </div>
   )
 }

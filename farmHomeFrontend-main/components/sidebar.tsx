@@ -24,10 +24,6 @@ import {
   QrCode,
   TrendingUp,
   CreditCard,
-<<<<<<< HEAD
-  Database,
-  Brain,
-=======
   Building2,
   Crown,
   Shield,
@@ -39,7 +35,7 @@ import {
   DollarSign,
   UserCheck,
   AlertTriangle,
->>>>>>> main
+  Brain,
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
@@ -135,20 +131,19 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-<<<<<<< HEAD
   { 
     name: "ai-spoilage", 
     href: "/ai-spoilage", 
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
-=======
+    badge: "AI"
+  },
   {
     name: "risk-assessment",
     label: "Risk Assessment",
     href: "/risk-assessment",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
->>>>>>> main
     badge: "AI"
   },
   {
@@ -159,7 +154,6 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-<<<<<<< HEAD
   { 
     name: "model-performance", 
     href: "/model-performance", 
@@ -174,15 +168,10 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "ML"
   },
-  { 
-    name: "environmental-data", 
-    href: "/environmental-data", 
-=======
   {
     name: "environmental-data",
     label: "Environmental Data",
     href: "/environmental-data",
->>>>>>> main
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined

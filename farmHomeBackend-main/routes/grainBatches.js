@@ -1,16 +1,18 @@
 const express = require("express");
 const router = express.Router();
-<<<<<<< HEAD
-const GrainBatch = require('../models/GrainBatch');
-const Silo = require('../models/Silo');
-const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
-const { body, validationResult, param, query } = require('express-validator');
-const QRCode = require('qrcode');
-const PDFKit = require('pdfkit');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const GrainBatch = require("../models/GrainBatch");
+const Silo = require("../models/Silo");
+const { auth } = require("../middleware/auth");
+const {
+  requirePermission,
+  requireTenantAccess,
+} = require("../middleware/permission");
+const { body, validationResult, param, query } = require("express-validator");
+const QRCode = require("qrcode");
+const PDFKit = require("pdfkit");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
 // Configure multer for photo uploads
 const storage = multer.diskStorage({
@@ -38,17 +40,6 @@ const upload = multer({
     }
   }
 });
-=======
-const GrainBatch = require("../models/GrainBatch");
-const Silo = require("../models/Silo");
-const { auth } = require("../middleware/auth");
-const {
-  requirePermission,
-  requireTenantAccess,
-} = require("../middleware/permission");
-const { body, validationResult, param, query } = require("express-validator");
-const QRCode = require("qrcode");
->>>>>>> main
 
 /**
  * @swagger

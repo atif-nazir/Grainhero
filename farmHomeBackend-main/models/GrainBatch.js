@@ -19,8 +19,7 @@ const grainBatchSchema = new mongoose.Schema({
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, "Admin ID is required"],
-    index: true
+    required: [true, "Admin ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -219,15 +218,10 @@ const grainBatchSchema = new mongoose.Schema({
   versionKey: false 
 });
 
-<<<<<<< HEAD
-// Indexes for better query performance (batch_id and qr_code already have unique indexes)
-grainBatchSchema.index({ tenant_id: 1, status: 1 });
-=======
 // Indexes for better query performance
 grainBatchSchema.index({ admin_id: 1, status: 1 });
 grainBatchSchema.index({ batch_id: 1 });
 grainBatchSchema.index({ qr_code: 1 });
->>>>>>> main
 grainBatchSchema.index({ silo_id: 1 });
 grainBatchSchema.index({ grain_type: 1 });
 grainBatchSchema.index({ intake_date: -1 });

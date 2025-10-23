@@ -177,9 +177,9 @@ const userSchema = new mongoose.Schema(
       {
         device: String,
         token: String,
-<<<<<<< HEAD
-        created_at: { type: Date, default: Date.now }
-    }],
+        created_at: { type: Date, default: Date.now },
+      },
+    ],
     
     // GrainHero specific fields
     employee_id: {
@@ -218,13 +218,6 @@ const userSchema = new mongoose.Schema(
     two_factor_enabled: { type: Boolean, default: false },
     two_factor_secret: { type: String, select: false },
     backup_codes: [{ type: String, select: false }],
-    
-=======
-        created_at: { type: Date, default: Date.now },
-      },
-    ],
-
->>>>>>> main
     // Audit fields
     created_by: {
       type: mongoose.Schema.Types.ObjectId,

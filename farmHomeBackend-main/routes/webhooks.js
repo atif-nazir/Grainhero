@@ -142,6 +142,17 @@ router.post("/", (request, response) => {
             if (!user) {
               // Create new user for payment-first flow
               console.log("Creating new user for email:", customer.email);
+              
+              // Create tenant first
+              const Tenant = require("../models/Tenant");
+              const tenant = new Tenant({
+                name: `${customer.name || "Admin User"}'s Farm`,
+                email: customer.email,
+                business_type: "farm",
+                created_by: null, // Will be set after user creation
+              });
+              await tenant.save();
+              
               user = new User({
                 email: customer.email,
                 name: customer.name || "Admin User",
@@ -151,12 +162,18 @@ router.post("/", (request, response) => {
                 priceId: priceId,
                 status: "active",
                 emailVerified: true,
-                tenant_id: new mongoose.Types.ObjectId(), // Create new tenant
-                owned_tenant_id: new mongoose.Types.ObjectId(),
+                tenant_id: tenant._id,
+                owned_tenant_id: tenant._id,
                 createdAt: new Date(),
                 updated_at: new Date(),
               });
               await user.save();
+              
+              // Update tenant with user reference
+              await Tenant.findByIdAndUpdate(tenant._id, {
+                created_by: user._id,
+              });
+              
               console.log("New user created:", user);
 
               // Add a small delay to ensure user is fully saved

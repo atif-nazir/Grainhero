@@ -234,8 +234,10 @@ router.post("/signup", async (req, res) => {
                 name: existingUser.name,
                 email: existingUser.email,
                 role: existingUser.role,
+                hasAccess: existingUser.hasAccess,
               },
               token,
+              hasAccess: existingUser.hasAccess,
             });
           } catch (error) {
             console.error("Error updating pending user:", error);
