@@ -3,6 +3,20 @@ import { Wheat as WheatIcon, Menu, X, BarChart3, Brain, Thermometer, TrendingUp,
 import { Link } from '@/i18n/navigation'
 import { useState, useEffect } from 'react'
 import pricingData from './pricing-data.js'
+import { 
+  AnimatedHero, 
+  AnimatedFeatureCards, 
+  AnimatedStatsSection, 
+  AnimatedTestimonials, 
+  AnimatedCTA 
+} from '@/components/animations/AnimatedLanding'
+import { 
+  AnimatedBackground, 
+  FloatingElements, 
+  InteractiveCard,
+  AnimatedText,
+  AnimatedCounter
+} from '@/components/animations/MotionGraphics'
 
 type Plan = {
   id: string
@@ -17,16 +31,23 @@ type Plan = {
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-white text-black">
-      <Navigation />
-      <Hero />
-      <Highlights />
-      <Features />
-      <PricingShowcase />
-      <CTA />
-      <Contact />
-      <Footer />
-    </main>
+    <AnimatedBackground className="min-h-screen">
+      <main className="min-h-screen bg-white text-black">
+        <Navigation />
+        <AnimatedHero
+          title="Your grain success starts here"
+          subtitle="From monitoring to AI predictions, GrainHero has you covered."
+          ctaText="Start now"
+          onCtaClick={() => window.location.href = '/checkout'}
+        />
+        <Highlights />
+        <Features />
+        <PricingShowcase />
+        <CTA />
+        <Contact />
+        <Footer />
+      </main>
+    </AnimatedBackground>
   )
 }
 
@@ -189,36 +210,58 @@ function Highlights() {
   )
 }
 
-// Features (expanded to 9 features in 3x3 grid with hover effects)
+// Animated Features
 function Features() {
   const features = [
-    { icon: <Brain className="w-6 h-6" />, title: "AI-Powered Spoilage Prediction", description: "Predict deterioration before it happens, saving costs." },
-    { icon: <Thermometer className="w-6 h-6" />, title: "IoT Sensor Management", description: "Real-time monitoring of temperature and humidity." },
-    { icon: <TrendingUp className="w-6 h-6" />, title: "Analytics Dashboard", description: "Comprehensive trends, history and facility comparisons." },
-    { icon: <Bell className="w-6 h-6" />, title: "Smart Alerts", description: "Instant notifications on threshold breaches." },
-    { icon: <BarChart3 className="w-6 h-6" />, title: "Grain Batch Tracking", description: "Complete traceability from harvest to storage." },
-    { icon: <WheatIcon className="w-6 h-6" />, title: "Silo Management", description: "Monitor and manage multiple storage silos efficiently." },
-    { icon: <Check className="w-6 h-6" />, title: "Quality Control", description: "Automated quality assessment and grading systems." },
-    { icon: <Shield className="w-6 h-6" />, title: "Risk Assessment", description: "Identify and mitigate storage risks proactively." },
-    { icon: <Zap className="w-6 h-6" />, title: "Automated Controls", description: "Smart ventilation and climate control systems." }
+    { 
+      icon: Brain, 
+      title: "AI-Powered Spoilage Prediction", 
+      description: "Predict deterioration before it happens, saving costs.",
+      color: "bg-blue-500"
+    },
+    { 
+      icon: Thermometer, 
+      title: "IoT Sensor Management", 
+      description: "Real-time monitoring of temperature and humidity.",
+      color: "bg-green-500"
+    },
+    { 
+      icon: TrendingUp, 
+      title: "Analytics Dashboard", 
+      description: "Comprehensive trends, history and facility comparisons.",
+      color: "bg-purple-500"
+    },
+    { 
+      icon: Bell, 
+      title: "Smart Alerts", 
+      description: "Instant notifications on threshold breaches.",
+      color: "bg-yellow-500"
+    },
+    { 
+      icon: BarChart3, 
+      title: "Grain Batch Tracking", 
+      description: "Complete traceability from harvest to storage.",
+      color: "bg-red-500"
+    },
+    { 
+      icon: WheatIcon, 
+      title: "Silo Management", 
+      description: "Monitor and manage multiple storage silos efficiently.",
+      color: "bg-indigo-500"
+    }
   ]
 
   return (
     <section id="features" className="py-12 px-4 sm:px-6 lg:px-8 bg-white">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
-          <h2 className="text-3xl md:text-4xl font-bold mb-3">Built for modern grain operations</h2>
+          <AnimatedText 
+            text="Built for modern grain operations"
+            className="text-3xl md:text-4xl font-bold mb-3"
+          />
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">Comprehensive tools to optimize your grain storage, reduce losses, and maximize profitability.</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <div key={index} className={`group rounded-xl border border-gray-200 p-6 bg-white transition-all duration-300 hover:border-[#00a63e] hover:shadow-lg hover:-translate-y-1 delay-[${index * 30}ms]`}>
-              <div className="text-[#00a63e] mb-4 group-hover:scale-110 transition-transform duration-300">{feature.icon}</div>
-              <h3 className="text-lg font-semibold mb-3 text-gray-900">{feature.title}</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">{feature.description}</p>
-            </div>
-          ))}
-        </div>
+        <AnimatedFeatureCards features={features} />
       </div>
     </section>
   )
@@ -260,19 +303,15 @@ function PricingShowcase() {
   )
 }
 
-// CTA (bottom)
+// Animated CTA
 function CTA() {
   return (
-    <section id="cta" className="py-16 px-4 sm:px-6 lg:px-8 bg-[#effbf7]">
-      <div className="max-w-4xl mx-auto text-center">
-        <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to optimize your grain storage?</h2>
-        <p className="text-gray-700 mb-8">Join thousands of farmers and grain operators who trust GrainHero to protect their harvest and maximize profits.</p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-8 py-4 rounded-full text-lg font-semibold transition">Get started</Link>
-          <Link href="#contact" className="border-2 border-[#00a63e] text-[#00a63e] hover:bg-[#00a63e] hover:text-white px-8 py-4 rounded-full text-lg font-semibold transition">Contact us</Link>
-        </div>
-      </div>
-    </section>
+    <AnimatedCTA
+      title="Ready to optimize your grain storage?"
+      description="Join thousands of farmers and grain operators who trust GrainHero to protect their harvest and maximize profits."
+      buttonText="Get started"
+      onButtonClick={() => window.location.href = '/checkout'}
+    />
   )
 }
 

@@ -39,7 +39,6 @@ export default function SensorsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
 
-<<<<<<< HEAD
   // Load sensors from backend
   useEffect(() => {
     const run = async () => {
@@ -72,7 +71,6 @@ export default function SensorsPage() {
       }
     }
     run()
-=======
   useEffect(() => {
     let mounted = true
     ;(async () => {
@@ -86,7 +84,6 @@ export default function SensorsPage() {
     return () => {
       mounted = false
     }
->>>>>>> main
   }, [])
 
   const getStatusBadge = (status: string) => {

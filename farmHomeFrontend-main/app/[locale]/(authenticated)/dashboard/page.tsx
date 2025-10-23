@@ -1,8 +1,89 @@
 "use client"
 
 import { useAuth } from "@/app/[locale]/providers"
-<<<<<<< HEAD
 import { useState, useEffect } from 'react'
+import { SuperAdminDashboard } from "@/components/dashboards/SuperAdminDashboard"
+import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
+import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
+import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { 
+  AlertCircle, 
+  Package, 
+  TrendingUp, 
+  Users, 
+  Activity, 
+  Warehouse, 
+  DollarSign, 
+  AlertTriangle, 
+  PieChart, 
+  Shield, 
+  Thermometer, 
+  Droplets, 
+  Wind,
+  BarChart3,
+  Clock
+} from "lucide-react"
+import { AnimatedSilo, SiloGrid } from "@/components/animations/AnimatedSilo"
+import { 
+  AnimatedBarChart, 
+  AnimatedLineChart, 
+  AnimatedPieChart, 
+  AnimatedAreaChart,
+  AnimatedMetricCard 
+} from "@/components/animations/AnimatedCharts"
+import { 
+  AnimatedBackground, 
+  FloatingElements, 
+  InteractiveCard,
+  AnimatedText,
+  AnimatedCounter,
+  AnimatedProgressBar,
+  AnimatedFeatureGrid
+} from "@/components/animations/MotionGraphics"
+
+// Helper function for status colors
+const getStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'active':
+    case 'optimal':
+    case 'normal':
+    case 'stored':
+    case 'excellent':
+      return 'default'
+    case 'warning':
+    case 'medium':
+    case 'processing':
+      return 'secondary'
+    case 'critical':
+    case 'high':
+    case 'dispatched':
+      return 'destructive'
+    case 'low':
+    case 'quality check':
+      return 'outline'
+    default:
+      return 'default'
+  }
+}
+
+// Helper function for risk colors
+const getRiskColor = (risk: string) => {
+  switch (risk.toLowerCase()) {
+    case 'low':
+      return 'text-green-600'
+    case 'medium':
+      return 'text-yellow-600'
+    case 'high':
+      return 'text-red-600'
+    default:
+      return 'text-gray-600'
+  }
+}
 
 // Mock data for dashboard
 const dashboardData = {
@@ -60,15 +141,6 @@ const dashboardData = {
     { id: "CO2-001", type: "CO2", value: 420, unit: "ppm", status: "Normal", location: "Silo B" }
   ]
 }
-=======
-import { SuperAdminDashboard } from "@/components/dashboards/SuperAdminDashboard"
-import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
-import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
-import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
->>>>>>> main
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -121,7 +193,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">
@@ -133,61 +206,39 @@ export default function DashboardPage() {
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* Key Metrics Cards */}
+      {/* Animated Key Metrics Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Batches</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{aiStats?.total_predictions || dashboardData.overview.totalBatches}</div>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+12%</span> from last month
-            </p>
-          </CardContent>
-        </Card>
+        <AnimatedMetricCard
+          title="Total Batches"
+          value={<AnimatedCounter end={aiStats?.total_predictions || dashboardData.overview.totalBatches} />}
+          change={12}
+          icon={Package}
+          color="blue"
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage Utilization</CardTitle>
-            <Warehouse className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.overview.utilizationRate}%</div>
-            <Progress value={dashboardData.overview.utilizationRate} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-1">
-              {dashboardData.overview.currentStock.toLocaleString()} / {dashboardData.overview.totalCapacity.toLocaleString()} kg
-            </p>
-          </CardContent>
-        </Card>
+        <AnimatedMetricCard
+          title="Storage Utilization"
+          value={`${dashboardData.overview.utilizationRate}%`}
+          change={5}
+          icon={Warehouse}
+          color="green"
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">PKR {(dashboardData.overview.monthlyRevenue / 1000000).toFixed(1)}M</div>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+8.2%</span> from last month
-            </p>
-          </CardContent>
-        </Card>
+        <AnimatedMetricCard
+          title="Monthly Revenue"
+          value={`PKR ${(dashboardData.overview.monthlyRevenue / 1000000).toFixed(1)}M`}
+          change={8}
+          icon={DollarSign}
+          color="purple"
+        />
 
-        <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{aiStats?.high_risk_predictions || dashboardData.overview.activeAlerts}</div>
-            <p className="text-xs text-muted-foreground">
-              {dashboardData.alerts.filter(a => a.severity === "High").length} critical
-            </p>
-          </CardContent>
-        </Card>
+        <AnimatedMetricCard
+          title="Active Alerts"
+          value={aiStats?.high_risk_predictions || dashboardData.overview.activeAlerts}
+          change={-2}
+          icon={AlertTriangle}
+          color="red"
+        />
       </div>
 
       {/* Main Content Tabs */}
@@ -235,34 +286,26 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Silo Status */}
+            {/* Animated 3D Silo Status */}
             <Card className="col-span-3">
               <CardHeader>
-                <CardTitle>Silo Status</CardTitle>
-                <CardDescription>Real-time storage conditions</CardDescription>
+                <CardTitle className="flex items-center">
+                  <Warehouse className="w-5 h-5 mr-2" />
+                  Silo Status
+                </CardTitle>
+                <CardDescription>Interactive 3D storage visualization</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {dashboardData.siloStatus.map((silo) => (
-                    <div key={silo.id} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium">{silo.id}</div>
-                        <Badge variant={getStatusColor(silo.status)}>{silo.status}</Badge>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>{silo.grain}</span>
-                          <span>{silo.current}/{silo.capacity} kg</span>
-                        </div>
-                        <Progress value={(silo.current / silo.capacity) * 100} className="h-2" />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{silo.temp}°C</span>
-                          <span>{silo.humidity}% RH</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <SiloGrid 
+                  silos={dashboardData.siloStatus.map(silo => ({
+                    fillLevel: (silo.current / silo.capacity) * 100,
+                    capacity: silo.capacity,
+                    grainType: silo.grain,
+                    temperature: silo.temp,
+                    humidity: silo.humidity,
+                    status: silo.status.toLowerCase() as 'optimal' | 'warning' | 'critical'
+                  }))}
+                />
               </CardContent>
             </Card>
         </div>
@@ -300,99 +343,33 @@ export default function DashboardPage() {
           </Card>
         </TabsContent>
 
-        {/* Analytics Tab */}
+        {/* Animated Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {/* Grain Distribution */}
-            <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center">
-                  <PieChart className="mr-2 h-5 w-5" />
-                  Grain Distribution
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                  {dashboardData.analytics.grainDistribution.map((grain) => (
-                    <div key={grain.grain} className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="font-medium">{grain.grain}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {grain.percentage}% ({grain.quantity.toLocaleString()} kg)
-                        </span>
-                      </div>
-                      <Progress value={grain.percentage} className="h-2" />
-                    </div>
-                  ))}
-                </div>
-            </CardContent>
-          </Card>
+            <AnimatedPieChart
+              data={dashboardData.analytics.grainDistribution.map(grain => ({
+                name: grain.grain,
+                value: grain.percentage
+              }))}
+              title="Grain Distribution"
+            />
 
-            {/* Quality Metrics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Shield className="mr-2 h-5 w-5" />
-                  Quality Distribution
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {Object.entries(dashboardData.analytics.qualityMetrics).map(([quality, percentage]) => (
-                    <div key={quality} className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="font-medium capitalize">{quality}</span>
-                        <span className="text-sm text-muted-foreground">{percentage}%</span>
-                      </div>
-                      <Progress value={percentage} className="h-2" />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <AnimatedBarChart
+              data={Object.entries(dashboardData.analytics.qualityMetrics).map(([quality, percentage]) => ({
+                name: quality.charAt(0).toUpperCase() + quality.slice(1),
+                value: percentage
+              }))}
+              title="Quality Distribution"
+            />
           </div>
 
-          {/* Monthly Intake Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <BarChart3 className="mr-2 h-5 w-5" />
-                Monthly Grain Intake Trends
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {dashboardData.analytics.monthlyIntake.map((month) => (
-                  <div key={month.month} className="space-y-2">
-                    <div className="font-medium">{month.month} 2024</div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>Wheat</span>
-                          <span>{month.wheat.toLocaleString()} kg</span>
-                        </div>
-                        <Progress value={(month.wheat / 20000) * 100} className="h-2" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>Rice</span>
-                          <span>{month.rice.toLocaleString()} kg</span>
-                        </div>
-                        <Progress value={(month.rice / 15000) * 100} className="h-2" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>Corn</span>
-                          <span>{month.corn.toLocaleString()} kg</span>
-                        </div>
-                        <Progress value={(month.corn / 10000) * 100} className="h-2" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <AnimatedAreaChart
+            data={dashboardData.analytics.monthlyIntake.map(month => ({
+              name: month.month,
+              value: month.wheat + month.rice + month.corn
+            }))}
+            title="Monthly Grain Intake Trends"
+          />
         </TabsContent>
 
         {/* Live Monitoring Tab */}
@@ -514,9 +491,8 @@ export default function DashboardPage() {
           </TabsContent>
         )}
       </Tabs>
-=======
       {renderDashboard()}
->>>>>>> main
-    </div>
+      </div>
+    </AnimatedBackground>
   )
 }
