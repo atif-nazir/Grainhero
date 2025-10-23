@@ -71,6 +71,19 @@ export default function SensorsPage() {
       }
     }
     run()
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
+      if (!mounted) return
+      if (res.ok && res.data) {
+        setSensors(res.data.sensors as unknown as SensorDevice[])
+      }
+      setLoading(false)
+    })()
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const getStatusBadge = (status: string) => {

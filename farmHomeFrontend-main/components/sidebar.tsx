@@ -36,6 +36,7 @@ import {
   UserCheck,
   AlertTriangle,
   Brain,
+  Cloud,
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
@@ -104,10 +105,10 @@ const iotMonitoringNav = [
     badge: undefined
   },
   {
-    name: "environmental-data",
+    name: "environmental",
     label: "Environmental Data",
-    href: "/environmental-data",
-    icon: BarChart3,
+    href: "/environmental",
+    icon: Cloud,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
