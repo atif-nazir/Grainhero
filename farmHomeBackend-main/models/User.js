@@ -177,8 +177,8 @@ const userSchema = new mongoose.Schema(
       {
         device: String,
         token: String,
-        created_at: { type: Date, default: Date.now }
-      }
+        created_at: { type: Date, default: Date.now },
+      },
     ],
     
     // GrainHero specific fields

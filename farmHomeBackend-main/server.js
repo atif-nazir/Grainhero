@@ -103,16 +103,15 @@ app.use("/quotes", quotesRoute);
 // GrainHero integrated routes
 app.use("/api/grain-batches", grainBatchesRoute);
 app.use("/api/sensors", sensorsRoute);
-app.use('/api/ai', aiRoute);
-app.use('/api/ai-spoilage', aiSpoilageRoute);
-app.use('/api/actuators', actuatorsRoute);
-app.use('/api/dual-probe', dualProbeRoute);
-app.use('/api/device-health', deviceHealthRoute);
-app.use('/api/iot', iotRoute);
-app.use('/api/data-viz', dataVisualizationRoute);
+app.use("/api/ai", aiRoute);
+app.use("/api/ai-spoilage", aiSpoilageRoute);
+app.use("/api/actuators", actuatorsRoute);
+app.use("/api/dual-probe", dualProbeRoute);
+app.use("/api/device-health", deviceHealthRoute);
+app.use("/api/iot", iotRoute);
+app.use("/api/data-viz", dataVisualizationRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
-app.use("/api/environmental", environmentalRoute);
 
 // Super Admin routes
 app.use("/api/tenant-management", tenantManagementRoute);

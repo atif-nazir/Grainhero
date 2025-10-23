@@ -45,7 +45,7 @@ export default function SensorsPage() {
       try {
         const backendUrl = (await import('@/config')).config.backendUrl
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-        const res = await fetch(`${backendUrl}/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        const res = await fetch(`${backendUrl}/api/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
         if (res.ok) {
           const data = await res.json()
           const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({

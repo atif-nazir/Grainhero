@@ -10,9 +10,9 @@ const {
 const { body, validationResult, param, query } = require("express-validator");
 const QRCode = require("qrcode");
 const PDFKit = require("pdfkit");
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
 // Configure multer for photo uploads
 const storage = multer.diskStorage({
