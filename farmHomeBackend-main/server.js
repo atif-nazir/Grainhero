@@ -28,6 +28,7 @@ const iotRoute = require("./routes/iot");
 const dataVisualizationRoute = require("./routes/dataVisualization");
 const silosRoute = require("./routes/silos");
 const insuranceRoute = require("./routes/insurance");
+const environmentalRoute = require("./routes/environmental");
 
 // Super Admin routes
 const tenantManagementRoute = require("./routes/tenantManagement");
@@ -37,6 +38,7 @@ const planManagementRoute = require("./routes/planManagement");
 const userManagementRoute = require("./routes/userManagement");
 
 const Alert = require("./models/Alert");
+const environmentalDataService = require("./services/environmentalDataService");
 
 const cors = require("cors");
 require("dotenv").config();
@@ -69,6 +71,14 @@ const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error: "));
 db.once("open", () => {
   console.log("MongoDB Connection Successfull");
+  
+  // Start environmental data collection service
+  try {
+    environmentalDataService.start();
+    console.log("Environmental data service started");
+  } catch (error) {
+    console.error("Failed to start environmental data service:", error);
+  }
 });
 
 // Stripe webhook endpoint must use express.raw before express.json
