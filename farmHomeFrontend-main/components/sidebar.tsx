@@ -318,13 +318,15 @@ export function Sidebar() {
   };
 
   const showOnlySuperAdmin = userRole === "super_admin";
+  const showOnlyAdmin = userRole === "admin" || userRole === "super_admin";
+  const showOnlyManager = userRole === "manager" || userRole === "admin" || userRole === "super_admin";
 
-  const visibleDashboardNav = showOnlySuperAdmin ? dashboardNav.filter(hasAccess) : dashboardNav.filter(hasAccess);
-  const visibleGrainOpsNav = showOnlySuperAdmin ? [] : grainOperationsNav.filter(hasAccess);
-  const visibleIoTNav = showOnlySuperAdmin ? [] : iotMonitoringNav.filter(hasAccess);
-  const visibleAINav = showOnlySuperAdmin ? [] : aiAnalyticsNav.filter(hasAccess);
-  const visibleBusinessNav = showOnlySuperAdmin ? [] : businessNav.filter(hasAccess);
-  const visibleSystemNav = showOnlySuperAdmin ? [] : systemNav.filter(hasAccess);
+  const visibleDashboardNav = dashboardNav.filter(hasAccess);
+  const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : [];
+  const visibleIoTNav = showOnlyManager ? iotMonitoringNav.filter(hasAccess) : [];
+  const visibleAINav = showOnlyManager ? aiAnalyticsNav.filter(hasAccess) : [];
+  const visibleBusinessNav = showOnlyAdmin ? businessNav.filter(hasAccess) : [];
+  const visibleSystemNav = showOnlyAdmin ? systemNav.filter(hasAccess) : [];
   const visibleSuperAdminNav = superAdminNav.filter(hasAccess);
 
   return (
@@ -512,7 +514,7 @@ export function Sidebar() {
           )}
 
           {/* Milestone 2 Features */}
-          {!showOnlySuperAdmin && (
+          {!showOnlySuperAdmin && userRole !== "manager" && (
             <div className="space-y-1">
               <Button
                 variant="ghost"
@@ -566,8 +568,8 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Admin Features */}
-          {!showOnlySuperAdmin && (
+          {/* Admin Features - Only for Admin */}
+          {showOnlyAdmin && userRole !== "manager" && (
             <div className="space-y-1">
               <Button
                 variant="ghost"
@@ -602,16 +604,18 @@ export function Sidebar() {
 
       {/* Plans Button and User Profile & Logout */}
       <div className="border-t border-gray-200 p-4">
-        <Button
-          variant="outline"
-          className="w-full justify-start mb-2"
-          onClick={() => {
-            router.push('/plans');
-          }}
-        >
-          <BarChart3 className="mr-3 h-4 w-4" />
-          {t('plans', { defaultMessage: 'Plans' })}
-        </Button>
+        {showOnlyAdmin && (
+          <Button
+            variant="outline"
+            className="w-full justify-start mb-2"
+            onClick={() => {
+              router.push('/plans');
+            }}
+          >
+            <BarChart3 className="mr-3 h-4 w-4" />
+            {t('plans', { defaultMessage: 'Plans' })}
+          </Button>
+        )}
         <div
           className="flex items-center space-x-3 mb-3 cursor-pointer hover:bg-gray-100 rounded p-2 transition"
           onClick={() => router.push("/profile")}

@@ -127,7 +127,11 @@ const dashboardData = {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const [aiStats, setAiStats] = useState(null)
+  const [aiStats, setAiStats] = useState<{
+    total_predictions?: number
+    high_risk_predictions?: number
+    [key: string]: any
+  } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -196,7 +200,7 @@ export default function DashboardPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{aiStats?.total_predictions || dashboardData.overview.totalBatches}</div>
+            <div className="text-2xl font-bold">{aiStats?.total_predictions ?? dashboardData.overview.totalBatches}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+12%</span> from last month
             </p>
@@ -236,7 +240,7 @@ export default function DashboardPage() {
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{aiStats?.high_risk_predictions || dashboardData.overview.activeAlerts}</div>
+            <div className="text-2xl font-bold text-orange-600">{aiStats?.high_risk_predictions ?? dashboardData.overview.activeAlerts}</div>
             <p className="text-xs text-muted-foreground">
               {dashboardData.alerts.filter(a => a.severity === "High").length} critical
             </p>

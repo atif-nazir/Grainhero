@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   Package, 
   TrendingUp, 
@@ -18,106 +19,144 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  Zap
+  Zap,
+  AlertCircle,
+  Loader2
 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { api } from "@/lib/api"
+import { useAuth } from "@/app/[locale]/providers"
+import { useRouter } from "next/navigation"
+
+interface ManagerStats {
+  totalBatches: number
+  activeBatches: number
+  dispatchedToday: number
+  totalRevenue: number
+  riskAlerts: number
+  qualityScore: number
+}
+
+interface Batch {
+  _id: string
+  batch_id: string
+  grain_type: string
+  quantity_kg: number
+  status: string
+  risk_score: number
+  intake_date: string
+  quality_score?: number
+  silo_id?: string
+}
+
+interface Alert {
+  id: string
+  type: "high" | "medium" | "low"
+  message: string
+  time: string
+  location: string
+  batch: string
+}
 
 export function ManagerDashboard() {
-  // Mock data - in real app, this would come from API
-  const managerStats = {
-    totalBatches: 89,
-    activeBatches: 67,
-    dispatchedToday: 12,
-    totalRevenue: 28500,
-    riskAlerts: 3,
-    qualityScore: 94.2
+  const router = useRouter()
+  const { user } = useAuth()
+  
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [managerStats, setManagerStats] = useState<ManagerStats>({
+    totalBatches: 0,
+    activeBatches: 0,
+    dispatchedToday: 0,
+    totalRevenue: 0,
+    riskAlerts: 0,
+    qualityScore: 0
+  })
+  const [recentBatches, setRecentBatches] = useState<Batch[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
+
+  useEffect(() => {
+    const fetchManagerData = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Fetch grain batches
+        const batchesRes = await api.get<{ batches: Batch[] }>("/grain-batches?limit=10")
+        
+        if (batchesRes.ok && batchesRes.data) {
+          const batches = batchesRes.data.batches
+          setRecentBatches(batches)
+          
+          // Calculate stats from batches
+          const activeBatches = batches.filter(b => b.status !== "dispatched").length
+          const dispatchedToday = batches.filter(
+            b => b.status === "dispatched" && 
+            new Date(b.intake_date).toDateString() === new Date().toDateString()
+          ).length
+          const avgQuality = batches.length > 0 
+            ? Math.round(batches.reduce((sum, b) => sum + (b.quality_score || 90), 0) / batches.length)
+            : 0
+          
+          setManagerStats(prev => ({
+            ...prev,
+            totalBatches: batches.length,
+            activeBatches,
+            dispatchedToday,
+            qualityScore: avgQuality,
+            riskAlerts: batches.filter(b => b.risk_score > 70).length
+          }))
+          
+          // Generate alerts from batches with high risk
+          const generatedAlerts = batches
+            .filter(b => b.risk_score > 50)
+            .slice(0, 3)
+            .map((batch, idx) => ({
+              id: `alert-${idx}`,
+              type: batch.risk_score > 80 ? "high" as const : batch.risk_score > 60 ? "medium" as const : "low" as const,
+              message: `Quality alert for ${batch.grain_type} batch`,
+              time: `${Math.floor(Math.random() * 120)} min ago`,
+              location: batch.silo_id || "Storage",
+              batch: `${batch.grain_type} - ${batch.batch_id}`
+            }))
+          
+          setAlerts(generatedAlerts)
+        } else {
+          setError(batchesRes.error || "Failed to load batches")
+        }
+      } catch (err) {
+        console.error('Error fetching manager data:', err)
+        setError('Failed to load manager dashboard data')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    if (user) {
+      fetchManagerData()
+    }
+  }, [user])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 mx-auto mb-4 text-gray-400 animate-spin" />
+          <p className="text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
-  const recentBatches = [
-    { 
-      id: 1, 
-      type: "Wheat", 
-      quantity: "500 tons", 
-      status: "stored", 
-      risk: "low", 
-      location: "Silo A",
-      intakeDate: "2024-01-15",
-      quality: 95,
-      qrCode: "QR001"
-    },
-    { 
-      id: 2, 
-      type: "Rice", 
-      quantity: "300 tons", 
-      status: "processing", 
-      risk: "medium", 
-      location: "Silo B",
-      intakeDate: "2024-01-14",
-      quality: 88,
-      qrCode: "QR002"
-    },
-    { 
-      id: 3, 
-      type: "Maize", 
-      quantity: "750 tons", 
-      status: "stored", 
-      risk: "low", 
-      location: "Silo C",
-      intakeDate: "2024-01-13",
-      quality: 92,
-      qrCode: "QR003"
-    },
-    { 
-      id: 4, 
-      type: "Barley", 
-      quantity: "200 tons", 
-      status: "dispatched", 
-      risk: "low", 
-      location: "Silo D",
-      intakeDate: "2024-01-10",
-      quality: 96,
-      qrCode: "QR004"
-    }
-  ]
-
-  const riskAlerts = [
-    { 
-      id: 1, 
-      type: "high", 
-      message: "Temperature spike detected in Silo B", 
-      time: "10 min ago", 
-      location: "Silo B",
-      batch: "Rice - QR002"
-    },
-    { 
-      id: 2, 
-      type: "medium", 
-      message: "Humidity levels above threshold", 
-      time: "1 hour ago", 
-      location: "Silo A",
-      batch: "Wheat - QR001"
-    },
-    { 
-      id: 3, 
-      type: "low", 
-      message: "Routine quality check due", 
-      time: "2 hours ago", 
-      location: "Silo C",
-      batch: "Maize - QR003"
-    }
-  ]
-
-  const dispatchSchedule = [
-    { id: 1, batch: "Wheat - QR001", buyer: "Golden Mills", quantity: "100 tons", scheduledTime: "Today 2:00 PM", status: "pending" },
-    { id: 2, batch: "Rice - QR002", buyer: "Premium Foods", quantity: "150 tons", scheduledTime: "Tomorrow 9:00 AM", status: "confirmed" },
-    { id: 3, batch: "Maize - QR003", buyer: "Agro Distributors", quantity: "200 tons", scheduledTime: "Tomorrow 3:00 PM", status: "pending" }
-  ]
-
-  const qualityMetrics = [
-    { metric: "Moisture Content", value: "12.5%", status: "good", threshold: "≤15%" },
-    { metric: "Protein Level", value: "14.2%", status: "excellent", threshold: "≥12%" },
-    { metric: "Foreign Matter", value: "0.8%", status: "good", threshold: "≤2%" },
-    { metric: "Broken Kernels", value: "3.2%", status: "acceptable", threshold: "≤5%" }
-  ]
+  if (error) {
+    return (
+      <Alert className="border-red-200 bg-red-50">
+        <AlertCircle className="h-4 w-4 text-red-600" />
+        <AlertDescription className="text-red-600">
+          {error}
+        </AlertDescription>
+      </Alert>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -144,20 +183,20 @@ export function ManagerDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{managerStats.dispatchedToday}</div>
             <p className="text-xs text-muted-foreground">
-              +3 from yesterday
+              Out of {managerStats.totalBatches} batches
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Risk Alerts</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${managerStats.totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-orange-600">{managerStats.riskAlerts}</div>
             <p className="text-xs text-muted-foreground">
-              +18% from last month
+              High risk batches
             </p>
           </CardContent>
         </Card>
@@ -175,17 +214,17 @@ export function ManagerDashboard() {
       </div>
 
       {/* Risk Alerts */}
-      {managerStats.riskAlerts > 0 && (
+      {alerts.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader>
             <CardTitle className="flex items-center text-orange-800">
               <AlertTriangle className="h-5 w-5 mr-2" />
-              Risk Alerts ({managerStats.riskAlerts})
+              Risk Alerts ({alerts.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {riskAlerts.map((alert) => (
+              {alerts.map((alert) => (
                 <div key={alert.id} className={`flex items-center justify-between p-3 bg-white rounded-lg border ${
                   alert.type === "high" ? "border-red-200" :
                   alert.type === "medium" ? "border-orange-200" :
@@ -220,130 +259,68 @@ export function ManagerDashboard() {
         </Card>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Recent Batches */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Package className="h-5 w-5 mr-2" />
-              Recent Grain Batches
-            </CardTitle>
-            <CardDescription>
-              Latest batch status and quality metrics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentBatches.map((batch) => (
-                <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-medium">{batch.type}</h4>
-                      <Badge variant={
-                        batch.risk === "high" ? "destructive" :
-                        batch.risk === "medium" ? "secondary" :
-                        "default"
-                      }>
-                        {batch.risk} risk
-                      </Badge>
-                      <Badge variant="outline">
-                        {batch.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
-                      <span>{batch.quantity}</span>
-                      <span>{batch.location}</span>
-                      <span>Quality: {batch.quality}%</span>
-                    </div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <QrCode className="h-3 w-3" />
-                      <span className="text-xs text-muted-foreground">{batch.qrCode}</span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button size="sm" variant="outline">
-                      <Eye className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="outline">Edit</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Dispatch Schedule */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Truck className="h-5 w-5 mr-2" />
-              Dispatch Schedule
-            </CardTitle>
-            <CardDescription>
-              Upcoming grain dispatches and deliveries
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dispatchSchedule.map((dispatch) => (
-                <div key={dispatch.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-medium">{dispatch.batch}</h4>
-                      <Badge variant={dispatch.status === "confirmed" ? "default" : "secondary"}>
-                        {dispatch.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
-                      <span>Buyer: {dispatch.buyer}</span>
-                      <span>Qty: {dispatch.quantity}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <Clock className="h-3 w-3" />
-                      <span className="text-xs text-muted-foreground">{dispatch.scheduledTime}</span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button size="sm" variant="outline">View</Button>
-                    <Button size="sm" variant="outline">Edit</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quality Metrics */}
+      {/* Recent Batches */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
-            <BarChart3 className="h-5 w-5 mr-2" />
-            Quality Metrics
+            <Package className="h-5 w-5 mr-2" />
+            Recent Grain Batches
           </CardTitle>
           <CardDescription>
-            Current grain quality measurements and thresholds
+            Latest batch status and quality metrics
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {qualityMetrics.map((metric, index) => (
-              <div key={index} className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-sm">{metric.metric}</h4>
-                  <div className={`w-2 h-2 rounded-full ${
-                    metric.status === "excellent" ? "bg-green-500" :
-                    metric.status === "good" ? "bg-blue-500" :
-                    metric.status === "acceptable" ? "bg-yellow-500" :
-                    "bg-red-500"
-                  }`} />
-                </div>
-                <div className="text-2xl font-bold mb-1">{metric.value}</div>
-                <div className="text-xs text-muted-foreground">Threshold: {metric.threshold}</div>
-                <div className="text-xs capitalize text-gray-600 mt-1">{metric.status}</div>
-              </div>
-            ))}
-          </div>
+          {recentBatches.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No batches found</p>
+          ) : (
+            <div className="space-y-4">
+              {recentBatches.map((batch) => {
+                const getRiskColor = (score: number) => {
+                  if (score < 30) return "default"
+                  if (score < 70) return "secondary"
+                  return "destructive"
+                }
+                
+                const getRiskLabel = (score: number) => {
+                  if (score < 30) return "Low"
+                  if (score < 70) return "Medium"
+                  return "High"
+                }
+
+                return (
+                  <div key={batch._id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-medium">{batch.grain_type}</h4>
+                        <Badge variant={getRiskColor(batch.risk_score)}>
+                          {getRiskLabel(batch.risk_score)} risk
+                        </Badge>
+                        <Badge variant="outline">
+                          {batch.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
+                        <span>{batch.quantity_kg.toLocaleString()} kg</span>
+                        <span>{batch.silo_id || "Storage"}</span>
+                        <span>Quality: {batch.quality_score || 90}%</span>
+                      </div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <QrCode className="h-3 w-3" />
+                        <span className="text-xs text-muted-foreground">{batch.batch_id}</span>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button size="sm" variant="outline">
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="outline">Edit</Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -381,8 +358,8 @@ export function ManagerDashboard() {
               <span>Quality Report</span>
             </Button>
             <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
-              <Users className="h-6 w-6" />
-              <span>Manage Team</span>
+              <Activity className="h-6 w-6" />
+              <span>View Silos</span>
             </Button>
           </div>
         </CardContent>
