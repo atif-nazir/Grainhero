@@ -343,6 +343,14 @@ const ROLE_HIERARCHY = {
     USER_ROLES.MANAGER,
     USER_ROLES.TECHNICIAN,
   ],
+  [USER_ROLES.ADMIN]: [
+    USER_ROLES.MANAGER,
+    USER_ROLES.TECHNICIAN,
+  ],
+  [USER_ROLES.MANAGER]: [
+    USER_ROLES.TECHNICIAN,
+  ],
+  [USER_ROLES.TECHNICIAN]: [],
 };
 
 // Permission inheritance system

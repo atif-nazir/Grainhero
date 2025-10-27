@@ -15,11 +15,11 @@ const grainBatchSchema = new mongoose.Schema({
     sparse: true // Allows multiple null values
   },
   
-  // Tenant and location
-  tenant_id: {
+  // Admin and location
+  admin_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
+    ref: 'User',
+    required: [true, "Admin ID is required"],
     index: true
   },
   silo_id: {
@@ -190,7 +190,7 @@ const grainBatchSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-grainBatchSchema.index({ tenant_id: 1, status: 1 });
+grainBatchSchema.index({ admin_id: 1, status: 1 });
 grainBatchSchema.index({ batch_id: 1 });
 grainBatchSchema.index({ qr_code: 1 });
 grainBatchSchema.index({ silo_id: 1 });

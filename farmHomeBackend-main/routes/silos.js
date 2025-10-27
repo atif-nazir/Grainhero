@@ -71,9 +71,8 @@ router.get(
       console.log("Silos GET request - User:", req.user);
       console.log("Silos GET request - Tenant ID:", req.user?.tenant_id);
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+      const filter = { admin_id: req.user.admin_id };
+      if (req.query.status) filter.status = req.query.status;
 
     const filter = { tenant_id: req.user.tenant_id };
     if (req.query.status) filter.status = req.query.status;
@@ -138,9 +137,9 @@ router.get(
   "/stats",
   [auth, requirePermission("batch.view"), requireTenantAccess],
   async (req, res) => {
-  try {
-    const silos = await Silo.find({ tenant_id: req.user.tenant_id }).lean();
-    const total = silos.length;
+    try {
+      const silos = await Silo.find({ admin_id: req.user.admin_id }).lean();
+      const total = silos.length;
       const totalCapacity = silos.reduce(
         (sum, s) => sum + (s.capacity_kg || 0),
         0
@@ -221,8 +220,13 @@ router.post(
   ],
   async (req, res) => {
     try {
+      console.log("=== SILO CREATION REQUEST ===");
+      console.log("Request body:", req.body);
+      console.log("User admin_id:", req.user.admin_id);
+      
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log("Validation errors:", errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
@@ -235,12 +239,14 @@ router.post(
       } = req.body;
 
       // Check if silo_id already exists for this tenant
+      console.log("Checking for existing silo with silo_id:", silo_id, "admin_id:", req.user.admin_id);
       const existingSilo = await Silo.findOne({
         silo_id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (existingSilo) {
+        console.log("Silo ID already exists:", existingSilo);
         return res.status(400).json({
           error: "Silo ID already exists for this tenant",
         });
@@ -252,7 +258,7 @@ router.post(
         capacity_kg,
         location,
         status,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
         created_by: req.user._id,
         current_occupancy_kg: 0,
         current_conditions: {
@@ -301,7 +307,7 @@ router.get(
     try {
       const silo = await Silo.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       }).populate("current_batch_id", "batch_id grain_type");
 
       if (!silo) {
@@ -369,15 +375,23 @@ router.put(
   ],
   async (req, res) => {
     try {
+      console.log("=== SILO UPDATE REQUEST ===");
+      console.log("Silo ID:", req.params.id);
+      console.log("User admin_id:", req.user.admin_id);
+      console.log("Update data:", req.body);
+      
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log("Validation errors:", errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
       const silo = await Silo.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
+      
+      console.log("Found silo:", silo ? "Yes" : "No");
 
       if (!silo) {
         return res.status(404).json({ error: "Silo not found" });
@@ -431,7 +445,7 @@ router.delete(
     try {
       const silo = await Silo.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: req.user.admin_id,
       });
 
       if (!silo) {
