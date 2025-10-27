@@ -62,7 +62,7 @@ router.get("/test", (req, res) => {
 router.get(
   "/",
   [
-  auth,
+    auth,
     requirePermission("batch.view"), // reuse view permission for storage
     requireTenantAccess,
   ],
@@ -71,50 +71,47 @@ router.get(
       console.log("Silos GET request - User:", req.user);
       console.log("Silos GET request - Tenant ID:", req.user?.tenant_id);
 
-      const filter = { admin_id: req.user.admin_id };
+      const filter = { tenant_id: req.user.tenant_id };
       if (req.query.status) filter.status = req.query.status;
-
-    const filter = { tenant_id: req.user.tenant_id };
-    if (req.query.status) filter.status = req.query.status;
 
       console.log("Using filter (temporarily showing all silos):", filter);
 
       console.log("Silos filter:", filter);
 
-    const [silos, total] = await Promise.all([
-      Silo.find(filter)
+      const [silos, total] = await Promise.all([
+        Silo.find(filter)
           .populate({ path: "current_batch_id", select: "batch_id grain_type" })
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+          .sort({ created_at: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
         Silo.countDocuments(filter),
-    ]);
+      ]);
 
       console.log("Found silos:", silos.length);
       console.log("Total silos in DB:", total);
 
-    // Map to frontend-friendly shape for current_batch_id
+      // Map to frontend-friendly shape for current_batch_id
       const mapped = silos.map((s) => ({
-      ...s,
+        ...s,
         current_batch_id: s.current_batch_id
           ? {
-        batch_id: s.current_batch_id.batch_id,
+              batch_id: s.current_batch_id.batch_id,
               grain_type: s.current_batch_id.grain_type,
             }
           : undefined,
-    }));
+      }));
 
-    res.json({
-      silos: mapped,
-      pagination: {
-        current_page: page,
-        total_pages: Math.ceil(total / limit),
-        total_items: total,
+      res.json({
+        silos: mapped,
+        pagination: {
+          current_page: page,
+          total_pages: Math.ceil(total / limit),
+          total_items: total,
           items_per_page: limit,
         },
-    });
-  } catch (error) {
+      });
+    } catch (error) {
       console.error("Get silos error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
@@ -156,8 +153,8 @@ router.get(
         acc[s.status] = (acc[s.status] || 0) + 1;
         return acc;
       }, {});
-    res.json({ total, totalCapacity, totalCurrent, utilization, byStatus });
-  } catch (error) {
+      res.json({ total, totalCapacity, totalCurrent, utilization, byStatus });
+    } catch (error) {
       console.error("Get silo stats error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
@@ -223,7 +220,7 @@ router.post(
       console.log("=== SILO CREATION REQUEST ===");
       console.log("Request body:", req.body);
       console.log("User admin_id:", req.user.admin_id);
-      
+
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         console.log("Validation errors:", errors.array());
@@ -239,7 +236,12 @@ router.post(
       } = req.body;
 
       // Check if silo_id already exists for this tenant
-      console.log("Checking for existing silo with silo_id:", silo_id, "admin_id:", req.user.admin_id);
+      console.log(
+        "Checking for existing silo with silo_id:",
+        silo_id,
+        "admin_id:",
+        req.user.admin_id
+      );
       const existingSilo = await Silo.findOne({
         silo_id,
         admin_id: req.user.admin_id,
@@ -379,7 +381,7 @@ router.put(
       console.log("Silo ID:", req.params.id);
       console.log("User admin_id:", req.user.admin_id);
       console.log("Update data:", req.body);
-      
+
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         console.log("Validation errors:", errors.array());
@@ -390,7 +392,7 @@ router.put(
         _id: req.params.id,
         admin_id: req.user.admin_id,
       });
-      
+
       console.log("Found silo:", silo ? "Yes" : "No");
 
       if (!silo) {
