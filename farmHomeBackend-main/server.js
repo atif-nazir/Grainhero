@@ -19,8 +19,16 @@ const paymentVerificationRoute = require("./routes/payment-verification");
 // GrainHero integrated routes
 const grainBatchesRoute = require("./routes/grainBatches");
 const sensorsRoute = require("./routes/sensors");
+const aiRoute = require("./routes/ai");
+const aiSpoilageRoute = require("./routes/aiSpoilage");
+const actuatorsRoute = require("./routes/actuators");
+const dualProbeRoute = require("./routes/dualProbeMonitoring");
+const deviceHealthRoute = require("./routes/deviceHealth");
+const iotRoute = require("./routes/iot");
+const dataVisualizationRoute = require("./routes/dataVisualization");
 const silosRoute = require("./routes/silos");
 const insuranceRoute = require("./routes/insurance");
+const environmentalRoute = require("./routes/environmental");
 
 // Super Admin routes
 const tenantManagementRoute = require("./routes/tenantManagement");
@@ -30,6 +38,7 @@ const planManagementRoute = require("./routes/planManagement");
 const userManagementRoute = require("./routes/userManagement");
 
 const Alert = require("./models/Alert");
+const environmentalDataService = require("./services/environmentalDataService");
 
 const cors = require("cors");
 require("dotenv").config();
@@ -53,8 +62,6 @@ console.log(
 );
 
 mongoose.connect(connectionString, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
   serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
   socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
 });
@@ -64,6 +71,14 @@ const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error: "));
 db.once("open", () => {
   console.log("MongoDB Connection Successfull");
+  
+  // Start environmental data collection service
+  try {
+    environmentalDataService.start();
+    console.log("Environmental data service started");
+  } catch (error) {
+    console.error("Failed to start environmental data service:", error);
+  }
 });
 
 // Stripe webhook endpoint must use express.raw before express.json
@@ -88,6 +103,13 @@ app.use("/quotes", quotesRoute);
 // GrainHero integrated routes
 app.use("/api/grain-batches", grainBatchesRoute);
 app.use("/api/sensors", sensorsRoute);
+app.use("/api/ai", aiRoute);
+app.use("/api/ai-spoilage", aiSpoilageRoute);
+app.use("/api/actuators", actuatorsRoute);
+app.use("/api/dual-probe", dualProbeRoute);
+app.use("/api/device-health", deviceHealthRoute);
+app.use("/api/iot", iotRoute);
+app.use("/api/data-viz", dataVisualizationRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
 

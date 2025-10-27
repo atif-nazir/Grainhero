@@ -212,10 +212,25 @@ export default function SignUpPage() {
           const error = await res.json().catch(() => ({}))
           setMessage(error?.message || "Signup failed. Please try again.")
         } else {
-          setMessage("Account created successfully! Please login to access your dashboard.")
-          setTimeout(() => {
-            router.push("/auth/login")
-          }, 2000)
+          const data = await res.json()
+          console.log("Signup response:", data)
+          
+          if (data.token && data.user) {
+            // User is already logged in, redirect to dashboard
+            setMessage("Account created successfully! Redirecting to dashboard...")
+            localStorage.setItem("token", data.token)
+            localStorage.setItem("farm-home-user", JSON.stringify(data.user))
+            localStorage.setItem("farm-home-access", data.hasAccess || "none")
+            setTimeout(() => {
+              router.push("/dashboard")
+            }, 2000)
+          } else {
+            // Regular signup, redirect to login
+            setMessage("Account created successfully! Please login to access your dashboard.")
+            setTimeout(() => {
+              router.push("/auth/login")
+            }, 2000)
+          }
         }
       }
     } catch {

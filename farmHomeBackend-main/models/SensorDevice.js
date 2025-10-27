@@ -25,8 +25,7 @@ const sensorDeviceSchema = new mongoose.Schema({
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, "Admin ID is required"],
-    index: true
+    required: [true, "Admin ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,

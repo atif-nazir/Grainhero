@@ -35,6 +35,8 @@ import {
   DollarSign,
   UserCheck,
   AlertTriangle,
+  Brain,
+  Cloud,
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
@@ -103,10 +105,10 @@ const iotMonitoringNav = [
     badge: undefined
   },
   {
-    name: "environmental-data",
+    name: "environmental",
     label: "Environmental Data",
-    href: "/environmental-data",
-    icon: BarChart3,
+    href: "/environmental",
+    icon: Cloud,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
@@ -130,6 +132,13 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
+  { 
+    name: "ai-spoilage", 
+    href: "/ai-spoilage", 
+    icon: OctagonAlert,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: "AI"
+  },
   {
     name: "risk-assessment",
     label: "Risk Assessment",
@@ -146,6 +155,20 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
+  { 
+    name: "model-performance", 
+    href: "/model-performance", 
+    icon: Brain,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "ML"
+  },
+  { 
+    name: "data-management", 
+    href: "/data-management", 
+    icon: Database,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "ML"
+  },
   {
     name: "environmental-data",
     label: "Environmental Data",
@@ -153,6 +176,13 @@ const aiAnalyticsNav = [
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
+  },
+  { 
+    name: "data-visualization", 
+    href: "/data-visualization", 
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "NEW"
   },
 ]
 
@@ -289,13 +319,15 @@ export function Sidebar() {
   };
 
   const showOnlySuperAdmin = userRole === "super_admin";
+  const showOnlyAdmin = userRole === "admin" || userRole === "super_admin";
+  const showOnlyManager = userRole === "manager" || userRole === "admin" || userRole === "super_admin";
 
-  const visibleDashboardNav = showOnlySuperAdmin ? dashboardNav.filter(hasAccess) : dashboardNav.filter(hasAccess);
-  const visibleGrainOpsNav = showOnlySuperAdmin ? [] : grainOperationsNav.filter(hasAccess);
-  const visibleIoTNav = showOnlySuperAdmin ? [] : iotMonitoringNav.filter(hasAccess);
-  const visibleAINav = showOnlySuperAdmin ? [] : aiAnalyticsNav.filter(hasAccess);
-  const visibleBusinessNav = showOnlySuperAdmin ? [] : businessNav.filter(hasAccess);
-  const visibleSystemNav = showOnlySuperAdmin ? [] : systemNav.filter(hasAccess);
+  const visibleDashboardNav = dashboardNav.filter(hasAccess);
+  const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : [];
+  const visibleIoTNav = showOnlyManager ? iotMonitoringNav.filter(hasAccess) : [];
+  const visibleAINav = showOnlyManager ? aiAnalyticsNav.filter(hasAccess) : [];
+  const visibleBusinessNav = showOnlyAdmin ? businessNav.filter(hasAccess) : [];
+  const visibleSystemNav = showOnlyAdmin ? systemNav.filter(hasAccess) : [];
   const visibleSuperAdminNav = superAdminNav.filter(hasAccess);
 
   return (
@@ -483,7 +515,7 @@ export function Sidebar() {
           )}
 
           {/* Milestone 2 Features */}
-          {!showOnlySuperAdmin && (
+          {!showOnlySuperAdmin && userRole !== "manager" && (
             <div className="space-y-1">
               <Button
                 variant="ghost"
@@ -537,8 +569,8 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Admin Features */}
-          {!showOnlySuperAdmin && (
+          {/* Admin Features - Only for Admin */}
+          {showOnlyAdmin && userRole !== "manager" && (
             <div className="space-y-1">
               <Button
                 variant="ghost"
@@ -573,16 +605,18 @@ export function Sidebar() {
 
       {/* Plans Button and User Profile & Logout */}
       <div className="border-t border-gray-200 p-4">
-        <Button
-          variant="outline"
-          className="w-full justify-start mb-2"
-          onClick={() => {
-            router.push('/plans');
-          }}
-        >
-          <BarChart3 className="mr-3 h-4 w-4" />
-          {t('plans', { defaultMessage: 'Plans' })}
-        </Button>
+        {showOnlyAdmin && (
+          <Button
+            variant="outline"
+            className="w-full justify-start mb-2"
+            onClick={() => {
+              router.push('/plans');
+            }}
+          >
+            <BarChart3 className="mr-3 h-4 w-4" />
+            {t('plans', { defaultMessage: 'Plans' })}
+          </Button>
+        )}
         <div
           className="flex items-center space-x-3 mb-3 cursor-pointer hover:bg-gray-100 rounded p-2 transition"
           onClick={() => router.push("/profile")}

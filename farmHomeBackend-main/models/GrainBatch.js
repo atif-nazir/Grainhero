@@ -19,8 +19,7 @@ const grainBatchSchema = new mongoose.Schema({
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, "Admin ID is required"],
-    index: true
+    required: [true, "Admin ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -166,6 +165,36 @@ const grainBatchSchema = new mongoose.Schema({
   // Notes and metadata
   notes: String,
   tags: [String],
+  
+  // Insurance and spoilage events
+  spoilage_events: [{
+    event_id: String,
+    event_type: {
+      type: String,
+      enum: ['mold', 'insect', 'moisture', 'contamination', 'other']
+    },
+    severity: {
+      type: String,
+      enum: ['minor', 'moderate', 'severe', 'total_loss']
+    },
+    description: String,
+    estimated_loss_kg: Number,
+    estimated_value_loss: Number,
+    detected_date: { type: Date, default: Date.now },
+    reported_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    photos: [{
+      filename: String,
+      original_name: String,
+      path: String,
+      size: Number,
+      upload_date: { type: Date, default: Date.now }
+    }],
+    environmental_conditions: {
+      temperature: Number,
+      humidity: Number,
+      moisture_content: Number
+    }
+  }],
   
   // Audit trail
   created_by: {

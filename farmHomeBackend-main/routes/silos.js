@@ -78,8 +78,17 @@ router.get(
 
       console.log("Silos filter:", filter);
 
+<<<<<<< HEAD
       const [silos, total] = await Promise.all([
         Silo.find(filter)
+=======
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const skip = (page - 1) * limit;
+
+    const [silos, total] = await Promise.all([
+      Silo.find(filter)
+>>>>>>> 6df645732979e5c8f696d6d05f60123961421dba
           .populate({ path: "current_batch_id", select: "batch_id grain_type" })
           .sort({ created_at: -1 })
           .skip(skip)
