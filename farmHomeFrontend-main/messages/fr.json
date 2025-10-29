@@ -443,7 +443,12 @@
       "Alerts": "Alertes",
       "orders": "Commandes",
       "quotes": "Devis",
-      "breeding-recommendation": "Recommandation de reproduction"
+      "breeding-recommendation": "Recommandation de reproduction",
+      "grain-batches": "Lots de grain",
+      "silos": "Silos",
+      "sensors": "Capteurs",
+      "environmental": "Données environnementales",
+      "grain-alerts": "Alertes grain"
 
     },
   "Dashboard": {

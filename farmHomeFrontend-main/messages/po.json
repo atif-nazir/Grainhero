@@ -446,7 +446,12 @@
       "Alerts": "Obubaka obulabula",
       "orders": "Pedidos",
       "quotes": "Cotações",
-      "breeding-recommendation": "Reprodução"
+      "breeding-recommendation": "Reprodução",
+      "grain-batches": "Lotes de Grãos",
+      "silos": "Silos",
+      "sensors": "Sensores",
+      "environmental": "Dados Ambientais",
+      "grain-alerts": "Alertas de Grãos"
     },
   "Dashboard": {
     "totalAnimals": "Total de Animais",
