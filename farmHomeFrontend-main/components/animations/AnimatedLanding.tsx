@@ -1,127 +1,61 @@
 "use client"
 
-import React, { useRef, useState, useEffect } from 'react'
-import { motion, useAnimation, useInView } from 'framer-motion'
-import { useSpring, animated } from '@react-spring/web'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Sphere, Box } from '@react-three/drei'
-import { 
-  Sparkles, 
-  Zap, 
-  Shield, 
-  TrendingUp, 
-  Globe, 
-  Database,
-  Cpu,
-  BarChart3,
-  Activity
-} from 'lucide-react'
+import React from 'react'
+import { motion } from 'framer-motion'
 
-// 3D Floating Elements
-function FloatingCube({ position, color }: { position: [number, number, number], color: string }) {
-  const meshRef = useRef<THREE.Mesh>(null)
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
-      meshRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.3) * 0.3
-      meshRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.8) * 0.5
-    }
-  })
 
-  return (
-    <Box ref={meshRef} position={position} args={[1, 1, 1]}>
-      <meshStandardMaterial color={color} />
-    </Box>
-  )
-}
-
-function FloatingSphere({ position, color }: { position: [number, number, number], color: string }) {
-  const meshRef = useRef<THREE.Mesh>(null)
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.4) * 0.2
-      meshRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.6) * 0.2
-      meshRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.5) * 0.3
-    }
-  })
-
-  return (
-    <Sphere ref={meshRef} position={position} args={[0.5, 32, 32]}>
-      <meshStandardMaterial color={color} />
-    </Sphere>
-  )
-}
-
-// Hero Section with 3D Background
-export function AnimatedHero({ 
-  title, 
-  subtitle, 
-  ctaText, 
-  onCtaClick 
-}: { 
+// Hero Section with Background Image
+export function AnimatedHero({
+  title,
+  subtitle,
+  ctaText,
+  onCtaClick
+}: {
   title: string
   subtitle: string
   ctaText: string
   onCtaClick: () => void
 }) {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({
-        x: (e.clientX / window.innerWidth) * 2 - 1,
-        y: (e.clientY / window.innerHeight) * 2 - 1
-      })
-    }
-    
-    window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
-  }, [])
 
   return (
-    <div className="relative h-screen overflow-hidden bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
-      {/* 3D Background */}
-      <div className="absolute inset-0">
-        <Canvas camera={{ position: [0, 0, 5], fov: 75 }}>
-          <ambientLight intensity={0.4} />
-          <directionalLight position={[5, 5, 5]} intensity={0.8} />
-          <pointLight position={[-5, 5, 5]} intensity={0.3} />
-          
-          <FloatingCube position={[-2, 1, 0]} color="#3b82f6" />
-          <FloatingCube position={[2, -1, 0]} color="#10b981" />
-          <FloatingSphere position={[0, 2, -1]} color="#f59e0b" />
-          <FloatingSphere position={[-1, -1, 1]} color="#ef4444" />
-          <FloatingCube position={[1, 0, -2]} color="#8b5cf6" />
-          
-          <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
-        </Canvas>
-      </div>
+    <div className="relative h-screen overflow-hidden">
+      {/* Background Image */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/images/grain-fields-hero.jpg)',
+        }}
+      />
+
+      {/* Overlay for text visibility */}
+      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-black/60" />
+
+      {/* Additional overlay for better text contrast */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/40" />
 
       {/* Content */}
       <div className="relative z-10 flex items-center justify-center h-full">
         <div className="text-center text-white max-w-4xl mx-auto px-4">
           <motion.h1
-            className="text-6xl md:text-8xl font-bold mb-6"
+            className="text-5xl md:text-7xl font-bold mb-6 text-white drop-shadow-2xl"
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1 }}
           >
             {title}
           </motion.h1>
-          
+
           <motion.p
-            className="text-xl md:text-2xl mb-8 text-blue-100"
+            className="text-xl md:text-2xl mb-8 text-white/90 drop-shadow-lg max-w-3xl mx-auto"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.3 }}
           >
             {subtitle}
           </motion.p>
-          
+
           <motion.button
-            className="bg-white text-blue-900 px-8 py-4 rounded-full text-lg font-semibold hover:bg-blue-50 transition-colors"
+            className="bg-[#00a63e] text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-[#029238] transition-colors shadow-xl"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.6 }}
@@ -162,11 +96,11 @@ export function AnimatedHero({
 }
 
 // Animated Feature Cards
-export function AnimatedFeatureCards({ 
-  features 
-}: { 
+export function AnimatedFeatureCards({
+  features
+}: {
   features: Array<{
-    icon: React.ComponentType<any>
+    icon: React.ComponentType<{ className?: string }>
     title: string
     description: string
     color: string
@@ -181,7 +115,7 @@ export function AnimatedFeatureCards({
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: index * 0.1 }}
-          whileHover={{ 
+          whileHover={{
             y: -10,
             transition: { duration: 0.3 }
           }}
@@ -193,7 +127,7 @@ export function AnimatedFeatureCards({
           >
             <feature.icon className="w-8 h-8 text-white" />
           </motion.div>
-          
+
           <h3 className="text-2xl font-bold mb-4">{feature.title}</h3>
           <p className="text-gray-600 text-lg">{feature.description}</p>
         </motion.div>
@@ -203,9 +137,9 @@ export function AnimatedFeatureCards({
 }
 
 // Animated Stats Section
-export function AnimatedStatsSection({ 
-  stats 
-}: { 
+export function AnimatedStatsSection({
+  stats
+}: {
   stats: Array<{
     value: number
     label: string
@@ -230,10 +164,10 @@ export function AnimatedStatsSection({
                 animate={{ opacity: 1 }}
                 transition={{ duration: 1, delay: index * 0.2 + 0.5 }}
               >
-                <animated.span>
+                <motion.span>
                   {stat.value.toLocaleString()}
                   {stat.suffix}
-                </animated.span>
+                </motion.span>
               </motion.div>
               <p className="text-xl text-blue-100">{stat.label}</p>
             </motion.div>
@@ -245,9 +179,9 @@ export function AnimatedStatsSection({
 }
 
 // Animated Testimonial Cards
-export function AnimatedTestimonials({ 
-  testimonials 
-}: { 
+export function AnimatedTestimonials({
+  testimonials
+}: {
   testimonials: Array<{
     name: string
     role: string
@@ -266,7 +200,7 @@ export function AnimatedTestimonials({
         >
           What Our Users Say
         </motion.h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {testimonials.map((testimonial, index) => (
             <motion.div
@@ -286,7 +220,7 @@ export function AnimatedTestimonials({
                   <p className="text-gray-600 text-sm">{testimonial.role}</p>
                 </div>
               </div>
-              <p className="text-gray-700 italic">"{testimonial.content}"</p>
+              <p className="text-gray-700 italic">&ldquo;{testimonial.content}&rdquo;</p>
             </motion.div>
           ))}
         </div>
@@ -296,19 +230,19 @@ export function AnimatedTestimonials({
 }
 
 // Animated CTA Section
-export function AnimatedCTA({ 
-  title, 
-  description, 
-  buttonText, 
-  onButtonClick 
-}: { 
+export function AnimatedCTA({
+  title,
+  description,
+  buttonText,
+  onButtonClick
+}: {
   title: string
   description: string
   buttonText: string
   onButtonClick: () => void
 }) {
   return (
-    <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-20">
+    <div className="bg-gradient-to-r from-[#00a63e] to-[#029238] py-20">
       <div className="container mx-auto px-4 text-center">
         <motion.h2
           className="text-4xl md:text-6xl font-bold text-white mb-6"
@@ -318,18 +252,18 @@ export function AnimatedCTA({
         >
           {title}
         </motion.h2>
-        
+
         <motion.p
-          className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto"
+          className="text-xl text-green-100 mb-8 max-w-2xl mx-auto"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
           {description}
         </motion.p>
-        
+
         <motion.button
-          className="bg-white text-blue-600 px-8 py-4 rounded-full text-lg font-semibold hover:bg-blue-50 transition-colors"
+          className="bg-white text-[#00a63e] px-8 py-4 rounded-full text-lg font-semibold hover:bg-green-50 transition-colors"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.4 }}

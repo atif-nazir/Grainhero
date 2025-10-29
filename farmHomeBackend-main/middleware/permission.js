@@ -106,12 +106,15 @@ const requireTenantAccess = (req, res, next) => {
     console.log("User role:", req.user.role);
     console.log("User ID:", req.user._id);
     console.log("User admin_id:", req.user.admin_id);
-    
+
     if (req.user.role === USER_ROLES.ADMIN) {
       // Admin users are their own admin
       userAdminId = req.user._id;
       console.log("Admin user - using own ID as admin_id:", userAdminId);
-    } else if (req.user.role === USER_ROLES.MANAGER || req.user.role === USER_ROLES.TECHNICIAN) {
+    } else if (
+      req.user.role === USER_ROLES.MANAGER ||
+      req.user.role === USER_ROLES.TECHNICIAN
+    ) {
       // Managers and technicians belong to their admin
       userAdminId = req.user.admin_id;
       console.log("Manager/Technician - using admin_id:", userAdminId);

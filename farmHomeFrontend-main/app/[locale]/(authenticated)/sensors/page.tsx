@@ -1,13 +1,11 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 
@@ -31,13 +29,35 @@ interface SensorDevice {
   }
 }
 
+interface SensorApiResponse {
+  _id: string
+  device_id?: string
+  device_name: string
+  health_status?: string
+  status?: string
+  sensor_types?: string[]
+  battery_level?: number
+  device_metrics?: {
+    battery_level?: number
+    signal_strength?: number
+  }
+  signal_strength?: number
+  silo_id?: {
+    name?: string
+    _id?: string
+  }
+  health_metrics?: {
+    last_heartbeat?: string
+    uptime_percentage?: number
+    error_count?: number
+  }
+}
+
 export default function SensorsPage() {
-  const t = useTranslations('Sensors')
   const [sensors, setSensors] = useState<SensorDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [activeTab, setActiveTab] = useState('overview')
 
   // Load sensors from backend
   useEffect(() => {
@@ -48,7 +68,7 @@ export default function SensorsPage() {
         const res = await fetch(`${backendUrl}/api/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
         if (res.ok) {
           const data = await res.json()
-          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: SensorApiResponse) => ({
             _id: s._id,
             device_id: s.device_id || s._id,
             device_name: s.device_name,
@@ -71,16 +91,18 @@ export default function SensorsPage() {
       }
     }
     run()
+  }, [])
+
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
-      if (!mounted) return
-      if (res.ok && res.data) {
-        setSensors(res.data.sensors as unknown as SensorDevice[])
-      }
-      setLoading(false)
-    })()
+      ; (async () => {
+        const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
+        if (!mounted) return
+        if (res.ok && res.data) {
+          setSensors(res.data.sensors as unknown as SensorDevice[])
+        }
+        setLoading(false)
+      })()
     return () => {
       mounted = false
     }
@@ -118,7 +140,7 @@ export default function SensorsPage() {
 
   const filteredSensors = sensors.filter(sensor => {
     const matchesSearch = sensor.device_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         sensor.device_id.toLowerCase().includes(searchTerm.toLowerCase())
+      sensor.device_id.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || sensor.status === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -286,7 +308,7 @@ export default function SensorsPage() {
                 {/* Health Metrics */}
                 <div className="space-y-2">
                   <div className="text-sm font-medium">Device Health</div>
-                  
+
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <Battery className="h-4 w-4" />

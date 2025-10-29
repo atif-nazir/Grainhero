@@ -1,3 +1,7 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import pricingData from '../pricing-data.js';
@@ -20,6 +24,22 @@ export const plans = [
 ]
 export default function PricingPage() {
   const t = useTranslations('PricingPage');
+  const router = useRouter();
+  useEffect(() => {
+    const storedPlanId = localStorage.getItem('selectedPlanId');
+    if (storedPlanId) {
+      // Plan is already selected, could be used for highlighting
+    }
+  }, []);
+
+  const handleChoosePlan = (planId: string) => {
+    if (planId === 'custom') {
+      router.push('/contact?plan=custom');
+    } else {
+      localStorage.setItem('selectedPlanId', planId);
+      router.push('/checkout');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-12">
@@ -39,7 +59,7 @@ export default function PricingPage() {
             <Card key={plan.id} className="flex flex-col h-full">
               <CardHeader>
                 <CardTitle className="text-2xl text-center">{plan.name}</CardTitle>
-                <div className="text-3xl font-bold text-center mt-2">{plan.price}</div>
+                <div className="text-3xl font-bold text-center mt-2">{plan.priceFrontend}</div>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
                 <CardDescription className="text-center mb-4">{plan.description}</CardDescription>
@@ -56,15 +76,7 @@ export default function PricingPage() {
                 <Button
                   className="w-full"
                   variant={plan.id === 'pro' ? 'default' : 'outline'}
-                  onClick={() => {
-                    if (plan.id === 'custom') {
-                      window.location.href = plan.link || '#'
-                    } else {
-                      // Redirect to checkout page with selected plan
-                      localStorage.setItem('selectedPlanId', plan.id)
-                      window.location.href = '/checkout'
-                    }
-                  }}
+                  onClick={() => handleChoosePlan(plan.id)}
                 >
                   {plan.id === 'custom' ? t('contactUs', { defaultMessage: 'Contact Us' }) : t('choosePlan', { defaultMessage: 'Choose Plan' })}
                 </Button>

@@ -7,15 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import {
-  Crown,
-  Plus,
-  Edit,
-  Trash2,
-  Eye,
-  DollarSign,
-  Users,
-  HardDrive,
+import { 
+  Crown, 
+  Plus, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  DollarSign, 
+  Users, 
+  HardDrive, 
   Smartphone,
   CheckCircle,
   XCircle,
@@ -106,51 +106,51 @@ export default function PlanManagementPage() {
   ]
 
   useEffect(() => {
-    const mockPlans: Plan[] = [
-      {
-        id: "basic",
-        name: "Basic",
-        description: "Essential tools for small farms to get started.",
-        price: 9,
-        priceFrontend: "$9/mo",
-        priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
-        stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
-        features: [
+  const mockPlans: Plan[] = [
+    {
+      id: "basic",
+      name: "Basic",
+      description: "Essential tools for small farms to get started.",
+      price: 9,
+      priceFrontend: "$9/mo",
+      priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
+      stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
+      features: [
           "Up to 5 grain batches",
           "Basic quality monitoring",
           "Email support",
           "Mobile app access",
           "1 silo monitoring"
-        ],
-        limits: {
-          users: 5,
+      ],
+      limits: {
+        users: 5,
           devices: 3,
           storage: 100,
           batches: 5
-        },
-        features_enabled: {
-          ai_features: false,
-          priority_support: false,
-          custom_integrations: false,
-          advanced_analytics: false,
-          api_access: false,
-          white_label: false
-        },
-        status: "active",
+      },
+      features_enabled: {
+        ai_features: false,
+        priority_support: false,
+        custom_integrations: false,
+        advanced_analytics: false,
+        api_access: false,
+        white_label: false
+      },
+      status: "active",
         subscribers: 847,
         revenue: 7623,
         created_at: "2024-01-15",
-        updated_at: "2024-01-15"
-      },
-      {
+      updated_at: "2024-01-15"
+    },
+    {
         id: "professional",
         name: "Professional",
         description: "Advanced features for growing agricultural operations.",
-        price: 29,
-        priceFrontend: "$29/mo",
+      price: 29,
+      priceFrontend: "$29/mo",
         priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
         stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
-        features: [
+      features: [
           "Up to 50 grain batches",
           "Advanced AI monitoring",
           "Priority support",
@@ -158,66 +158,66 @@ export default function PlanManagementPage() {
           "Up to 10 silos",
           "Custom reports",
           "Team collaboration"
-        ],
-        limits: {
-          users: 25,
+      ],
+      limits: {
+        users: 25,
           devices: 15,
           storage: 500,
           batches: 50
-        },
-        features_enabled: {
-          ai_features: true,
-          priority_support: true,
-          custom_integrations: true,
-          advanced_analytics: true,
-          api_access: true,
-          white_label: false
-        },
-        status: "active",
-        subscribers: 312,
-        revenue: 9048,
-        created_at: "2024-01-15",
-        updated_at: "2024-01-15"
       },
-      {
+      features_enabled: {
+        ai_features: true,
+        priority_support: true,
+          custom_integrations: true,
+        advanced_analytics: true,
+        api_access: true,
+        white_label: false
+      },
+      status: "active",
+      subscribers: 312,
+      revenue: 9048,
+        created_at: "2024-01-15",
+      updated_at: "2024-01-15"
+    },
+    {
         id: "enterprise",
         name: "Enterprise",
         description: "Complete solution for large-scale agricultural operations.",
-        price: 99,
-        priceFrontend: "$99/mo",
+      price: 99,
+      priceFrontend: "$99/mo",
         priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
         stripeLink: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
-        features: [
+      features: [
           "Unlimited grain batches",
           "Full AI suite",
           "24/7 phone support",
-          "Custom integrations",
+        "Custom integrations",
           "Unlimited silos",
           "Advanced analytics",
           "White-label options",
           "Dedicated account manager"
-        ],
-        limits: {
-          users: 100,
+      ],
+      limits: {
+        users: 100,
           devices: 50,
           storage: 2000,
           batches: 500
-        },
-        features_enabled: {
-          ai_features: true,
-          priority_support: true,
-          custom_integrations: true,
-          advanced_analytics: true,
-          api_access: true,
-          white_label: true
-        },
-        status: "active",
+      },
+      features_enabled: {
+        ai_features: true,
+        priority_support: true,
+        custom_integrations: true,
+        advanced_analytics: true,
+        api_access: true,
+        white_label: true
+      },
+      status: "active",
         subscribers: 88,
         revenue: 8712,
         created_at: "2024-01-15",
-        updated_at: "2024-01-15"
-      }
-    ]
+      updated_at: "2024-01-15"
+    }
+  ]
     setPlans(mockPlans)
   }, [])
 
@@ -241,8 +241,8 @@ export default function PlanManagementPage() {
 
   const filteredPlans = plans.filter(plan => {
     const matchesSearch = plan.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plan.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plan.id.toLowerCase().includes(searchTerm.toLowerCase())
+                         plan.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         plan.id.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFilter = filterStatus === "all" || plan.status === filterStatus
     return matchesSearch && matchesFilter
   })
