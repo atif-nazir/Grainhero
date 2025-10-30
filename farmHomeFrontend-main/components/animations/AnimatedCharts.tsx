@@ -273,7 +273,7 @@ export function AnimatedMetricCard({
   className = "" 
 }: {
   title: string
-  value: string | number
+  value: React.ReactNode
   change?: number
   icon: React.ComponentType<any>
   color?: string

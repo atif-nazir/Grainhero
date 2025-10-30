@@ -144,7 +144,11 @@ const dashboardData = {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const [aiStats, setAiStats] = useState(null)
+  const [aiStats, setAiStats] = useState<{
+    total_predictions?: number
+    high_risk_predictions?: number
+    [key: string]: any
+  } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {

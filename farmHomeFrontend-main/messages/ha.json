@@ -452,7 +452,12 @@
       "Alerts": "Gargadi",
       "orders": "Umarni",
       "quotes": "Kudade",
-      "breeding-recommendation": "Kiwo"
+      "breeding-recommendation": "Kiwo",
+      "environmental": "Bayanan Muhalli",
+      "grain-batches": "Gungun Hatsi",
+      "silos": "Silos",
+      "sensors": "Sensorai",
+      "grain-alerts": "Alarmar Hatsi"
     },
   "Dashboard": {
     "totalAnimals": "Jimillar Dabbobi",
