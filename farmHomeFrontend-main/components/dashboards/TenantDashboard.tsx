@@ -4,10 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import {
-  Users,
-  DollarSign,
-  AlertTriangle,
+import { 
+  Users, 
+  DollarSign, 
+  AlertTriangle, 
   Activity,
   Package,
   Smartphone,
@@ -82,10 +82,10 @@ export function TenantDashboard() {
   useEffect(() => {
     let mounted = true
       ; (async () => {
-        try {
+      try {
           const [dashboardRes, usersRes, batchesRes, planRes] = await Promise.all([
-            api.get<DashboardResponse>("/dashboard"),
-            api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
+          api.get<DashboardResponse>("/dashboard"),
+          api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
             api.get<{ batches: RecentBatch[] }>("/grain-batches?limit=5"),
             api.get<{
               plan: {
@@ -110,35 +110,35 @@ export function TenantDashboard() {
                 api_calls_this_month: number;
               };
             }>("/api/plan-management/plan-info")
-          ])
-
-          if (!mounted) return
-
-          if (dashboardRes.ok && dashboardRes.data) {
-            setData(dashboardRes.data)
-          } else {
-            setError(dashboardRes.error || "Failed to load dashboard")
-          }
-
-          if (usersRes.ok && usersRes.data) {
-            setUsers(usersRes.data.users as unknown as User[])
-          }
-
-          if (batchesRes.ok && batchesRes.data) {
-            setRecentBatches(batchesRes.data.batches as unknown as RecentBatch[])
-          }
+        ])
+        
+        if (!mounted) return
+        
+        if (dashboardRes.ok && dashboardRes.data) {
+          setData(dashboardRes.data)
+        } else {
+          setError(dashboardRes.error || "Failed to load dashboard")
+        }
+        
+        if (usersRes.ok && usersRes.data) {
+          setUsers(usersRes.data.users as unknown as User[])
+        }
+        
+        if (batchesRes.ok && batchesRes.data) {
+          setRecentBatches(batchesRes.data.batches as unknown as RecentBatch[])
+        }
 
           if (planRes.ok && planRes.data) {
             setPlanInfo(planRes.data.plan)
             setUsageStats(planRes.data.usage)
           }
-        } catch (error) {
-          console.error('Failed to load dashboard data:', error)
-          setError('Failed to load dashboard data')
-        } finally {
-          setIsLoading(false)
-        }
-      })()
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error)
+        setError('Failed to load dashboard data')
+      } finally {
+        setIsLoading(false)
+      }
+    })()
     return () => {
       mounted = false
     }
@@ -462,26 +462,26 @@ export function TenantDashboard() {
             {systemAlerts.map((alert) => (
               <div key={alert.id} className={`flex items-center justify-between p-3 rounded-lg border ${alert.type === "critical" ? "bg-red-50 border-red-200" :
                 alert.type === "warning" ? "bg-yellow-50 border-yellow-200" :
-                  "bg-blue-50 border-blue-200"
-                }`}>
+                "bg-blue-50 border-blue-200"
+              }`}>
                 <div>
                   <p className={`font-medium ${alert.type === "critical" ? "text-red-900" :
                     alert.type === "warning" ? "text-yellow-900" :
-                      "text-blue-900"
-                    }`}>
+                    "text-blue-900"
+                  }`}>
                     {alert.message}
                   </p>
                   <p className={`text-sm ${alert.type === "critical" ? "text-red-600" :
                     alert.type === "warning" ? "text-yellow-600" :
-                      "text-blue-600"
-                    }`}>
+                    "text-blue-600"
+                  }`}>
                     {alert.location} • {alert.time}
                   </p>
                 </div>
                 <Badge variant={
                   alert.type === "critical" ? "destructive" :
-                    alert.type === "warning" ? "secondary" :
-                      "default"
+                  alert.type === "warning" ? "secondary" :
+                  "default"
                 }>
                   {alert.type}
                 </Badge>
@@ -504,47 +504,47 @@ export function TenantDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
-            <Button
+            <Button 
               className="h-20 flex flex-col items-center justify-center space-y-2"
               onClick={() => router.push('/users')}
             >
               <UserPlus className="h-6 w-6" />
               <span>Add User</span>
             </Button>
-            <Button
-              className="h-20 flex flex-col items-center justify-center space-y-2"
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
               variant="outline"
               onClick={() => router.push('/grain-batches')}
             >
               <Package className="h-6 w-6" />
               <span>New Batch</span>
             </Button>
-            <Button
-              className="h-20 flex flex-col items-center justify-center space-y-2"
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
               variant="outline"
               onClick={() => router.push('/sensors')}
             >
               <Smartphone className="h-6 w-6" />
               <span>Manage Sensors</span>
             </Button>
-            <Button
-              className="h-20 flex flex-col items-center justify-center space-y-2"
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
               variant="outline"
               onClick={() => router.push('/reports')}
             >
               <BarChart3 className="h-6 w-6" />
               <span>View Reports</span>
             </Button>
-            <Button
-              className="h-20 flex flex-col items-center justify-center space-y-2"
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
               variant="outline"
               onClick={() => router.push('/settings')}
             >
               <Settings className="h-6 w-6" />
               <span>Settings</span>
             </Button>
-            <Button
-              className="h-20 flex flex-col items-center justify-center space-y-2"
+            <Button 
+              className="h-20 flex flex-col items-center justify-center space-y-2" 
               variant="outline"
               onClick={() => router.push('/security')}
             >
