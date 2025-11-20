@@ -388,6 +388,51 @@ router.get('/my-locations', auth, async (req, res) => {
       .select('silo_id name location');
     }
 
+    // If user has no silos with location data, return a sensible default demo location
+    if (!silos || silos.length === 0) {
+      try {
+        // Default to Lahore coordinates used in the frontend page
+        const defaultLat = 31.5204;
+        const defaultLon = 74.3587;
+
+        const environmentalData = await weatherService.getEnvironmentalData(
+          defaultLat,
+          defaultLon
+        );
+
+        const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
+        const regionalAnalysis = weatherService.analyzeRegionalClimate(
+          environmentalData,
+          defaultLat,
+          defaultLon
+        );
+
+        return res.json({
+          success: true,
+          data: {
+            total_locations: 1,
+            total_silos: 0,
+            locations: [{
+              city: 'Default Location',
+              latitude: defaultLat,
+              longitude: defaultLon,
+              address: 'Demo location for environmental data',
+              silos: [],
+              silo_count: 0,
+              weather: environmentalData.weather,
+              air_quality: environmentalData.airQuality,
+              aqi_level: weatherService.getAQILevel(environmentalData.airQuality.aqi),
+              impact_assessment: impactAssessment,
+              regional_analysis: regionalAnalysis
+            }]
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching default environmental location:', error);
+        // fall through to normal error handling below
+      }
+    }
+
     // Group silos by location (city/coordinates)
     const locationGroups = {};
     

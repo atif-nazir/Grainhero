@@ -77,7 +77,7 @@ async function addSampleSilos() {
       // Create new silo
       const silo = new Silo({
         ...siloData,
-        created_by: adminUser._id,
+        created_by: adminUs er._id,
         updated_by: adminUser._id
       });
       
