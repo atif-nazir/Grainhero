@@ -62,7 +62,7 @@ router.get("/test", (req, res) => {
 router.get(
   "/",
   [
-    auth,
+  auth,
     requirePermission("batch.view"), // reuse view permission for storage
     requireTenantAccess,
   ],
@@ -78,44 +78,44 @@ router.get(
 
       console.log("Silos filter:", filter);
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const skip = (page - 1) * limit;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
 
     const [silos, total] = await Promise.all([
       Silo.find(filter)
           .populate({ path: "current_batch_id", select: "batch_id grain_type" })
-          .sort({ created_at: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
         Silo.countDocuments(filter),
-      ]);
+    ]);
 
       console.log("Found silos:", silos.length);
       console.log("Total silos in DB:", total);
 
-      // Map to frontend-friendly shape for current_batch_id
+    // Map to frontend-friendly shape for current_batch_id
       const mapped = silos.map((s) => ({
-        ...s,
+      ...s,
         current_batch_id: s.current_batch_id
           ? {
-              batch_id: s.current_batch_id.batch_id,
+        batch_id: s.current_batch_id.batch_id,
               grain_type: s.current_batch_id.grain_type,
             }
           : undefined,
-      }));
+    }));
 
-      res.json({
-        silos: mapped,
-        pagination: {
-          current_page: page,
-          total_pages: Math.ceil(total / limit),
-          total_items: total,
+    res.json({
+      silos: mapped,
+      pagination: {
+        current_page: page,
+        total_pages: Math.ceil(total / limit),
+        total_items: total,
           items_per_page: limit,
         },
-      });
-    } catch (error) {
+    });
+  } catch (error) {
       console.error("Get silos error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
@@ -140,7 +140,7 @@ router.get(
   async (req, res) => {
     try {
       const silos = await Silo.find({ admin_id: req.user.admin_id }).lean();
-      const total = silos.length;
+    const total = silos.length;
       const totalCapacity = silos.reduce(
         (sum, s) => sum + (s.capacity_kg || 0),
         0
@@ -157,8 +157,8 @@ router.get(
         acc[s.status] = (acc[s.status] || 0) + 1;
         return acc;
       }, {});
-      res.json({ total, totalCapacity, totalCurrent, utilization, byStatus });
-    } catch (error) {
+    res.json({ total, totalCapacity, totalCurrent, utilization, byStatus });
+  } catch (error) {
       console.error("Get silo stats error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
