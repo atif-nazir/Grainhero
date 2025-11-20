@@ -8,6 +8,7 @@ const { auth } = require('../middleware/auth');
 const { requirePermission, requireTenantAccess } = require('../middleware/permission');
 const { body, validationResult, param, query } = require('express-validator');
 const axios = require('axios');
+const iotDeviceService = require('../services/iotDeviceService');
 
 /**
  * @swagger
@@ -15,6 +16,175 @@ const axios = require('axios');
  *   name: Sensors
  *   description: IoT sensor device and reading management
  */
+
+/**
+ * @swagger
+ * /sensors/register:
+ *   post:
+ *     summary: Register a new IoT sensor device
+ *     tags: [Sensors]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - device_id
+ *               - device_name
+ *               - silo_id
+ *               - sensor_types
+ *               - device_type
+ *               - category
+ *             properties:
+ *               device_id:
+ *                 type: string
+ *               device_name:
+ *                 type: string
+ *               silo_id:
+ *                 type: string
+ *               sensor_types:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               mac_address:
+ *                 type: string
+ *               model:
+ *                 type: string
+ *               manufacturer:
+ *                 type: string
+ *               device_type:
+ *                 type: string
+ *                 enum: [sensor, actuator]
+ *               category:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Sensor registered successfully
+ */
+router.post('/register', [
+    auth,
+    requirePermission('sensor.manage'),
+    requireTenantAccess,
+    [
+        body('device_id').notEmpty().withMessage('Device ID is required'),
+        body('device_name').notEmpty().withMessage('Device name is required'),
+        body('silo_id').isMongoId().withMessage('Valid silo ID is required'),
+        body('sensor_types').isArray({ min: 1 }).withMessage('At least one sensor type is required'),
+        body('device_type').isIn(['sensor', 'actuator']).withMessage('Device type must be sensor or actuator'),
+        body('category').notEmpty().withMessage('Device category is required')
+    ]
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        // Check if silo exists
+        const silo = await Silo.findOne({
+            _id: req.body.silo_id,
+            admin_id: req.user.admin_id
+        });
+
+        if (!silo) {
+            return res.status(404).json({ error: 'Silo not found' });
+        }
+
+        // Check if device already exists
+        const existingDevice = await SensorDevice.findOne({
+            device_id: req.body.device_id
+        });
+
+        if (existingDevice) {
+            return res.status(400).json({ error: 'Device with this ID already exists' });
+        }
+
+        const sensor = new SensorDevice({
+            ...req.body,
+            admin_id: req.user.admin_id,
+            created_by: req.user._id
+        });
+
+        await sensor.save();
+
+        // Add sensor to silo
+        silo.sensors.push({
+            device_id: sensor._id,
+            sensor_type: req.body.sensor_types[0], // Primary sensor type
+            is_primary: silo.sensors.length === 0 // First sensor is primary
+        });
+
+        await silo.save();
+
+        res.status(201).json({
+            message: 'Sensor registered successfully',
+            sensor
+        });
+
+    } catch (error) {
+        console.error('Register sensor error:', error);
+        if (error.code === 11000) {
+            return res.status(400).json({ error: 'Device ID or MAC address already exists' });
+        }
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /sensors/iot-data:
+ *   post:
+ *     summary: Ingest sensor data from IoT devices
+ *     tags: [Sensors]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - device_id
+ *               - readings
+ *             properties:
+ *               device_id:
+ *                 type: string
+ *               timestamp:
+ *                 type: string
+ *                 format: date-time
+ *               readings:
+ *                 type: object
+ *               battery_level:
+ *                 type: number
+ *               signal_strength:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Data ingested successfully
+ */
+router.post('/iot-data', async (req, res) => {
+    try {
+        const { device_id, ...payload } = req.body;
+        
+        if (!device_id) {
+            return res.status(400).json({ error: 'Device ID is required' });
+        }
+
+        // Process sensor data through IoT service
+        const result = await iotDeviceService.processSensorData(device_id, payload);
+        
+        res.status(201).json({
+            message: 'Data ingested successfully',
+            ...result
+        });
+
+    } catch (error) {
+        console.error('IoT data ingest error:', error);
+        res.status(500).json({ error: 'Failed to ingest data' });
+    }
+});
 
 /**
  * @swagger
@@ -287,9 +457,13 @@ router.post('/:id/readings', [
         body('timestamp').optional().isISO8601().withMessage('Invalid timestamp format'),
         body('temperature.value').optional().isFloat().withMessage('Invalid temperature value'),
         body('humidity.value').optional().isFloat({ min: 0, max: 100 }).withMessage('Humidity must be 0-100%'),
-        body('co2.value').optional().isFloat({ min: 0 }).withMessage('CO2 must be positive'),
         body('voc.value').optional().isFloat({ min: 0 }).withMessage('VOC must be positive'),
-        body('moisture.value').optional().isFloat({ min: 0, max: 100 }).withMessage('Moisture must be 0-100%')
+        body('moisture.value').optional().isFloat({ min: 0, max: 100 }).withMessage('Moisture must be 0-100%'),
+        body('ambient.humidity.value').optional().isFloat({ min: 0, max: 100 }).withMessage('Ambient humidity must be 0-100%'),
+        body('ambient.temperature.value').optional().isFloat().withMessage('Ambient temperature must be numeric'),
+        body('ambient.light.value').optional().isFloat({ min: 0 }).withMessage('Ambient light must be positive'),
+        body('actuation_state.fan_speed_factor').optional().isFloat({ min: 0, max: 1 }).withMessage('Fan speed factor must be 0-1'),
+        body('actuation_state.fan_duty_cycle').optional().isFloat({ min: 0, max: 1 }).withMessage('Fan duty cycle must be 0-1')
     ]
 ], async (req, res) => {
     try {
@@ -343,10 +517,13 @@ router.post('/:id/readings', [
             await updateSiloConditions(sensor.silo_id, reading);
         }
 
+        const controlAdvisory = buildControlAdvisory(reading);
+
         res.status(201).json({
             message: 'Reading recorded successfully',
             reading_id: reading._id,
-            alerts_triggered: thresholdViolations.length
+            alerts_triggered: thresholdViolations.length,
+            control_advisory: controlAdvisory
         });
 
     } catch (error) {
@@ -484,7 +661,7 @@ function getCalibrationStatus(sensor) {
 
 function checkThresholds(reading, thresholds) {
     const violations = [];
-    const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
+    const sensorTypes = ['temperature', 'humidity', 'voc', 'moisture'];
     
     sensorTypes.forEach(type => {
         const value = reading[type]?.value;
@@ -559,7 +736,7 @@ async function createAlert(sensor, reading, violation) {
 
 async function updateSiloConditions(silo, reading) {
     try {
-        const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
+        const sensorTypes = ['temperature', 'humidity', 'voc', 'moisture'];
         
         for (const type of sensorTypes) {
             if (reading[type]?.value !== undefined) {
@@ -569,6 +746,34 @@ async function updateSiloConditions(silo, reading) {
     } catch (error) {
         console.error('Update silo conditions error:', error);
     }
+}
+
+function buildControlAdvisory(reading) {
+    const derived = reading.derived_metrics || {};
+
+    const guardrails = derived.guardrails || { venting_blocked: false, reasons: [] };
+    const highRisk = derived.ml_risk_class === 'risky' || derived.ml_risk_class === 'spoiled';
+
+    let recommendedAction = 'Maintain current state';
+    if (highRisk && !guardrails.venting_blocked) {
+      recommendedAction = 'Run fan to purge headspace air';
+    } else if (guardrails.venting_blocked) {
+      recommendedAction = 'Hold ventilation until guardrails clear';
+    }
+
+    return {
+      risk_class: derived.ml_risk_class || 'unknown',
+      risk_score: derived.ml_risk_score || null,
+      should_run_fan: highRisk && !guardrails.venting_blocked,
+      guardrails: {
+        active: guardrails.venting_blocked,
+        reasons: guardrails.reasons || []
+      },
+      voc_relative_5min: derived.voc_relative_5min ?? null,
+      voc_rate_5min: derived.voc_rate_5min ?? null,
+      airflow: derived.airflow ?? null,
+      recommended_action: recommendedAction
+    };
 }
 
 // ============= ENVIRONMENTAL DATA FEED LAYER =============

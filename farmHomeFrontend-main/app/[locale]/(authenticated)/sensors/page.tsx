@@ -41,14 +41,13 @@ export default function SensorsPage() {
 
   // Load sensors from backend
   useEffect(() => {
-    const run = async () => {
+    let mounted = true
+    ;(async () => {
       try {
-        const backendUrl = (await import('@/config')).config.backendUrl
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-        const res = await fetch(`${backendUrl}/api/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-        if (res.ok) {
-          const data = await res.json()
-          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
+        const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=100`)
+        if (!mounted) return
+        if (res.ok && res.data) {
+          const mapped: SensorDevice[] = (res.data.sensors || []).map((s: any) => ({
             _id: s._id,
             device_id: s.device_id || s._id,
             device_name: s.device_name,
@@ -67,19 +66,10 @@ export default function SensorsPage() {
       } catch {
         setSensors([])
       } finally {
-        setLoading(false)
+        if (mounted) {
+          setLoading(false)
+        }
       }
-    }
-    run()
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
-      if (!mounted) return
-      if (res.ok && res.data) {
-        setSensors(res.data.sensors as unknown as SensorDevice[])
-      }
-      setLoading(false)
     })()
     return () => {
       mounted = false

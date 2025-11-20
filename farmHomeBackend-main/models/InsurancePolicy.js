@@ -13,8 +13,7 @@ const insurancePolicySchema = new mongoose.Schema({
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
-    index: true
+    required: [true, "Tenant ID is required"]
   },
   
   // Insurance provider details

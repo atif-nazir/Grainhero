@@ -45,6 +45,19 @@ const sensorDeviceSchema = new mongoose.Schema({
     enum: Object.values(SENSOR_TYPES)
   }],
   
+  // Device type (sensor or actuator)
+  device_type: {
+    type: String,
+    enum: ['sensor', 'actuator'],
+    required: [true, "Device type is required"]
+  },
+  
+  // Device category for grouping
+  category: {
+    type: String,
+    required: [true, "Device category is required"]
+  },
+  
   // Status and health
   status: {
     type: String,
@@ -111,6 +124,23 @@ const sensorDeviceSchema = new mongoose.Schema({
   },
   mqtt_topic: String,
   api_endpoint: String,
+  
+  // IoT-specific fields for real devices
+  communication_protocol: {
+    type: String,
+    enum: ['mqtt', 'http', 'coap', 'lorawan'],
+    default: 'mqtt'
+  },
+  last_heartbeat: Date,
+  expected_heartbeat_interval: {
+    type: Number,
+    default: 300 // seconds
+  },
+  connection_status: {
+    type: String,
+    enum: ['online', 'offline', 'connecting', 'error'],
+    default: 'offline'
+  },
   
   // Thresholds and alerts
   thresholds: {
@@ -227,6 +257,8 @@ sensorDeviceSchema.index({ silo_id: 1 });
 sensorDeviceSchema.index({ status: 1 });
 sensorDeviceSchema.index({ 'health_metrics.last_heartbeat': 1 });
 sensorDeviceSchema.index({ last_calibration_date: 1 });
+sensorDeviceSchema.index({ device_type: 1 });
+sensorDeviceSchema.index({ category: 1 });
 
 // Exclude deleted devices by default
 sensorDeviceSchema.pre(/^find/, function() {
@@ -236,12 +268,12 @@ sensorDeviceSchema.pre(/^find/, function() {
 // Virtual for device health status
 sensorDeviceSchema.virtual('health_status').get(function() {
   const now = new Date();
-  const lastHeartbeat = this.health_metrics?.last_heartbeat;
+  const lastHeartbeat = this.health_metrics?.last_heartbeat || this.last_heartbeat;
   
   if (!lastHeartbeat) return 'unknown';
   
   const minutesSinceHeartbeat = (now - lastHeartbeat) / (1000 * 60);
-  const expectedInterval = this.data_transmission_interval / 60; // Convert to minutes
+  const expectedInterval = (this.expected_heartbeat_interval || this.data_transmission_interval) / 60; // Convert to minutes
   
   if (minutesSinceHeartbeat > expectedInterval * 3) return 'offline';
   if (this.battery_level && this.battery_level < 20) return 'low_battery';
@@ -266,6 +298,8 @@ sensorDeviceSchema.virtual('calibration_status').get(function() {
 // Method to update heartbeat
 sensorDeviceSchema.methods.updateHeartbeat = function() {
   this.health_metrics.last_heartbeat = new Date();
+  this.last_heartbeat = new Date();
+  this.connection_status = 'online';
   return this.save({ validateBeforeSave: false });
 };
 
@@ -277,6 +311,7 @@ sensorDeviceSchema.methods.recordError = function(errorCode, errorMessage) {
     error_code: errorCode,
     error_message: errorMessage
   };
+  this.connection_status = 'error';
   return this.save();
 };
 
@@ -298,6 +333,19 @@ sensorDeviceSchema.methods.incrementReadingCount = function() {
 sensorDeviceSchema.methods.isCalibrationDue = function() {
   if (!this.calibration_due_date) return false;
   return new Date() >= this.calibration_due_date;
+};
+
+// Method to check if device is online
+sensorDeviceSchema.methods.isOnline = function() {
+  const now = new Date();
+  const lastHeartbeat = this.health_metrics?.last_heartbeat || this.last_heartbeat;
+  
+  if (!lastHeartbeat) return false;
+  
+  const secondsSinceHeartbeat = (now - lastHeartbeat) / 1000;
+  const expectedInterval = this.expected_heartbeat_interval || this.data_transmission_interval;
+  
+  return secondsSinceHeartbeat <= expectedInterval * 2;
 };
 
 module.exports = mongoose.model('SensorDevice', sensorDeviceSchema);

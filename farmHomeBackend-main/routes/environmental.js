@@ -3,6 +3,8 @@ const router = express.Router();
 const weatherService = require('../services/weatherService');
 const SensorReading = require('../models/SensorReading');
 const { body, validationResult } = require('express-validator');
+const { auth } = require('../middleware/auth');
+const Silo = require('../models/Silo');
 
 // Get current environmental data for a location
 router.get('/current/:lat/:lon', async (req, res) => {
@@ -337,6 +339,134 @@ router.get('/service/status', (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to get service status',
+      message: error.message 
+    });
+  }
+});
+
+// Get environmental data for all user's locations (role-based)
+router.get('/my-locations', auth, async (req, res) => {
+  try {
+    const user = req.user;
+    let silos = [];
+
+    // Super Admin: See ALL silos
+    if (user.role === 'super_admin') {
+      silos = await Silo.find({
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .populate('admin_id', 'name email')
+      .select('silo_id name location admin_id');
+    }
+    // Admin: See all their silos across all locations
+    else if (user.role === 'admin') {
+      silos = await Silo.find({
+        admin_id: user._id,
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .select('silo_id name location');
+    }
+    // Manager: See silos they manage (specific warehouse/location)
+    else if (user.role === 'manager') {
+      // Assuming manager_id field or admin_id for managers under admin
+      silos = await Silo.find({
+        admin_id: user.admin_id,
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .select('silo_id name location');
+    }
+    // Technician: See all silos under their admin
+    else if (user.role === 'technician') {
+      silos = await Silo.find({
+        admin_id: user.admin_id,
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .select('silo_id name location');
+    }
+
+    // Group silos by location (city/coordinates)
+    const locationGroups = {};
+    
+    for (const silo of silos) {
+      if (!silo.location?.coordinates?.latitude || !silo.location?.coordinates?.longitude) {
+        continue;
+      }
+
+      const lat = silo.location.coordinates.latitude;
+      const lon = silo.location.coordinates.longitude;
+      const city = silo.location.city || 'Unknown City';
+      const key = `${city}_${lat.toFixed(2)}_${lon.toFixed(2)}`;
+
+      if (!locationGroups[key]) {
+        locationGroups[key] = {
+          city: city,
+          latitude: lat,
+          longitude: lon,
+          address: silo.location.address,
+          silos: [],
+          silo_count: 0
+        };
+      }
+
+      locationGroups[key].silos.push({
+        silo_id: silo.silo_id,
+        name: silo.name,
+        admin: silo.admin_id
+      });
+      locationGroups[key].silo_count++;
+    }
+
+    // Fetch weather for each unique location
+    const locationsWithWeather = [];
+    
+    for (const [key, location] of Object.entries(locationGroups)) {
+      try {
+        const environmentalData = await weatherService.getEnvironmentalData(
+          location.latitude,
+          location.longitude
+        );
+        
+        const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
+        const regionalAnalysis = weatherService.analyzeRegionalClimate(
+          environmentalData,
+          location.latitude,
+          location.longitude
+        );
+
+        locationsWithWeather.push({
+          ...location,
+          weather: environmentalData.weather,
+          air_quality: environmentalData.airQuality,
+          aqi_level: weatherService.getAQILevel(environmentalData.airQuality.aqi),
+          impact_assessment: impactAssessment,
+          regional_analysis: regionalAnalysis
+        });
+      } catch (error) {
+        console.error(`Failed to fetch weather for ${location.city}:`, error);
+        locationsWithWeather.push({
+          ...location,
+          error: 'Failed to fetch weather data'
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        total_locations: locationsWithWeather.length,
+        total_silos: silos.length,
+        locations: locationsWithWeather
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching my locations:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch environmental data for your locations',
       message: error.message 
     });
   }

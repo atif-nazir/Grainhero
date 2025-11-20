@@ -169,14 +169,7 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "ML"
   },
-  {
-    name: "environmental-data",
-    label: "Environmental Data",
-    href: "/environmental-data",
-    icon: BarChart3,
-    roles: ["super_admin", "admin", "manager", "technician"],
-    badge: undefined
-  },
+
   { 
     name: "data-visualization", 
     href: "/data-visualization", 

@@ -250,7 +250,7 @@ class RealTimeDataService extends EventEmitter {
     async checkThresholdViolations(reading) {
         try {
             const violations = [];
-            const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
+            const sensorTypes = ['temperature', 'humidity', 'voc', 'moisture'];
             
             // Get sensor device to check thresholds
             const sensorDevice = await require('../models/SensorDevice').findById(reading.device_id);
