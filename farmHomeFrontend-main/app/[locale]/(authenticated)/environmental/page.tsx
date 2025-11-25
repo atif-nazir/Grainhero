@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { 
   Cloud, 
@@ -37,7 +37,7 @@ import {
 import { 
   AnimatedMetricCard 
 } from '@/components/animations/AnimatedCharts'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area, Legend } from 'recharts'
 
 interface WeatherData {
   temperature: number
@@ -150,9 +150,13 @@ interface EnvironmentalData {
   regional_analysis?: RegionalAnalysis
 }
 
-// New interface for Rainfall and Airflow data
-interface EnvironmentalMetrics {
+// Time-series interfaces for rainfall (OpenWeather) and airflow (fan telemetry)
+interface RainfallMetric {
   rainfall: number
+  timestamp: string
+}
+
+interface AirflowMetric {
   airflow: number
   timestamp: string
 }
@@ -168,7 +172,76 @@ export default function EnvironmentalPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [viewMode, setViewMode] = useState<'single' | 'multi'>('multi')
   const [location] = useState({ lat: 31.5204, lon: 74.3587 })
-  const [environmentalMetrics, setEnvironmentalMetrics] = useState<EnvironmentalMetrics[]>([])
+const [rainfallHistory, setRainfallHistory] = useState<RainfallMetric[]>([])
+const [airflowHistory, setAirflowHistory] = useState<AirflowMetric[]>([])
+const [historyIsFallback, setHistoryIsFallback] = useState(false)
+const [forecastSeries, setForecastSeries] = useState<WeatherData[]>([])
+
+  // Helper function to fetch forecast data
+  const fetchForecastData = async (lat: number, lon: number) => {
+    try {
+      const response = await fetch(`/api/environmental/forecast/${lat}/${lon}`)
+      const result = await response.json()
+      if (result.success) {
+        setForecastSeries(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching forecast data:', error)
+    }
+  }
+
+  // Helper function to calculate dew point
+  const calculateDewPoint = (temp: number, humidity: number) => {
+    if (temp === undefined || humidity === undefined || humidity <= 0) return null
+    const a = 17.27
+    const b = 237.7
+    const alpha = ((a * temp) / (b + temp)) + Math.log(humidity / 100)
+    return Number(((b * alpha) / (a - alpha)).toFixed(2))
+  }
+
+  // Helper function to calculate heat index
+  const calculateHeatIndex = (temp: number, humidity: number) => {
+    if (temp === undefined || humidity === undefined) return null
+    const tempF = (temp * 9) / 5 + 32
+    const hi =
+      -42.379 +
+      2.04901523 * tempF +
+      10.14333127 * humidity -
+      0.22475541 * tempF * humidity -
+      6.83783e-3 * tempF * tempF -
+      5.481717e-2 * humidity * humidity +
+      1.22874e-3 * tempF * tempF * humidity +
+      8.5282e-4 * tempF * humidity * humidity -
+      1.99e-6 * tempF * tempF * humidity * humidity
+    const hiC = ((hi - 32) * 5) / 9
+    return Number(hiC.toFixed(2))
+  }
+
+  // Derived climate metrics
+  const derivedClimate = useMemo(() => {
+    if (!environmentalData) return null
+    const { weather } = environmentalData
+    return {
+      dewPoint: calculateDewPoint(weather.temperature, weather.humidity),
+      heatIndex: calculateHeatIndex(weather.temperature, weather.humidity),
+      pressure: weather.pressure,
+      visibility: weather.visibility,
+      uvIndex: weather.uv_index,
+      cloudiness: weather.cloudiness,
+      windSpeed: weather.wind_speed
+    }
+  }, [environmentalData])
+
+  // Forecast chart data
+  const forecastChartData = useMemo(() => {
+    return forecastSeries.map((entry) => ({
+      timestamp: entry.timestamp,
+      temperature: entry.temperature,
+      humidity: entry.humidity,
+      precipitation: entry.precipitation,
+      pressure: entry.pressure
+    }))
+  }, [forecastSeries])
   
   // Fetch environmental data for all user's locations
   const fetchEnvironmentalData = async () => {
@@ -221,7 +294,8 @@ export default function EnvironmentalPage() {
           }
           
           // Fetch environmental metrics (Rainfall and Airflow)
-          fetchEnvironmentalMetrics()
+          fetchEnvironmentalMetrics(firstLocation.latitude, firstLocation.longitude)
+          fetchForecastData(firstLocation.latitude, firstLocation.longitude)
         }
         
         setLastUpdated(new Date())
@@ -237,12 +311,14 @@ export default function EnvironmentalPage() {
   }
 
   // Fetch Rainfall and Airflow data
-  const fetchEnvironmentalMetrics = async () => {
+  const fetchEnvironmentalMetrics = async (latOverride?: number, lonOverride?: number) => {
     try {
       const token = localStorage.getItem('token')
+      const historyLat = latOverride ?? selectedLocation?.latitude ?? location.lat
+      const historyLon = lonOverride ?? selectedLocation?.longitude ?? location.lon
       
       // Fetch historical environmental data to extract Rainfall and Airflow
-      const response = await fetch(`/api/environmental/history/${localStorage.getItem('tenantId') || 'default'}?limit=24`, {
+      const response = await fetch(`/api/environmental/history/${localStorage.getItem('tenantId') || 'default'}?limit=24&lat=${historyLat}&lon=${historyLon}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -250,18 +326,26 @@ export default function EnvironmentalPage() {
       
       const result = await response.json()
       if (result.success) {
-        // Extract Rainfall from weather data and Airflow from derived metrics
-        const metrics = result.data.map((reading: { 
+        const rainfallMetrics: RainfallMetric[] = result.data.map((reading: { 
           environmental_context?: { weather?: { precipitation?: number } },
-          derived_metrics?: { airflow?: number },
           timestamp: string 
         }) => ({
           rainfall: reading.environmental_context?.weather?.precipitation || 0,
-          airflow: reading.derived_metrics?.airflow || 0,
           timestamp: reading.timestamp
         }))
         
-        setEnvironmentalMetrics(metrics)
+        const airflowMetrics: AirflowMetric[] = result.data.map((reading: { 
+          derived_metrics?: { airflow?: number },
+          timestamp: string 
+        }) => ({
+          airflow: reading.derived_metrics?.airflow ?? 0,
+          timestamp: reading.timestamp
+        }))
+
+        // API returns newest first, reverse for chronological charts
+        setRainfallHistory(rainfallMetrics.reverse())
+        setAirflowHistory(airflowMetrics.reverse())
+        setHistoryIsFallback(Boolean(result.fallback))
       }
     } catch (error) {
       console.error('Error fetching environmental metrics:', error)
@@ -304,7 +388,8 @@ export default function EnvironmentalPage() {
       }
       
       // Fetch environmental metrics for this location
-      fetchEnvironmentalMetrics()
+      fetchEnvironmentalMetrics(location.latitude, location.longitude)
+      fetchForecastData(location.latitude, location.longitude)
     }
   }
 
@@ -342,6 +427,126 @@ export default function EnvironmentalPage() {
             <LoadingAnimation size="lg" />
           </div>
         </div>
+
+        {derivedClimate && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Gauge className="w-5 h-5 mr-2" />
+                Climate Diagnostics
+              </CardTitle>
+              <CardDescription>
+                Derived in real-time from OpenWeather measurements for the selected location.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Dew Point</p>
+                  <p className="text-2xl font-semibold mt-1">{derivedClimate.dewPoint ?? '--'}°C</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Condensation risk increases as dew point approaches grain temperature.
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Heat Index</p>
+                  <p className="text-2xl font-semibold mt-1">{derivedClimate.heatIndex ?? '--'}°C</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Apparent feel when humidity and temperature combine.
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Barometric Pressure</p>
+                  <p className="text-2xl font-semibold mt-1">{derivedClimate.pressure} hPa</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Falling pressure often precedes storm activity.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3 mt-4">
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Visibility</p>
+                  <p className="text-2xl font-semibold mt-1">{derivedClimate.visibility?.toFixed(1)} km</p>
+                  <p className="text-xs text-muted-foreground mt-1">Smog or dust can lower values quickly.</p>
+                </div>
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Cloud Cover</p>
+                  <p className="text-2xl font-semibold mt-1">{derivedClimate.cloudiness}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">High cloudiness correlates with cooler daytime temps.</p>
+                </div>
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Wind Speed</p>
+                  <p className="text-2xl font-semibold mt-1">{derivedClimate.windSpeed} m/s</p>
+                  <p className="text-xs text-muted-foreground mt-1">Use cross-ventilation when winds are favorable.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {forecastChartData.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <TrendingUp className="w-5 h-5 mr-2" />
+                24h Environmental Outlook
+              </CardTitle>
+              <CardDescription>
+                Fetched live from OpenWeather forecast API (3‑hour resolution).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={forecastChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="timestamp"
+                      tickFormatter={(value) => new Date(value).toLocaleTimeString([], { hour: '2-digit' })}
+                    />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip 
+                      labelFormatter={(label) => new Date(label).toLocaleString()}
+                      formatter={(value, name) => {
+                        if (name === 'Rainfall (mm)') return [`${value} mm`, name]
+                        if (name === 'Temperature (°C)') return [`${value} °C`, name]
+                        if (name === 'Humidity (%)') return [`${value}%`, name]
+                        return [value, name]
+                      }}
+                    />
+                    <Legend />
+                    <Area
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="precipitation"
+                      stroke="#60a5fa"
+                      fill="#60a5fa"
+                      fillOpacity={0.3}
+                      name="Rainfall (mm)"
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="temperature"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      name="Temperature (°C)"
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="humidity"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      name="Humidity (%)"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </AnimatedBackground>
     )
   }
@@ -494,16 +699,24 @@ export default function EnvironmentalPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <CloudRain className="w-5 h-5 mr-2" />
-                Rainfall Data (OpenWeather API)
+                Rainfall (OpenWeather)
+                <Badge variant="outline" className="ml-2 text-xs font-normal">
+                  API Source
+                </Badge>
+                {historyIsFallback && (
+                  <Badge variant="secondary" className="ml-2 text-xs font-normal">
+                    Live API Feed
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
-                Core precipitation data from OpenWeather API - Primary source for Rainfall column
+                Direct precipitation feed from OpenWeather. Rainfall is the only environmental input sent to spoilage AI.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={environmentalMetrics}>
+                  <BarChart data={rainfallHistory}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="timestamp" 
@@ -537,7 +750,7 @@ export default function EnvironmentalPage() {
                 <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-center text-blue-800">
                     <Database className="w-4 h-4 mr-2" />
-                    <span className="text-sm font-medium">OpenWeather API - Primary Rainfall Data Source</span>
+                    <span className="text-sm font-medium">OpenWeather API • Rainfall ingested into AI predictions</span>
                   </div>
                 </div>
                 <div className="mt-2 flex justify-center space-x-2">
@@ -558,16 +771,19 @@ export default function EnvironmentalPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Fan className="w-5 h-5 mr-2" />
-                Airflow
+                Fan Airflow (IoT)
+                <Badge variant="secondary" className="ml-2 text-xs font-normal">
+                  Fan Telemetry
+                </Badge>
               </CardTitle>
               <CardDescription>
-                Fan speed and ventilation data - Critical for moisture control
+                Derived from silo fan speed + duty cycle. Not used for rainfall-based AI predictions but vital for live ventilation control.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={environmentalMetrics}>
+                  <LineChart data={airflowHistory}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="timestamp" 
@@ -591,17 +807,17 @@ export default function EnvironmentalPage() {
               </div>
               <div className="mt-4 text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {environmentalMetrics.length > 0 ? environmentalMetrics[environmentalMetrics.length - 1].airflow?.toFixed(1) : '0'}%
+                  {airflowHistory.length > 0 ? airflowHistory[airflowHistory.length - 1].airflow.toFixed(1) : '0'}%
                 </div>
                 <div className="text-sm text-muted-foreground">
                   Current airflow efficiency
                 </div>
                 <div className="mt-3">
                   <div className="text-xs text-muted-foreground mb-1">Ventilation Effectiveness</div>
-                  <Progress value={environmentalMetrics.length > 0 ? environmentalMetrics[environmentalMetrics.length - 1].airflow || 0 : 0} className="h-2" />
+                  <Progress value={airflowHistory.length > 0 ? airflowHistory[airflowHistory.length - 1].airflow || 0 : 0} className="h-2" />
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Poor</span>
-                    <span className="font-medium">{environmentalMetrics.length > 0 ? environmentalMetrics[environmentalMetrics.length - 1].airflow?.toFixed(1) : '0'}%</span>
+                    <span className="font-medium">{airflowHistory.length > 0 ? airflowHistory[airflowHistory.length - 1].airflow.toFixed(1) : '0'}%</span>
                     <span>Optimal</span>
                   </div>
                 </div>
@@ -630,8 +846,9 @@ export default function EnvironmentalPage() {
               <div>
                 <h3 className="font-semibold text-green-900">AI Prediction Integration</h3>
                 <p className="text-sm text-green-800">
-                  Rainfall and Airflow data from OpenWeather API are core parameters for spoilage prediction models.
-                  These real-time environmental metrics are continuously fed into our ML algorithms for accurate forecasting.
+                  Only rainfall from OpenWeather is ingested into the spoilage ML models. Airflow remains a live fan telemetry
+                  signal for control loops, while temperature, humidity, and other sensor streams stay available for dashboards
+                  and alerts. All labels now match these sources so data stays consistent across the platform.
                 </p>
               </div>
               <Button variant="outline" className="ml-auto" size="sm">

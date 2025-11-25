@@ -463,7 +463,8 @@ router.post('/:id/readings', [
         body('ambient.temperature.value').optional().isFloat().withMessage('Ambient temperature must be numeric'),
         body('ambient.light.value').optional().isFloat({ min: 0 }).withMessage('Ambient light must be positive'),
         body('actuation_state.fan_speed_factor').optional().isFloat({ min: 0, max: 1 }).withMessage('Fan speed factor must be 0-1'),
-        body('actuation_state.fan_duty_cycle').optional().isFloat({ min: 0, max: 1 }).withMessage('Fan duty cycle must be 0-1')
+        body('actuation_state.fan_duty_cycle').optional().isFloat({ min: 0, max: 100 }).withMessage('Fan duty cycle must be 0-100% (IoT spec)'),
+        body('actuation_state.fan_rpm').optional().isFloat({ min: 0 }).withMessage('Fan RPM must be positive')
     ]
 ], async (req, res) => {
     try {
@@ -510,7 +511,33 @@ router.post('/:id/readings', [
             }));
         }
 
+        // Buffer raw 30s reading for aggregation (IoT spec: 30s raw → 5min avg)
+        try {
+          const dataAggregationService = require('../services/dataAggregationService');
+          dataAggregationService.bufferRawReading(reading.toObject());
+        } catch (aggError) {
+          console.warn('Failed to buffer raw reading for aggregation:', aggError.message);
+        }
+
         await reading.save();
+
+        // Use fan control service for recommendations (IoT spec: hysteresis + min durations)
+        try {
+          const fanControlService = require('../services/fanControlService');
+          const fanRecommendation = fanControlService.calculateFanRecommendation(reading);
+          
+          // Update fan state if recommendation changed
+          if (fanRecommendation.should_change) {
+            fanControlService.updateFanState(reading.silo_id, fanRecommendation.fan_state, fanRecommendation.reason);
+            
+            // Update reading with new fan state
+            reading.actuation_state.fan_state = fanRecommendation.fan_state;
+            reading.actuation_state.fan_status = fanRecommendation.fan_state === 1 ? 'on' : 'off';
+            await reading.save();
+          }
+        } catch (fanError) {
+          console.warn('Fan control service error:', fanError.message);
+        }
 
         // Update silo current conditions
         if (sensor.silo_id) {
@@ -1245,5 +1272,105 @@ async function getCityName(lat, lon) {
     const key = `${parseFloat(lat).toFixed(4)},${parseFloat(lon).toFixed(4)}`;
     return cities[key] || 'Unknown City';
 }
+
+/**
+ * @swagger
+ * /sensors/export/iot-csv:
+ *   get:
+ *     summary: Export sensor readings in IoT spec CSV format
+ *     tags: [Sensors]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: silo_id
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: batch_id
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: start_date
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: end_date
+ *         schema:
+ *           type: string
+ *           format: date-time
+ */
+router.get('/export/iot-csv', [
+  auth,
+  requirePermission('sensor.view'),
+  requireTenantAccess
+], async (req, res) => {
+  try {
+    const { silo_id, batch_id, start_date, end_date } = req.query;
+    const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
+    
+    // Build query
+    const query = { tenant_id: tenantId };
+    if (silo_id) query.silo_id = silo_id;
+    if (batch_id) query.batch_id = batch_id;
+    if (start_date && end_date) {
+      query.timestamp = {
+        $gte: new Date(start_date),
+        $lte: new Date(end_date)
+      };
+    }
+    
+    // Fetch readings (5-min averaged data)
+    const readings = await SensorReading.find(query)
+      .sort({ timestamp: 1 })
+      .populate('silo_id', 'silo_id')
+      .populate('batch_id', '_id')
+      .lean();
+    
+    // IoT Spec CSV Format (exact field order from spec):
+    // timestamp, silo_id, batch_id, T_core, RH_core, T_amb, RH_amb, 
+    // Grain_Moisture, fan_state, fan_duty, VOC_index, VOC_relative, 
+    // dew_point_core, rainfall_last_hour, spoilage_label
+    const csvRows = readings.map(reading => {
+      const siloId = reading.silo_id?.silo_id || reading.silo_id?._id?.toString() || 'UNKNOWN';
+      const batchId = reading.batch_id?._id?.toString() || reading.batch_id?.toString() || '';
+      
+      return [
+        reading.timestamp.toISOString(),
+        siloId,
+        batchId,
+        reading.temperature?.value?.toFixed(1) || '',
+        reading.humidity?.value?.toFixed(1) || '',
+        reading.ambient?.temperature?.value?.toFixed(1) || '',
+        reading.ambient?.humidity?.value?.toFixed(1) || '',
+        reading.moisture?.value?.toFixed(1) || '',
+        reading.actuation_state?.fan_state ?? (reading.actuation_state?.fan_status === 'on' ? 1 : 0),
+        reading.actuation_state?.fan_duty_cycle?.toFixed(0) || 0,
+        reading.voc?.value?.toFixed(0) || '',
+        reading.derived_metrics?.voc_relative?.toFixed(1) || '',
+        reading.derived_metrics?.dew_point?.toFixed(1) || '',
+        reading.environmental_context?.weather?.precipitation?.toFixed(2) || 0,
+        reading.metadata?.spoilage_label || reading.derived_metrics?.ml_risk_class || 'unknown'
+      ].join(',');
+    });
+    
+    // CSV Header (IoT spec exact format)
+    const csvHeader = 'timestamp,silo_id,batch_id,T_core,RH_core,T_amb,RH_amb,Grain_Moisture,fan_state,fan_duty,VOC_index,VOC_relative,dew_point_core,rainfall_last_hour,spoilage_label\n';
+    const csvContent = csvHeader + csvRows.join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="iot-sensor-data-${Date.now()}.csv"`);
+    res.send(csvContent);
+    
+  } catch (error) {
+    console.error('IoT CSV export error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to export IoT CSV',
+      message: error.message
+    });
+  }
+});
 
 module.exports = router;

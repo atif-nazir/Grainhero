@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 
 interface SensorDevice {
   _id: string
@@ -38,6 +39,7 @@ export default function SensorsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
+  const { latest, data: envHistory } = useEnvironmentalHistory({ limit: 50 })
 
   // Load sensors from backend
   useEffect(() => {
@@ -139,6 +141,45 @@ export default function SensorsPage() {
           Add New Sensor
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Live Environmental Snapshot</CardTitle>
+          <CardDescription>
+            {latest ? `Last reading ${new Date(latest.timestamp).toLocaleString()}` : 'Waiting for telemetry'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-4 text-sm">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Core Temp</div>
+            <div className="text-lg font-semibold">
+              {(latest?.temperature?.value ??
+                latest?.environmental_context?.weather?.temperature ??
+                '--') + '°C'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Core RH</div>
+            <div className="text-lg font-semibold">
+              {(latest?.humidity?.value ??
+                latest?.environmental_context?.weather?.humidity ??
+                '--') + '%'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Fan Duty</div>
+            <div className="text-lg font-semibold">
+              {latest?.actuation_state?.fan_duty_cycle?.toFixed(0) ?? 0}%
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">VOC Relative</div>
+            <div className="text-lg font-semibold">
+              {latest?.derived_metrics?.voc_relative?.toFixed(1) ?? '0'}%
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

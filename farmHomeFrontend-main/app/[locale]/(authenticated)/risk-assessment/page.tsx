@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Brain, CheckCircle, BarChart3 } from "lucide-react"
+import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from "@/lib/useEnvironmentalData"
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH"
 
@@ -77,6 +78,19 @@ const riskBadgeColor = (risk: RiskLevel) => {
 export default function RiskAssessmentPage() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS)
   const [result, setResult] = useState<Result>(null)
+  const { locations } = useEnvironmentalLocations()
+  const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(null)
+  const { data: envHistory, latest: latestRecord } = useEnvironmentalHistory({
+    limit: 120,
+    latitude: selectedLocation?.latitude,
+    longitude: selectedLocation?.longitude,
+  })
+
+  useEffect(() => {
+    if (!selectedLocation && locations.length > 0) {
+      setSelectedLocation(locations[0])
+    }
+  }, [locations, selectedLocation])
 
   const handleInputChange = (key: keyof typeof DEFAULT_INPUTS, value: string) => {
     const parsed = value === "" ? "" : Number(value)
@@ -358,7 +372,108 @@ export default function RiskAssessmentPage() {
           Run live spoilage predictions, validate the model, and inspect dataset quality for your storage
           conditions.
         </p>
+        {locations.length > 0 && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-sm text-gray-600">Location:</span>
+            <select
+              className="border rounded-md px-3 py-1 text-sm"
+              value={selectedLocation?.city || ""}
+              onChange={(event) => {
+                const loc = locations.find((l) => l.city === event.target.value)
+                if (loc) setSelectedLocation(loc)
+              }}
+            >
+              {locations.map((loc) => (
+                <option key={`${loc.city}-${loc.latitude}`} value={loc.city}>
+                  {loc.city} ({loc.silo_count} silos)
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (!latestRecord) return
+                setInputs({
+                  temperature:
+                    latestRecord.temperature?.value ??
+                    latestRecord.environmental_context?.weather?.temperature ??
+                    DEFAULT_INPUTS.temperature,
+                  humidity:
+                    latestRecord.humidity?.value ??
+                    latestRecord.environmental_context?.weather?.humidity ??
+                    DEFAULT_INPUTS.humidity,
+                  ambientHumidity:
+                    latestRecord.ambient?.humidity?.value ??
+                    latestRecord.environmental_context?.weather?.humidity ??
+                    DEFAULT_INPUTS.ambientHumidity,
+                  vocIndex: latestRecord.voc?.value ?? DEFAULT_INPUTS.vocIndex,
+                  baselineVoc24h:
+                    latestRecord.derived_metrics?.voc_baseline_24h ??
+                    DEFAULT_INPUTS.baselineVoc24h,
+                  moisture:
+                    latestRecord.moisture?.value ?? DEFAULT_INPUTS.moisture,
+                  storageDays:
+                    latestRecord.metadata?.storage_days ??
+                    DEFAULT_INPUTS.storageDays,
+                  airflow:
+                    latestRecord.derived_metrics?.airflow ??
+                    DEFAULT_INPUTS.airflow,
+                  rainfall:
+                    latestRecord.environmental_context?.weather?.precipitation ??
+                    DEFAULT_INPUTS.rainfall,
+                })
+              }}
+              disabled={!latestRecord}
+            >
+              Use Latest Reading
+            </Button>
+          </div>
+        )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Environmental Snapshot</CardTitle>
+          <CardDescription>
+            {latestRecord
+              ? `Latest reading at ${new Date(latestRecord.timestamp).toLocaleString()}`
+              : "No environmental data yet"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-4 text-sm">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">T_core</div>
+            <div className="text-lg font-medium">
+              {(latestRecord?.temperature?.value ??
+                latestRecord?.environmental_context?.weather?.temperature ??
+                "--") + "°C"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">RH_core</div>
+            <div className="text-lg font-medium">
+              {(latestRecord?.humidity?.value ??
+                latestRecord?.environmental_context?.weather?.humidity ??
+                "--") + "%"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Rainfall</div>
+            <div className="text-lg font-medium">
+              {latestRecord?.environmental_context?.weather?.precipitation ?? 0} mm
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">
+              VOC Relative
+            </div>
+            <div className="text-lg font-medium">
+              {latestRecord?.derived_metrics?.voc_relative?.toFixed(1) ?? "0"}%
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

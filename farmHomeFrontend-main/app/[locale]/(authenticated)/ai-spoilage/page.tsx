@@ -1,6 +1,563 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Brain,
+  AlertTriangle,
+  Target,
+  Gauge,
+  Zap,
+  CheckCircle,
+  Shield,
+} from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import {
+  useEnvironmentalHistory,
+  useEnvironmentalLocations,
+  LocationOption,
+  EnvironmentalRecord,
+} from '@/lib/useEnvironmentalData';
+
+interface SpoilagePrediction {
+  _id: string;
+  prediction_id: string;
+  batch_id: { batch_id: string; grain_type: string };
+  silo_id: { name: string };
+  risk_score: number;
+  risk_level: string;
+  confidence_score: number;
+  prediction_details?: { key_risk_factors?: string[]; time_to_spoilage?: number };
+  created_at: string;
+}
+
+interface Advisory {
+  _id: string;
+  advisory_id: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  created_at: string;
+}
+
+interface SpoilageStatistics {
+  total_predictions: number;
+  avg_risk_score: number;
+  high_risk_predictions: number;
+  critical_predictions: number;
+  validated_predictions: number;
+}
+
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+
+const AISpoilagePage = () => {
+  const t = useTranslations('aiSpoilage');
+  const [predictions, setPredictions] = useState<SpoilagePrediction[]>([]);
+  const [advisories, setAdvisories] = useState<Advisory[]>([]);
+  const [statistics, setStatistics] = useState<SpoilageStatistics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { locations, loading: locationsLoading } = useEnvironmentalLocations();
+  const [selectedLocation, setSelectedLocation] =
+    useState<LocationOption | null>(null);
+
+  useEffect(() => {
+    if (!selectedLocation && locations.length > 0) {
+      setSelectedLocation(locations[0]);
+    }
+  }, [locations, selectedLocation]);
+
+  const {
+    data: envHistory,
+    latest: latestRecord,
+    loading: historyLoading,
+  } = useEnvironmentalHistory({
+    limit: 288,
+    latitude: selectedLocation?.latitude,
+    longitude: selectedLocation?.longitude,
+  });
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const token =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('token')
+            : null;
+        const headers = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        const [predRes, advRes, statsRes] = await Promise.all([
+          fetch(`${backendUrl}/ai-spoilage/predictions`, { headers }),
+          fetch(`${backendUrl}/ai-spoilage/advisories`, { headers }),
+          fetch(`${backendUrl}/ai-spoilage/statistics`, { headers }),
+        ]);
+
+        if (predRes.ok) {
+          const json = await predRes.json();
+          setPredictions(json.predictions || []);
+        } else {
+          setPredictions([]);
+        }
+
+        if (advRes.ok) {
+          const json = await advRes.json();
+          setAdvisories(json.advisories || []);
+        } else {
+          setAdvisories([]);
+        }
+
+        if (statsRes.ok) {
+          const json = await statsRes.json();
+          setStatistics(json.statistics || null);
+        } else {
+          setStatistics(null);
+        }
+      } catch (error) {
+        console.error('Failed to load AI spoilage data', error);
+        setPredictions([]);
+        setAdvisories([]);
+        setStatistics(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const rainfallTrend = useMemo(() => {
+    return envHistory.slice(-48).map((record: EnvironmentalRecord) => ({
+      timestamp: new Date(record.timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      rainfall: record.environmental_context?.weather?.precipitation ?? 0,
+      vocRelative: record.derived_metrics?.voc_relative ?? 0,
+      humidity:
+        record.environmental_context?.weather?.humidity ??
+        record.humidity?.value ??
+        0,
+    }));
+  }, [envHistory]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Brain className="h-6 w-6 text-gray-700" />
+            {t('title', { default: 'AI Spoilage Intelligence' })}
+          </h1>
+          <p className="text-sm text-gray-600">
+            {t('subtitle', {
+              default:
+                'Monitor VOC-first predictions, advisories, and environmental conditions.',
+            })}
+          </p>
+        </div>
+        {locations.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Location</span>
+            <select
+              className="border rounded-md px-3 py-1 text-sm"
+              value={selectedLocation?.city || ''}
+              onChange={(event) => {
+                const loc = locations.find(
+                  (l) => l.city === event.target.value,
+                );
+                if (loc) setSelectedLocation(loc);
+              }}
+            >
+              {locations.map((loc) => (
+                <option
+                  key={`${loc.city}-${loc.latitude}`}
+                  value={loc.city}
+                >
+                  {loc.city} ({loc.silo_count} silos)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <Card className="border border-gray-200">
+        <CardHeader>
+          <CardTitle>Environmental Snapshot</CardTitle>
+          <CardDescription>
+            {historyLoading ? 'Loading dataset...' : latestRecord ? `Latest at ${new Date(latestRecord.timestamp).toLocaleString()}` : 'No dataset yet'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {latestRecord ? (
+            <div className="grid gap-4 md:grid-cols-4 text-sm">
+              <div>
+                <div className="text-xs uppercase text-gray-500">Temp</div>
+                <div className="text-lg font-medium">
+                  {(
+                    latestRecord.temperature?.value ??
+                    latestRecord.environmental_context?.weather?.temperature ??
+                    '--'
+                  )}{' '}
+                  °C
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-gray-500">
+                  Humidity
+                </div>
+                <div className="text-lg font-medium">
+                  {(
+                    latestRecord.humidity?.value ??
+                    latestRecord.environmental_context?.weather?.humidity ??
+                    '--'
+                  )}{' '}
+                  %
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-gray-500">
+                  Grain Moisture
+                </div>
+                <div className="text-lg font-medium">
+                  {latestRecord.moisture?.value ?? '--'} %
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-gray-500">
+                  VOC Relative
+                </div>
+                <div className="text-lg font-medium">
+                  {latestRecord.derived_metrics?.voc_relative?.toFixed(1) ??
+                    '0'}
+                  %
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-gray-500">
+                  Fan Duty
+                </div>
+                <div className="text-lg font-medium">
+                  {latestRecord.actuation_state?.fan_duty_cycle?.toFixed(0) ??
+                    0}
+                  %
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-gray-500">
+                  Rainfall
+                </div>
+                <div className="text-lg font-medium">
+                  {latestRecord.environmental_context?.weather?.precipitation ??
+                    0}{' '}
+                  mm
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-gray-500">
+                  Guardrails
+                </div>
+                <div className="text-sm font-medium">
+                  {latestRecord.derived_metrics?.guardrails?.venting_blocked
+                    ? `Active (${latestRecord.derived_metrics.guardrails.reasons?.join(', ')})`
+                    : 'Clear'}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">
+              No environmental history available.
+            </p>
+          )}
+          {rainfallTrend.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium">
+                  Rainfall / VOC Trend (last 24h)
+                </h4>
+                <span className="text-xs text-gray-500">
+                  {rainfallTrend.length} points
+                </span>
+              </div>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={rainfallTrend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="timestamp" minTickGap={24} />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="rainfall"
+                      stroke="#3b82f6"
+                      name="Rainfall (mm)"
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="vocRelative"
+                      stroke="#ef4444"
+                      name="VOC Relative (%)"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Predictions</CardTitle>
+            <CardDescription>Active ML outputs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {loading ? '--' : predictions.length}
+            </div>
+            <p className="text-xs text-gray-500">Batches evaluated</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">High Risk</CardTitle>
+            <CardDescription>VOC thresholds triggered</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {predictions.filter((p) => p.risk_level === 'high').length}
+            </div>
+            <p className="text-xs text-gray-500">Requires action</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Open Advisories</CardTitle>
+            <CardDescription>Pending recommendations</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">
+              {advisories.filter((a) => a.status !== 'completed').length}
+            </div>
+            <p className="text-xs text-gray-500">To be resolved</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="border border-gray-200">
+          <CardHeader>
+            <CardTitle>Predictions</CardTitle>
+            <CardDescription>
+              VOC-first ML results per batch (live data only)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading && <p className="text-sm text-gray-500">Loading…</p>}
+            {!loading && predictions.length === 0 && (
+              <p className="text-sm text-gray-500">
+                No predictions available yet.
+              </p>
+            )}
+            {predictions.map((prediction) => (
+              <div
+                key={prediction._id}
+                className="border rounded-lg p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{prediction.batch_id.batch_id}</div>
+                    <div className="text-xs text-gray-500">
+                      {prediction.batch_id.grain_type} • {prediction.silo_id.name}
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      prediction.risk_level === 'high'
+                        ? 'destructive'
+                        : prediction.risk_level === 'medium'
+                        ? 'secondary'
+                        : 'default'
+                    }
+                  >
+                    {prediction.risk_level}
+                  </Badge>
+                </div>
+                <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
+                  <span>
+                    Risk:{' '}
+                    <span className="font-medium">
+                      {prediction.risk_score}%
+                    </span>
+                  </span>
+                  <span>
+                    Confidence:{' '}
+                    <span className="font-medium">
+                      {Math.round((prediction.confidence_score || 0) * 100)}%
+                    </span>
+                  </span>
+                  <span>
+                    Spoilage ETA:{' '}
+                    <span className="font-medium">
+                      {Math.round(
+                        (prediction.prediction_details?.time_to_spoilage || 24) /
+                          24,
+                      )}
+                      d
+                    </span>
+                  </span>
+                  <span>
+                    Risk factors:{' '}
+                    {(prediction.prediction_details?.key_risk_factors || [])
+                      .slice(0, 2)
+                      .join(', ') || '—'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Calendar className="h-4 w-4" />
+                  {new Date(prediction.created_at).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border border-gray-200">
+          <CardHeader>
+            <CardTitle>Operational Advisories</CardTitle>
+            <CardDescription>
+              Actions generated by AI (auto + manual updates)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading && <p className="text-sm text-gray-500">Loading…</p>}
+            {!loading && advisories.length === 0 && (
+              <p className="text-sm text-gray-500">
+                No advisories open at the moment.
+              </p>
+            )}
+            {advisories.map((advisory) => (
+              <div
+                key={advisory._id}
+                className="border rounded-lg p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{advisory.title}</div>
+                  <Badge
+                    variant={
+                      advisory.priority === 'high'
+                        ? 'destructive'
+                        : advisory.priority === 'medium'
+                        ? 'secondary'
+                        : 'default'
+                    }
+                  >
+                    {advisory.priority}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-600">{advisory.description}</p>
+                <div className="text-xs text-gray-500 flex items-center gap-2">
+                  <Shield className="h-3 w-3" />
+                  Status: {advisory.status}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border border-gray-200">
+        <CardHeader>
+          <CardTitle>Model Statistics</CardTitle>
+          <CardDescription>
+            Live performance summary for SmartBin-RiceSpoilage
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-5 text-sm">
+          <div>
+            <div className="text-xs uppercase text-gray-500">Predictions</div>
+            <div className="text-lg font-semibold">
+              {statistics?.total_predictions ?? '--'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-gray-500">Avg risk</div>
+            <div className="text-lg font-semibold">
+              {statistics?.avg_risk_score ?? '--'}%
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-gray-500">High risk</div>
+            <div className="text-lg font-semibold text-red-600">
+              {statistics?.high_risk_predictions ?? '--'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-gray-500">Critical</div>
+            <div className="text-lg font-semibold text-red-700">
+              {statistics?.critical_predictions ?? '--'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-gray-500">Validated</div>
+            <div className="text-lg font-semibold text-green-600">
+              {statistics?.validated_predictions ?? '--'}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.open('/api/docs', '_blank')}
+        >
+          <Brain className="h-4 w-4 mr-2" />
+          API Docs
+        </Button>
+        <Button
+          size="sm"
+          className="bg-gray-900 hover:bg-gray-800"
+          onClick={() => window.open(`${backendUrl}/api/sensors/export/iot-csv`)}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export Dataset
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default AISpoilagePage;
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +599,7 @@ import {
   Gauge
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from '@/lib/useEnvironmentalData';
 
 interface SpoilagePrediction {
   _id: string;
@@ -137,229 +695,27 @@ const AISpoilagePage = () => {
   const [modelStatus, setModelStatus] = useState(null);
   const [realTimePredictions, setRealTimePredictions] = useState([]);
   const [isRealTimeMonitoring, setIsRealTimeMonitoring] = useState(false);
-  const [dynamicDataEnabled, setDynamicDataEnabled] = useState(false);
+  const { locations } = useEnvironmentalLocations();
+  const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(null);
+  const { data: envHistory, latest: latestRecord, loading: datasetLoading } = useEnvironmentalHistory({
+    limit: 288,
+    latitude: selectedLocation?.latitude,
+    longitude: selectedLocation?.longitude,
+  });
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-
-  // Mock data for demonstration
-  const mockPredictions: SpoilagePrediction[] = [
-    {
-      _id: '1',
-      prediction_id: 'PRED-001',
-      batch_id: { batch_id: 'BATCH-001', grain_type: 'Wheat', quantity_kg: 5000 },
-      silo_id: { name: 'Silo A', silo_id: 'SILO-001' },
-      prediction_type: 'mold',
-      risk_score: 85,
-      risk_level: 'high',
-      confidence_score: 0.92,
-      predicted_date: '2024-01-15T10:00:00Z',
-      environmental_factors: {
-        temperature: { current: 32, trend: 'increasing', impact_score: 0.8 },
-        humidity: { current: 78, trend: 'stable', impact_score: 0.9 },
-        co2: { current: 1200, trend: 'increasing', impact_score: 0.7 },
-        moisture: { current: 16, trend: 'stable', impact_score: 0.85 }
-      },
-      prediction_details: {
-        key_risk_factors: ['high_humidity', 'elevated_temperature'],
-        secondary_risk_factors: ['poor_air_quality', 'elevated_moisture'],
-        time_to_spoilage: 48,
-        severity_indicators: ['high_risk_conditions', 'monitoring_required']
-      },
-      validation_status: 'pending',
-      created_at: '2024-01-10T08:00:00Z'
-    },
-    {
-      _id: '2',
-      prediction_id: 'PRED-002',
-      batch_id: { batch_id: 'BATCH-002', grain_type: 'Rice', quantity_kg: 3000 },
-      silo_id: { name: 'Silo B', silo_id: 'SILO-002' },
-      prediction_type: 'aflatoxin',
-      risk_score: 45,
-      risk_level: 'medium',
-      confidence_score: 0.78,
-      predicted_date: '2024-01-20T14:00:00Z',
-      environmental_factors: {
-        temperature: { current: 25, trend: 'stable', impact_score: 0.4 },
-        humidity: { current: 65, trend: 'decreasing', impact_score: 0.5 },
-        co2: { current: 600, trend: 'stable', impact_score: 0.3 },
-        moisture: { current: 13, trend: 'stable', impact_score: 0.4 }
-      },
-      prediction_details: {
-        key_risk_factors: ['elevated_humidity'],
-        secondary_risk_factors: ['rice_humidity_sensitivity'],
-        time_to_spoilage: 168,
-        severity_indicators: ['monitoring_required']
-      },
-      validation_status: 'pending',
-      created_at: '2024-01-10T09:00:00Z'
-    }
-  ];
-
-  const mockAdvisories: Advisory[] = [
-    {
-      _id: '1',
-      advisory_id: 'ADV-001',
-      title: 'Temperature Control Required',
-      description: 'Adjust temperature control systems to maintain optimal range for wheat storage',
-      priority: 'high',
-      status: 'in_progress',
-      advisory_type: 'preventive',
-      effectiveness_score: 0.8,
-      implementation_details: {
-        estimated_duration: 30,
-        required_skills: ['storage_management'],
-        required_equipment: ['monitoring_equipment']
-      },
-      recommended_timing: {
-        start_time: '2024-01-10T10:00:00Z',
-        completion_deadline: '2024-01-10T12:00:00Z'
-      },
-      created_at: '2024-01-10T08:30:00Z'
-    },
-    {
-      _id: '2',
-      advisory_id: 'ADV-002',
-      title: 'Humidity Management Needed',
-      description: 'Increase ventilation or activate dehumidification systems',
-      priority: 'medium',
-      status: 'generated',
-      advisory_type: 'preventive',
-      effectiveness_score: 0.75,
-      implementation_details: {
-        estimated_duration: 45,
-        required_skills: ['environmental_control'],
-        required_equipment: ['dehumidification_systems']
-      },
-      recommended_timing: {
-        start_time: '2024-01-10T11:00:00Z',
-        completion_deadline: '2024-01-10T14:00:00Z'
-      },
-      created_at: '2024-01-10T09:00:00Z'
-    }
-  ];
-
-  const mockStatistics: Statistics = {
-    total_predictions: 25,
-    avg_risk_score: 65,
-    high_risk_predictions: 8,
-    critical_predictions: 3,
-    validated_predictions: 15,
-    false_positives: 2,
-    false_negatives: 1,
-    total_advisories: 18,
-    completed_advisories: 12,
-    in_progress_advisories: 4,
-    overdue_advisories: 2,
-    avg_effectiveness: 0.82,
-    risk_distribution: [
-      { _id: 'low', count: 8, avg_risk_score: 25 },
-      { _id: 'medium', count: 10, avg_risk_score: 55 },
-      { _id: 'high', count: 5, avg_risk_score: 80 },
-      { _id: 'critical', count: 2, avg_risk_score: 95 }
-    ]
-  };
 
   useEffect(() => {
     loadData();
     loadModelStatus();
   }, []);
 
-  // Dynamic data simulation for demonstration
   useEffect(() => {
-    if (!dynamicDataEnabled) return;
+    if (!selectedLocation && locations.length > 0) {
+      setSelectedLocation(locations[0]);
+    }
+  }, [locations, selectedLocation]);
 
-    const interval = setInterval(() => {
-      // Simulate new sensor readings
-      const newSensorData = {
-        temperature: 20 + Math.random() * 15, // 20-35°C
-        humidity: 40 + Math.random() * 40,   // 40-80%
-        grain_moisture: 10 + Math.random() * 10, // 10-20%
-        storage_days: Math.floor(Math.random() * 30) + 1,
-        grain_type: 'Rice'
-      };
-
-      // Simulate ML prediction
-      const riskScore = Math.random() * 100;
-      const confidence = 0.7 + Math.random() * 0.3; // 70-100%
-      
-      const newPrediction = {
-        _id: `dynamic-${Date.now()}`,
-        prediction_id: `PRED-DYNAMIC-${Date.now()}`,
-        batch_id: { 
-          _id: `batch-dynamic-${Date.now()}`, 
-          batch_id: `GH${Date.now()}`, 
-          grain_type: 'Rice' 
-        },
-        silo_id: { 
-          _id: `silo-dynamic`, 
-          name: `Silo ${String.fromCharCode(65 + Math.floor(Math.random() * 3))}` 
-        },
-        prediction_type: 'dynamic_simulation',
-        risk_score: Math.round(riskScore),
-        risk_level: riskScore > 80 ? 'critical' : riskScore > 60 ? 'high' : riskScore > 40 ? 'medium' : 'low',
-        confidence_score: Math.round(confidence * 100) / 100,
-        prediction_horizon: Math.ceil(Math.random() * 14) + 1,
-        predicted_date: new Date(Date.now() + (Math.random() * 14 + 1) * 24 * 60 * 60 * 1000),
-        environmental_factors: {
-          temperature: { 
-            current: Math.round(newSensorData.temperature * 10) / 10, 
-            trend: Math.random() > 0.5 ? 'increasing' : 'decreasing', 
-            impact_score: 0.5 + Math.random() * 0.5 
-          },
-          humidity: { 
-            current: Math.round(newSensorData.humidity * 10) / 10, 
-            trend: Math.random() > 0.5 ? 'stable' : 'increasing', 
-            impact_score: 0.3 + Math.random() * 0.7 
-          },
-          co2: { 
-            current: Math.round(400 + Math.random() * 600), 
-            trend: 'stable', 
-            impact_score: 0.2 + Math.random() * 0.5 
-          },
-          moisture: { 
-            current: Math.round(newSensorData.grain_moisture * 10) / 10, 
-            trend: 'stable', 
-            impact_score: 0.4 + Math.random() * 0.6 
-          }
-        },
-        grain_factors: {
-          grain_type: 'Rice',
-          storage_duration_days: newSensorData.storage_days,
-          initial_quality_score: 80 + Math.random() * 20,
-          moisture_content: Math.round(newSensorData.grain_moisture * 10) / 10
-        },
-        validation_status: 'pending',
-        prediction_details: {
-          time_to_spoilage: Math.round((Math.random() * 7 + 1) * 24), // 1-7 days in hours
-          key_risk_factors: riskScore > 60 ? ['high_humidity', 'elevated_temperature'] : [],
-          secondary_risk_factors: riskScore > 40 ? ['storage_duration'] : [],
-          severity_indicators: riskScore > 80 ? ['critical_conditions'] : riskScore > 60 ? ['high_risk_conditions'] : ['monitoring_required'],
-          recommended_actions: riskScore > 60 ? ['Increase ventilation', 'Monitor closely'] : ['Continue monitoring']
-        },
-        created_at: new Date(),
-        updated_at: new Date(),
-        model_used: 'SmartBin-RiceSpoilage-Dynamic',
-        tenant_id: '652a266c69576a07b18d1c5c'
-      };
-
-      setPredictions(prev => [newPrediction, ...prev.slice(0, 19)]); // Keep last 20 predictions
-      
-      // Update statistics
-      setStatistics(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          total_predictions: prev.total_predictions + 1,
-          high_risk_predictions: riskScore > 60 ? prev.high_risk_predictions + 1 : prev.high_risk_predictions,
-          critical_predictions: riskScore > 80 ? prev.critical_predictions + 1 : prev.critical_predictions,
-          avg_risk_score: Math.round(((prev.avg_risk_score * (prev.total_predictions - 1)) + riskScore) / prev.total_predictions * 10) / 10
-        };
-      });
-
-      console.log('🔄 Dynamic prediction added:', newPrediction.prediction_id);
-    }, 5000); // Add new prediction every 5 seconds
-
-    return () => clearInterval(interval);
-  }, [dynamicDataEnabled]);
+  // Remove dynamic demo mode – rely on live backend data
 
   const loadData = async () => {
     setLoading(true);
@@ -379,11 +735,11 @@ const AISpoilagePage = () => {
           throw new Error(`HTTP ${predictionsResponse.status}: ${predictionsResponse.statusText}`);
         }
         const predictionsData = await predictionsResponse.json();
-        setPredictions(predictionsData.predictions || mockPredictions);
+        setPredictions(predictionsData.predictions || []);
         console.log('✅ Predictions loaded:', predictionsData.predictions?.length || 0);
       } catch (error) {
         console.error('❌ Error loading predictions:', error);
-        setPredictions(mockPredictions);
+        setPredictions([]);
       }
 
       // Load advisories with better error handling
@@ -393,11 +749,11 @@ const AISpoilagePage = () => {
           throw new Error(`HTTP ${advisoriesResponse.status}: ${advisoriesResponse.statusText}`);
         }
         const advisoriesData = await advisoriesResponse.json();
-        setAdvisories(advisoriesData.advisories || mockAdvisories);
+        setAdvisories(advisoriesData.advisories || []);
         console.log('✅ Advisories loaded:', advisoriesData.advisories?.length || 0);
       } catch (error) {
         console.error('❌ Error loading advisories:', error);
-        setAdvisories(mockAdvisories);
+        setAdvisories([]);
       }
 
       // Load statistics with better error handling

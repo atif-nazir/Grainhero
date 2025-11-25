@@ -89,6 +89,9 @@ const sensorReadingSchema = new mongoose.Schema({
       type: String,
       default: 'percent'
     }
+    // IoT Spec Calibration Zones:
+    // 0-10% = dry (safe), 13-14% = risk (monitor), >=15% = spoilage (critical)
+    // Sensor: Capacitive moisture probe (SEN0193/YL-69) in lower half of grain
   },
 
   ambient: {
@@ -217,8 +220,13 @@ const sensorReadingSchema = new mongoose.Schema({
     }
   }],
 
-  // Actuation telemetry captured with reading
+  // Actuation telemetry captured with reading (IoT spec alignment)
   actuation_state: {
+    fan_state: {
+      type: Number,
+      enum: [0, 1], // 0 = OFF, 1 = ON (matches IoT spec CSV format)
+      default: 0
+    },
     fan_status: {
       type: String,
       enum: ['on', 'off', 'auto', 'unknown'],
@@ -232,24 +240,33 @@ const sensorReadingSchema = new mongoose.Schema({
     fan_duty_cycle: {
       type: Number,
       min: 0,
-      max: 1
+      max: 100, // Store as percentage (0-100) for IoT spec
+      default: 0
     },
-    last_command_source: String
+    fan_rpm: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+    last_command_source: String,
+    last_state_change: Date // Track for hysteresis + min duration logic
   },
 
-  // Derived metrics and risk flags (enhanced for VOC-first detection)
+  // Derived metrics and risk flags (enhanced for VOC-first detection - IoT spec aligned)
   derived_metrics: {
-    dew_point: Number,
-    dew_point_gap: Number,
+    dew_point: Number, // Dew_Point (Magnus formula, every 5 min)
+    dew_point_gap: Number, // T_core - Dew_Point (condensation risk if < 1°C)
     condensation_risk: {
       type: Boolean,
       default: false
     },
-    airflow: Number,
-    voc_baseline_24h: Number,
-    voc_relative_5min: Number,
-    voc_relative_30min: Number,
-    voc_rate_5min: Number,
+    airflow: Number, // Fan_Speed_Factor × Fan_Duty_Cycle (0.0 = OFF, 1.0 = full)
+    voc_baseline_24h: Number, // 24-hour rolling baseline for VOC calibration
+    voc_relative: Number, // VOC_current - VOC_baseline_24h (primary metric)
+    voc_relative_5min: Number, // 5-minute window relative to baseline
+    voc_relative_30min: Number, // 30-minute window relative to baseline
+    voc_rate_5min: Number, // Rate of change over 5 minutes
+    voc_rate_30min: Number, // Rate of change over 30 minutes (for IoT spec)
     pest_presence_score: Number,
     pest_presence_flag: {
       type: Boolean,
@@ -416,13 +433,27 @@ sensorReadingSchema.pre('save', async function(next) {
       }
     }
 
-    // --- Airflow calculation from actuation telemetry ---
+    // --- Airflow calculation from actuation telemetry (IoT spec) ---
+    // IoT Spec: Airflow = Fan_Speed_Factor × Fan_Duty_Cycle
+    // 1.0 = full airflow at 100% fan speed, 0.0 = fan OFF
     if (reading.actuation_state?.fan_speed_factor !== undefined && reading.actuation_state?.fan_duty_cycle !== undefined) {
-      const airflow =
-        reading.actuation_state.fan_speed_factor * reading.actuation_state.fan_duty_cycle;
-      derived.airflow = Number((airflow * 100).toFixed(2)); // store as %
+      // fan_duty_cycle is now 0-100 (percentage), convert to 0-1 for calculation
+      const dutyCycleNormalized = reading.actuation_state.fan_duty_cycle / 100;
+      const airflow = reading.actuation_state.fan_speed_factor * dutyCycleNormalized;
+      derived.airflow = Number(airflow.toFixed(2)); // Store as 0.0-1.0 (IoT spec format)
     } else if (derived.airflow === undefined) {
-      derived.airflow = null;
+      derived.airflow = 0; // Default to 0 (fan OFF) instead of null
+    }
+    
+    // Sync fan_state (numeric 0/1) with fan_status (string) for IoT spec compatibility
+    if (reading.actuation_state) {
+      if (reading.actuation_state.fan_status === 'on' || reading.actuation_state.fan_state === 1) {
+        reading.actuation_state.fan_state = 1;
+        reading.actuation_state.fan_status = 'on';
+      } else {
+        reading.actuation_state.fan_state = 0;
+        reading.actuation_state.fan_status = 'off';
+      }
     }
 
     // --- VOC relative metrics ---
@@ -459,56 +490,96 @@ sensorReadingSchema.pre('save', async function(next) {
       ]);
       const vocAvg30 = thirtyAgg?.avg_voc ?? vocValue;
 
+      // Calculate VOC_relative (primary metric: current vs baseline)
+      derived.voc_relative = Number(((vocValue / (vocBaseline || 1)) * 100).toFixed(1));
       derived.voc_relative_5min = Number(((vocAvg5 / (vocBaseline || 1)) * 100).toFixed(1));
       derived.voc_relative_30min = Number(((vocAvg30 / (vocBaseline || 1)) * 100).toFixed(1));
 
-      const minutesElapsed = Math.max(1, (windowEnd - fiveMinWindow) / (1000 * 60));
-      derived.voc_rate_5min = Number(((vocValue - vocAvg5) / minutesElapsed).toFixed(1));
+      // Calculate VOC rate (change per minute)
+      const minutesElapsed5 = Math.max(1, (windowEnd - fiveMinWindow) / (1000 * 60));
+      const minutesElapsed30 = Math.max(1, (windowEnd - thirtyMinWindow) / (1000 * 60));
+      derived.voc_rate_5min = Number(((vocValue - vocAvg5) / minutesElapsed5).toFixed(1));
+      derived.voc_rate_30min = Number(((vocValue - vocAvg30) / minutesElapsed30).toFixed(1));
     }
 
-    // --- Pest presence heuristic ---
-    if (derived.voc_relative_5min !== undefined) {
-      let pestScore = 0.05;
+    // --- Pest presence heuristic (IoT spec: inferred from VOC patterns) ---
+    // IoT Spec: Pest_Presence = Inferred insect/mold activity from VOC + T/RH + moisture
+    // ML implicitly learns pest presence from VOC + environmental patterns
+    if (derived.voc_relative_5min !== undefined && derived.voc_rate_5min !== undefined) {
+      let pestScore = 0.0; // Start at 0 (no pest activity)
+      
+      // Yellow threshold pattern: VOC_relative_5min > 150 AND VOC_rate_5min > 20
+      // This indicates early pest/spoilage activity
       if (derived.voc_relative_5min > 150 && derived.voc_rate_5min > 20) {
-        pestScore += 0.45;
+        pestScore += 0.5; // Moderate pest activity
       }
-      if (derived.voc_relative_30min > 100 && (grainMoisture || 0) > 14) {
-        pestScore += 0.35;
+      
+      // Red threshold pattern: VOC_relative_30min > 100 AND Grain_Moisture > 14%
+      // Sustained VOC rise with high moisture = strong pest/spoilage signal
+      if (derived.voc_relative_30min !== undefined && derived.voc_relative_30min > 100 && (grainMoisture || 0) > 14) {
+        pestScore += 0.4; // High pest activity
       }
+      
+      // High humidity amplifies pest risk (IoT spec: environmental context)
       if ((coreHumidity || 0) > 70) {
-        pestScore += 0.1;
+        pestScore += 0.1; // Humidity factor
       }
+      
+      // Normalize to 0-1 scale
       derived.pest_presence_score = Number(Math.min(1, pestScore).toFixed(2));
-      derived.pest_presence_flag = derived.pest_presence_score >= 0.5;
+      derived.pest_presence_flag = derived.pest_presence_score >= 0.5; // Threshold for pest detection
     }
 
-    // --- Guardrails evaluation ---
+    // --- Guardrails evaluation (IoT spec: NEVER ventilate if...) ---
+    // IoT Spec: Skip ventilation if:
+    // 1. External Rainfall > 0
+    // 2. Ambient_RH > 80%
+    // 3. T_core - Dew_Point_core < 1°C (condensation risk)
     const guardrailReasons = [];
-    if (derived.condensation_risk) {
-      guardrailReasons.push('Dew point within 1°C of core temperature (condensation risk)');
+    
+    // Condensation risk: T_core - Dew_Point < 1°C
+    if (derived.condensation_risk || (derived.dew_point_gap !== undefined && derived.dew_point_gap < 1)) {
+      guardrailReasons.push('T_core - Dew_Point < 1°C (condensation risk)');
+      derived.condensation_risk = true;
     }
+    
+    // Rainfall > 0 blocks ventilation
     const rainfall = reading.environmental_context?.weather?.precipitation;
     if (rainfall !== undefined && rainfall > 0) {
-      guardrailReasons.push('External rainfall detected');
+      guardrailReasons.push('External rainfall detected (rainfall > 0)');
     }
+    
+    // Ambient RH > 80% blocks ventilation
     const ambientHumidity = reading.ambient?.humidity?.value ?? reading.environmental_context?.weather?.humidity;
     if (ambientHumidity !== undefined && ambientHumidity > 80) {
       guardrailReasons.push('Ambient humidity above 80%');
     }
+    
     if (!derived.guardrails) derived.guardrails = {};
     derived.guardrails.venting_blocked = guardrailReasons.length > 0;
     derived.guardrails.reasons = guardrailReasons;
 
-    // --- ML style risk scoring ---
-    if (derived.voc_relative_30min !== undefined) {
+    // --- ML style risk scoring (IoT spec VOC thresholds) ---
+    // IoT Spec Thresholds:
+    // Yellow (early risk): VOC_relative_5min > 150 AND VOC_rate_5min > 20
+    // Red (high risk): VOC_relative_5min > 300 OR (VOC_relative_30min > 100 AND Grain_Moisture > 14%)
+    if (derived.voc_relative_5min !== undefined && derived.voc_rate_5min !== undefined) {
       let riskScore = 0;
-      if (derived.voc_relative_30min > 300 || (derived.voc_relative_30min > 100 && (grainMoisture || 0) > 14)) {
+      const moisture = grainMoisture || 0;
+      
+      // Red threshold (Spoiled): VOC_relative_5min > 300 OR (VOC_relative_30min > 100 AND Moisture > 14%)
+      if (derived.voc_relative_5min > 300 || 
+          (derived.voc_relative_30min !== undefined && derived.voc_relative_30min > 100 && moisture > 14)) {
         riskScore = 85;
         derived.ml_risk_class = 'spoiled';
-      } else if (derived.voc_relative_5min > 150 && derived.voc_rate_5min > 20) {
+      } 
+      // Yellow threshold (Risky): VOC_relative_5min > 150 AND VOC_rate_5min > 20
+      else if (derived.voc_relative_5min > 150 && derived.voc_rate_5min > 20) {
         riskScore = 65;
         derived.ml_risk_class = 'risky';
-      } else {
+      } 
+      // Safe
+      else {
         riskScore = 25;
         derived.ml_risk_class = 'safe';
       }
@@ -525,22 +596,29 @@ sensorReadingSchema.pre('save', async function(next) {
       pest_presence: derived.pest_presence_flag || false
     };
 
-    // --- Smart fan control logic ---
+    // --- Smart fan control logic (IoT spec: hysteresis + guardrails) ---
     const coreRH = coreHumidity;
     if (coreRH !== undefined && grainMoisture !== undefined) {
-      // Fan ON conditions
-      if ((coreRH > 65 && grainMoisture > 14) || 
-          derived.ml_risk_class === 'risky' || 
-          derived.ml_risk_class === 'spoiled') {
+      // IoT Spec Fan Logic:
+      // ON: RH_core > 65% AND Grain_Moisture > 14% OR ML risk high (if external conditions safe)
+      // OFF: RH_core < 62% AND Grain_Moisture < 13.5% (hysteresis: ON at 65%, OFF at 62%)
+      // NEVER: Rainfall > 0 OR Ambient_RH > 80% OR T_core - Dew_Point < 1°C
+      
+      const shouldTurnOn = (coreRH > 65 && grainMoisture > 14) || 
+                           (derived.ml_risk_class === 'risky' || derived.ml_risk_class === 'spoiled');
+      const shouldTurnOff = (coreRH < 62 && grainMoisture < 13.5);
+      
+      // Guardrails block ALL ventilation (IoT spec)
+      if (derived.guardrails.venting_blocked) {
+        derived.fan_recommendation = 'hold';
+      }
+      // Fan ON conditions (only if guardrails clear)
+      else if (shouldTurnOn) {
         derived.fan_recommendation = 'run';
       }
-      // Fan OFF conditions
-      else if (coreRH < 62 && grainMoisture < 13.5) {
+      // Fan OFF conditions (hysteresis: lower threshold to prevent short-cycling)
+      else if (shouldTurnOff) {
         derived.fan_recommendation = 'stop';
-      }
-      // Hold conditions (guardrails active)
-      else if (derived.guardrails.venting_blocked) {
-        derived.fan_recommendation = 'hold';
       } else {
         derived.fan_recommendation = 'unknown';
       }

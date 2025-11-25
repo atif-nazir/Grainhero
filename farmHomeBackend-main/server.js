@@ -108,6 +108,15 @@ db.once("open", () => {
     console.error("Failed to start environmental data service:", error);
   }
   
+  // Start data aggregation service (30s raw → 5min averages)
+  try {
+    const dataAggregationService = require("./services/dataAggregationService");
+    dataAggregationService.start();
+    console.log("Data aggregation service started (IoT spec: 5-minute averaging)");
+  } catch (error) {
+    console.error("Failed to start data aggregation service:", error);
+  }
+  
   // Start the server
   startServer();
 });
