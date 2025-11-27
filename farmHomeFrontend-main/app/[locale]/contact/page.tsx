@@ -97,7 +97,7 @@ export default function ContactPage() {
                         </h1>
                         <p className="text-xl md:text-2xl text-gray-700 max-w-4xl mx-auto leading-relaxed">
                             {planType === 'custom'
-                                ? 'Let&apos;s discuss your custom grain management solution requirements and create the perfect solution for your business'
+                                ? "Let's discuss your custom grain management solution requirements and create the perfect solution for your business"
                                 : 'Get in touch with our team for support, questions, or partnership opportunities'
                             }
                         </p>

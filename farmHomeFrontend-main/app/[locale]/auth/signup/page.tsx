@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { WheatIcon as Sheep, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react"
 import { config } from "@/config"
 import { useTranslations } from 'next-intl';
+import { useRouter } from "@/i18n/navigation"
 import {
   validateSignupForm,
   validateField,
@@ -59,6 +60,17 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, feedback: [], isValid: false })
+
+  const handlePostSignupRedirect = (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pendingSignupEmail', normalizedEmail)
+    }
+    setMessage("Account created successfully! Redirecting you to login.")
+    setTimeout(() => {
+      router.push(`/auth/login?prefill=${encodeURIComponent(normalizedEmail)}`)
+    }, 1500)
+  }
 
   // Verify invitation token and handle payment success on component mount
   useEffect(() => {
@@ -149,9 +161,9 @@ export default function SignUpPage() {
           invitation_token: invitationToken || undefined,
         };
 
-      const res = await fetch(`${config.backendUrl}/auth/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        const res = await fetch(`${config.backendUrl}/auth/signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(signupData),
         })
 
@@ -159,10 +171,7 @@ export default function SignUpPage() {
           const error = await res.json().catch(() => ({}))
           setMessage(error?.message || "Signup failed. Please try again.")
         } else {
-          setMessage("Account created successfully! Please login to access your dashboard.")
-          setTimeout(() => {
-            router.push("/auth/login")
-          }, 2000)
+          handlePostSignupRedirect(formData.email)
         }
       } else {
         // First-time users need to verify payment first
@@ -208,29 +217,11 @@ export default function SignUpPage() {
           body: JSON.stringify(signupData),
         })
 
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}))
-        setMessage(error?.message || "Signup failed. Please try again.")
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({}))
+          setMessage(error?.message || "Signup failed. Please try again.")
         } else {
-          const data = await res.json()
-          console.log("Signup response:", data)
-          
-          if (data.token && data.user) {
-            // User is already logged in, redirect to dashboard
-            setMessage("Account created successfully! Redirecting to dashboard...")
-            localStorage.setItem("token", data.token)
-            localStorage.setItem("farm-home-user", JSON.stringify(data.user))
-            localStorage.setItem("farm-home-access", data.hasAccess || "none")
-            setTimeout(() => {
-              router.push("/dashboard")
-            }, 2000)
-      } else {
-            // Regular signup, redirect to login
-            setMessage("Account created successfully! Please login to access your dashboard.")
-            setTimeout(() => {
-              router.push("/auth/login")
-            }, 2000)
-          }
+          handlePostSignupRedirect(formData.email)
         }
       }
     } catch {
@@ -314,23 +305,23 @@ export default function SignUpPage() {
                   }
                 </CardDescription>
               </div>
-          </div>
-        </CardHeader>
-        <CardContent>
+            </div>
+          </CardHeader>
+          <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Name Field */}
-            <div className="space-y-2">
-              <Label htmlFor="name">{t('fullName')}</Label>
+              <div className="space-y-2">
+                <Label htmlFor="name">{t('fullName')}</Label>
                 <div className="relative">
-              <Input
-                id="name"
-                type="text"
+                  <Input
+                    id="name"
+                    type="text"
                     placeholder="Full Name (First and Last)"
-                value={formData.name}
-                onChange={(e) => handleChange("name", e.target.value)}
+                    value={formData.name}
+                    onChange={(e) => handleChange("name", e.target.value)}
                     className={`pr-10 ${fieldValidations.name.touched && !fieldValidations.name.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.name.touched && fieldValidations.name.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
-                required
-              />
+                    required
+                  />
                   {fieldValidations.name.touched && (
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                       {fieldValidations.name.isValid ? (
@@ -347,22 +338,22 @@ export default function SignUpPage() {
                     {fieldValidations.name.message}
                   </p>
                 )}
-            </div>
+              </div>
 
               {/* Email Field */}
-            <div className="space-y-2">
-              <Label htmlFor="email">{t('email')}</Label>
+              <div className="space-y-2">
+                <Label htmlFor="email">{t('email')}</Label>
                 <div className="relative">
-              <Input
-                id="email"
-                type="email"
+                  <Input
+                    id="email"
+                    type="email"
                     placeholder="john.doe@example.com"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
+                    value={formData.email}
+                    onChange={(e) => handleChange("email", e.target.value)}
                     className={`pr-10 ${fieldValidations.email.touched && !fieldValidations.email.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.email.touched && fieldValidations.email.isValid ? 'border-green-500 focus:border-green-500' : ''} ${invitationData ? 'bg-gray-50' : ''}`}
                     readOnly={!!invitationData}
-                required
-              />
+                    required
+                  />
                   {fieldValidations.email.touched && (
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                       {fieldValidations.email.isValid ? (
@@ -379,18 +370,18 @@ export default function SignUpPage() {
                     {fieldValidations.email.message}
                   </p>
                 )}
-            </div>
+              </div>
 
               {/* Phone Field */}
-            <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="phone">{t('phoneNumber')} <span className="text-gray-400 text-sm">{t('optional')}</span></Label>
                 <div className="relative">
-              <Input
-                id="phone"
-                type="tel"
+                  <Input
+                    id="phone"
+                    type="tel"
                     placeholder="+1 (555) 123-4567"
-                value={formData.phone}
-                onChange={(e) => handleChange("phone", e.target.value)}
+                    value={formData.phone}
+                    onChange={(e) => handleChange("phone", e.target.value)}
                     className={`pr-10 ${fieldValidations.phone.touched && !fieldValidations.phone.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.phone.touched && fieldValidations.phone.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
                   />
                   {fieldValidations.phone.touched && fieldValidations.phone.value && (
@@ -409,21 +400,21 @@ export default function SignUpPage() {
                     {fieldValidations.phone.message}
                   </p>
                 )}
-            </div>
+              </div>
 
               {/* Password Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">{t('password')}</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="password">{t('password')}</Label>
                   <div className="relative">
-              <Input
-                id="password"
+                    <Input
+                      id="password"
                       type={showPassword ? "text" : "password"}
-                value={formData.password}
-                onChange={(e) => handleChange("password", e.target.value)}
+                      value={formData.password}
+                      onChange={(e) => handleChange("password", e.target.value)}
                       className={`pr-10 ${fieldValidations.password.touched && !fieldValidations.password.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.password.touched && fieldValidations.password.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
-                required
-              />
+                      required
+                    />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
@@ -439,19 +430,19 @@ export default function SignUpPage() {
                       {fieldValidations.password.message}
                     </p>
                   )}
-            </div>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">{t('confirmPassword')}</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">{t('confirmPassword')}</Label>
                   <div className="relative">
-              <Input
-                id="confirmPassword"
+                    <Input
+                      id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
-                value={formData.confirmPassword}
-                onChange={(e) => handleChange("confirmPassword", e.target.value)}
+                      value={formData.confirmPassword}
+                      onChange={(e) => handleChange("confirmPassword", e.target.value)}
                       className={`pr-10 ${fieldValidations.confirmPassword.touched && !fieldValidations.confirmPassword.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.confirmPassword.touched && fieldValidations.confirmPassword.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
-                required
-              />
+                      required
+                    />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -468,7 +459,7 @@ export default function SignUpPage() {
                     </p>
                   )}
                 </div>
-            </div>
+              </div>
 
               {/* Password Strength Indicator */}
               {formData.password && (
@@ -479,7 +470,7 @@ export default function SignUpPage() {
               )}
 
               {/* Message Display */}
-            {message && (
+              {message && (
                 <div className={`text-sm rounded-md p-3 flex items-center gap-2 ${message.includes('successfully') || message.includes('success')
                   ? 'text-green-600 bg-green-50 border border-green-200'
                   : 'text-red-600 bg-red-50 border border-red-200'
@@ -501,10 +492,10 @@ export default function SignUpPage() {
                 aria-label="Create account and continue to payment"
               >
                 {isLoading ? 'Creating Account...' : 'Create Account'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
       </div>
     </div>

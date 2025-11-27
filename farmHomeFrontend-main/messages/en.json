@@ -2,7 +2,7 @@
   "HomePage": {
     "title": "Hello world!",
     "description": "This is the home page",
-    "farmHome": "Farm Home",
+    "farmHome": "GrainHero",
     "login": "Login",
     "getStarted": "Get Started",
     "modernLivestock": "Modern Livestock",
@@ -23,7 +23,7 @@
   },
   "AuthPage": {
     "welcomeBack": "Welcome Back",
-    "signInToAccount": "Sign in to your Farm Home account",
+    "signInToAccount": "Sign in to your GrainHero account",
     "email": "Email",
     "password": "Password",
     "signingIn": "Signing in...",
@@ -35,7 +35,7 @@
     "networkError": "Network error. Please try again.",
     "loginSuccess": "Login successful! Redirecting...",
     "createAccount": "Create Account",
-    "signUpForFarmHome": "Sign up for Farm Home (Admin Registration)",
+    "signUpForFarmHome": "Sign up for GrainHero (Admin Registration)",
     "fullName": "Full Name",
     "phoneNumber": "Phone Number",
     "optional": "(optional)",
