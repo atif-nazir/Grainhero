@@ -26,12 +26,14 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  ArrowRight
+  ArrowRight,
+  X
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatConfidence, formatRisk, formatSmart } from '@/lib/percentageUtils';
 import SiloVisualization from '../silo-visualization/page';
 import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from '@/lib/useEnvironmentalData';
+import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 
 interface AIPrediction {
   batch_id: string
@@ -59,6 +61,8 @@ export default function AIPredictionsPage() {
     latitude: selectedLocation?.latitude,
     longitude: selectedLocation?.longitude,
   })
+const [showActuatorPanel, setShowActuatorPanel] = useState(false)
+const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(null)
 
   // Fetch recent predictions overview
   useEffect(() => {
@@ -199,6 +203,11 @@ export default function AIPredictionsPage() {
       vocRelative: record.derived_metrics?.voc_relative ?? 0,
     }))
   }, [envHistory])
+
+const openActuatorPanel = (prediction: AIPrediction) => {
+  setActionPrediction(prediction)
+  setShowActuatorPanel(true)
+}
 
   const getRiskColor = (riskScore: number) => {
     if (riskScore < 30) return 'text-green-600'

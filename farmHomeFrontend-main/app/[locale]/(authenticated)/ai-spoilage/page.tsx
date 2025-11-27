@@ -35,6 +35,7 @@ import {
   LocationOption,
   EnvironmentalRecord,
 } from '@/lib/useEnvironmentalData';
+import { ActuatorQuickActions } from '@/components/actuator-quick-actions';
 
 interface SpoilagePrediction {
   _id: string;
@@ -531,6 +532,8 @@ const AISpoilagePage = () => {
           </div>
         </CardContent>
       </Card>
+
+      <ActuatorQuickActions compact />
 
       <div className="flex flex-wrap gap-3">
         <Button

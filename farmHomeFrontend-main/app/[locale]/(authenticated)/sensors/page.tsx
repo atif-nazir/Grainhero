@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
+import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 
 interface SensorDevice {
   _id: string
@@ -180,6 +181,8 @@ export default function SensorsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ActuatorQuickActions />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
