@@ -1,46 +1,97 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useMemo, useState, FormEvent } from "react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Truck, Search, Filter, Phone, Mail, MapPin, Plus, Package } from 'lucide-react'
-import { useEffect, useState } from "react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Users, Truck, Search, Phone, Mail, MapPin, Plus, Package, MoreHorizontal } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { config } from "@/config"
 
-export default function BuyersPage() {
-  // Loading state (simulate API)
-  const [isLoading, setIsLoading] = useState(true)
+type BuyerRecord = {
+  _id: string
+  name: string
+  company_name?: string
+  contact_person: {
+    name: string
+    email?: string
+    phone?: string
+  }
+  location?: {
+    city?: string
+    state?: string
+    country?: string
+  }
+  status: string
+  rating?: number
+  totalOrders?: number
+  lastOrderDate?: string | null
+}
 
-  // Mock data — replace with API later
-  const buyers = [
-    { id: 1, name: "Golden Mills", contact: "Ali Raza", phone: "+92 300 1234567", email: "procure@goldenmills.com", location: "Lahore", rating: 5, totalOrders: 48, lastOrder: "3d ago", status: "active" },
-    { id: 2, name: "Premium Foods", contact: "Sara Khan", phone: "+92 301 7654321", email: "sara@premiumfoods.pk", location: "Karachi", rating: 4, totalOrders: 31, lastOrder: "1d ago", status: "active" },
-    { id: 3, name: "Agro Distributors", contact: "Umer Farooq", phone: "+92 302 1112233", email: "orders@agro-dist.com", location: "Multan", rating: 4, totalOrders: 19, lastOrder: "2w ago", status: "paused" },
-    { id: 4, name: "Sunrise Bakers", contact: "Hina Malik", phone: "+92 333 9988776", email: "buy@sunrise.com", location: "Faisalabad", rating: 5, totalOrders: 54, lastOrder: "6h ago", status: "active" },
-  ]
+type Summary = {
+  totalBuyers: number
+  activeContracts: number
+  scheduledDispatches: number
+  topRating?: number | null
+}
 
-  const contracts = [
-    { id: "CTR-1042", buyer: "Golden Mills", grain: "Wheat", qty: "1,200 tons", price: "$320/ton", status: "running" },
-    { id: "CTR-1038", buyer: "Premium Foods", grain: "Rice", qty: "800 tons", price: "$410/ton", status: "negotiating" },
-    { id: "CTR-1019", buyer: "Agro Distributors", grain: "Maize", qty: "600 tons", price: "$270/ton", status: "completed" },
-  ]
+type Contract = {
+  id: string
+  buyer: string
+  grain?: string
+  quantity_kg?: number
+  price_per_kg?: number
+  status: string
+}
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
-  }, [])
+type Dispatch = {
+  id: string
+  buyer: string
+  batch: string
+  quantity_kg?: number
+  eta?: string
+  status: string
+}
 
-  const dispatches = [
-    { id: "DSP-2207", buyer: "Sunrise Bakers", batch: "Wheat QR-001", qty: "120 tons", eta: "Today 3:00 PM", status: "scheduled" },
-    { id: "DSP-2199", buyer: "Premium Foods", batch: "Rice QR-145", qty: "90 tons", eta: "Tomorrow 9:30 AM", status: "confirmed" },
-  ]
+const statusOptions = [
+  { value: "all", label: "All statuses" },
+  { value: "active", label: "Active" },
+  { value: "paused", label: "Paused" },
+  { value: "inactive", label: "Inactive" },
+]
 
-  const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+const initialFormState = {
+  name: "",
+  companyName: "",
+  contactName: "",
+  contactEmail: "",
+  contactPhone: "",
+  city: "",
+  status: "active",
+  rating: "4",
+  notes: "",
+}
 
-  // Color chips aligned with Silos/Grain Batches styling
+const formatRelativeDate = (value?: string | null) => {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  const diffMs = Date.now() - date.getTime()
+  const minutes = Math.floor(diffMs / (1000 * 60))
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return date.toLocaleDateString()
+}
+
   const buyerStatusClass = (status: string) => {
     switch (status) {
       case "active":
@@ -57,10 +108,13 @@ export default function BuyersPage() {
   const contractStatusClass = (status: string) => {
     switch (status) {
       case "running":
+    case "processing":
         return "bg-blue-100 text-blue-800"
       case "negotiating":
+    case "on_hold":
         return "bg-yellow-100 text-yellow-800"
       case "completed":
+    case "sold":
         return "bg-gray-100 text-gray-800"
       default:
         return "bg-gray-100 text-gray-800"
@@ -70,15 +124,164 @@ export default function BuyersPage() {
   const dispatchStatusClass = (status: string) => {
     switch (status) {
       case "confirmed":
+    case "dispatched":
         return "bg-green-100 text-green-800"
       case "scheduled":
+    case "processing":
         return "bg-yellow-100 text-yellow-800"
-      case "delivered":
-        return "bg-blue-100 text-blue-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
   }
+
+export default function BuyersPage() {
+  const [buyers, setBuyers] = useState<BuyerRecord[]>([])
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [recentContracts, setRecentContracts] = useState<Contract[]>([])
+  const [upcomingDispatches, setUpcomingDispatches] = useState<Dispatch[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchInput, setSearchInput] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [cityFilter, setCityFilter] = useState("all")
+  const [cityOptions, setCityOptions] = useState<string[]>([])
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [formState, setFormState] = useState(initialFormState)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isSavingBuyer, setIsSavingBuyer] = useState(false)
+
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null
+
+  useEffect(() => {
+    fetchDashboard()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, statusFilter, cityFilter])
+
+  const fetchDashboard = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams()
+      if (searchQuery) params.append("q", searchQuery)
+      if (statusFilter !== "all") params.append("status", statusFilter)
+      if (cityFilter !== "all") params.append("city", cityFilter)
+
+      const res = await fetch(
+        `${config.backendUrl}/api/buyers/dashboard?${params.toString()}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      )
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch buyers")
+      }
+
+      const payload = await res.json()
+      setBuyers(payload.buyers || [])
+      setSummary(payload.summary || null)
+      setRecentContracts(payload.recentContracts || [])
+      setUpcomingDispatches(payload.upcomingDispatches || [])
+
+      const cities = new Set<string>()
+      ;(payload.buyers || []).forEach((buyer: BuyerRecord) => {
+        if (buyer.location?.city) {
+          cities.add(buyer.location.city)
+        }
+      })
+      setCityOptions(Array.from(cities))
+    } catch (err) {
+      console.error(err)
+      setError("Unable to load buyers. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    setSearchQuery(searchInput.trim())
+  }
+
+  const handleAddBuyer = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setFormError(null)
+    setIsSavingBuyer(true)
+
+    try {
+      const res = await fetch(`${config.backendUrl}/api/buyers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: formState.name,
+          companyName: formState.companyName || undefined,
+          contactPerson: {
+            name: formState.contactName,
+            email: formState.contactEmail || undefined,
+            phone: formState.contactPhone || undefined,
+          },
+          location: {
+            city: formState.city || undefined,
+          },
+          status: formState.status,
+          rating: Number(formState.rating) || 4,
+          notes: formState.notes || undefined,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.message || "Failed to create buyer")
+      }
+
+      setFormState(initialFormState)
+      setIsDialogOpen(false)
+      fetchDashboard()
+    } catch (err: any) {
+      setFormError(err.message || "Unable to save buyer")
+    } finally {
+      setIsSavingBuyer(false)
+    }
+  }
+
+  const ordersTotal = useMemo(
+    () => buyers.reduce((sum, buyer) => sum + (buyer.totalOrders || 0), 0),
+    [buyers]
+  )
+
+  const filteredBuyers = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+    return buyers.filter((buyer) => {
+      if (statusFilter !== "all" && buyer.status !== statusFilter) {
+        return false
+      }
+      if (cityFilter !== "all" && buyer.location?.city?.toLowerCase() !== cityFilter.toLowerCase()) {
+        return false
+      }
+      if (!normalizedQuery) return true
+      const haystack = [
+        buyer.name,
+        buyer.company_name,
+        buyer.contact_person?.name,
+        buyer.contact_person?.email,
+        buyer.contact_person?.phone,
+        buyer.location?.city,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+      return haystack.includes(normalizedQuery)
+    })
+  }, [buyers, searchQuery, statusFilter, cityFilter])
 
   if (isLoading) {
     return (
@@ -93,26 +296,179 @@ export default function BuyersPage() {
 
   return (
     <div className="space-y-6">
-      <>
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Buyers Management</h1>
-          <p className="text-muted-foreground">Central registry of grain buyers, contracts and dispatches</p>
+          <p className="text-muted-foreground">
+            Central registry of grain buyers, contracts and dispatches
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Filters
-          </Button>
-          <Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Buyer
           </Button>
+          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+            <div className="max-h-[80vh] overflow-y-auto">
+              <div className="border-b px-6 py-4">
+                <DialogHeader className="space-y-2">
+                  <DialogTitle className="text-xl flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add New Buyer
+                  </DialogTitle>
+                  <DialogDescription>
+                    Capture buyer details so your operations and dispatch teams stay in sync.
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
+              <form className="space-y-6 p-6" onSubmit={handleAddBuyer}>
+                <section className="rounded-2xl border bg-white p-4 space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Basic Information</h4>
+                    <p className="text-sm text-muted-foreground">Buyer identity and brand</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="buyer-name">Buyer name *</Label>
+                      <Input
+                        id="buyer-name"
+                        value={formState.name}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Enter buyer or company name"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="company-name">Company / Brand</Label>
+                      <Input
+                        id="company-name"
+                        value={formState.companyName}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, companyName: e.target.value }))}
+                        placeholder="Enter brand name"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border bg-white p-4 space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Contact Information</h4>
+                    <p className="text-sm text-muted-foreground">Primary contact details</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Contact person *</Label>
+                      <Input
+                        value={formState.contactName}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, contactName: e.target.value }))}
+                        placeholder="Full name"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone</Label>
+                      <Input
+                        value={formState.contactPhone}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, contactPhone: e.target.value }))}
+                        placeholder="+92 300 0000000"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={formState.contactEmail}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                        placeholder="contact@company.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>City</Label>
+                      <Input
+                        value={formState.city}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, city: e.target.value }))}
+                        placeholder="Lahore, Karachi..."
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border bg-white p-4 space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Status & Rating</h4>
+                    <p className="text-sm text-muted-foreground">Operational state and quality score</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={formState.status}
+                        onValueChange={(value) => setFormState((prev) => ({ ...prev, status: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Active" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions
+                            .filter((option) => option.value !== "all")
+                            .map((option) => (
+                              <SelectItem value={option.value} key={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Rating (0-5)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="5"
+                        step="0.1"
+                        value={formState.rating}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, rating: e.target.value }))}
+                      />
         </div>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border bg-white p-4 space-y-2">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Notes</h4>
+                    <p className="text-sm text-muted-foreground">Internal notes for your team</p>
+                  </div>
+                  <Textarea
+                    rows={3}
+                    value={formState.notes}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Add preferences, payment terms, or reminders"
+                  />
+                </section>
+
+                {formError && <p className="text-sm text-red-600">{formError}</p>}
+                <DialogFooter className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                    disabled={isSavingBuyer}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSavingBuyer}>
+                    {isSavingBuyer ? "Saving..." : "Save buyer"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* KPIs */}
+      {summary && (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -120,8 +476,8 @@ export default function BuyersPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{buyers.length}</div>
-            <p className="text-xs text-muted-foreground">+2 this week</p>
+              <div className="text-2xl font-bold">{summary.totalBuyers}</div>
+              <p className="text-xs text-muted-foreground">Across this tenant</p>
           </CardContent>
         </Card>
         <Card>
@@ -129,8 +485,8 @@ export default function BuyersPage() {
             <CardTitle className="text-sm font-medium">Active Contracts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{contracts.filter(c => c.status !== "completed").length}</div>
-            <p className="text-xs text-muted-foreground">Running and negotiating</p>
+              <div className="text-2xl font-bold">{summary.activeContracts}</div>
+              <p className="text-xs text-muted-foreground">Running & negotiating</p>
           </CardContent>
         </Card>
         <Card>
@@ -139,8 +495,8 @@ export default function BuyersPage() {
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dispatches.length}</div>
-            <p className="text-xs text-muted-foreground">Within next 48 hours</p>
+              <div className="text-2xl font-bold">{summary.scheduledDispatches}</div>
+              <p className="text-xs text-muted-foreground">Upcoming deliveries</p>
           </CardContent>
         </Card>
         <Card>
@@ -148,57 +504,75 @@ export default function BuyersPage() {
             <CardTitle className="text-sm font-medium">Top Rating</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">5.0</div>
-            <p className="text-xs text-muted-foreground">Best partner performance</p>
+              <div className="text-2xl font-bold">{summary.topRating ?? "—"}</div>
+              <p className="text-xs text-muted-foreground">Best partner score</p>
           </CardContent>
         </Card>
       </div>
+      )}
 
-      {/* Filters */}
       <Card>
         <CardHeader>
           <CardTitle>Search Buyers</CardTitle>
-          <CardDescription>Search and filter partners</CardDescription>
+          <CardDescription>
+            Search, narrow by status or city, and view live data coming from your batches.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="relative">
+          <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr]">
+            <form className="flex gap-2" onSubmit={handleSearchSubmit}>
+              <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by buyer or contact" className="pl-8" />
+                <Input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search by buyer, contact, email or phone"
+                  className="pl-8"
+                />
             </div>
-            <Select>
+              <Button type="submit" variant="secondary">
+                Search
+              </Button>
+            </form>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="paused">Paused</SelectItem>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Select>
+                <Select value={cityFilter} onValueChange={setCityFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="City" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="lahore">Lahore</SelectItem>
-                <SelectItem value="karachi">Karachi</SelectItem>
-                <SelectItem value="multan">Multan</SelectItem>
-                <SelectItem value="faisalabad">Faisalabad</SelectItem>
+                <SelectItem value="all">All cities</SelectItem>
+                {cityOptions.map((city) => (
+                  <SelectItem key={city} value={city}>
+                    {city}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+          {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
         </CardContent>
       </Card>
 
-      {/* Buyers table */}
       <Card>
         <CardHeader>
           <CardTitle>Buyers Directory</CardTitle>
-          <CardDescription>Contacts, locations and performance</CardDescription>
+          <CardDescription>
+            Contacts, locations and live order history (linked with grain batches)
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="w-full">
+          <div className="w-full overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -212,61 +586,102 @@ export default function BuyersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {buyers.map((b) => (
-                  <TableRow key={b.id}>
+                {filteredBuyers.map((buyer) => (
+                  <TableRow key={buyer._id}>
                     <TableCell>
-                      <div className="font-medium">{b.name}</div>
+                      <div className="font-medium">{buyer.name}</div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Mail className="h-3 w-3" />{b.email}
+                        <Mail className="h-3 w-3" />
+                        {buyer.contact_person?.email || "—"}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Phone className="h-3 w-3 text-muted-foreground" />
-                        <span>{b.contact} • {b.phone}</span>
+                        <span>
+                          {buyer.contact_person?.name}
+                          {buyer.contact_person?.phone ? ` • ${buyer.contact_person.phone}` : ""}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <MapPin className="h-3 w-3 text-muted-foreground" />
-                        <span>{b.location}</span>
+                        <span>{buyer.location?.city || "—"}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{b.totalOrders}</TableCell>
-                    <TableCell className="text-muted-foreground">{b.lastOrder}</TableCell>
+                    <TableCell>{buyer.totalOrders ?? 0}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatRelativeDate(buyer.lastOrderDate)}
+                    </TableCell>
                     <TableCell>
-                      <Badge className={buyerStatusClass(b.status)}>{capitalize(b.status)}</Badge>
+                      <Badge className={buyerStatusClass(buyer.status)}>
+                        {buyer.status ? buyer.status.charAt(0).toUpperCase() + buyer.status.slice(1) : "—"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline">View</Button>
-                        <Button size="sm" variant="outline">Edit</Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>View buyer</DropdownMenuItem>
+                          <DropdownMenuItem>Edit buyer</DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-600">Delete buyer</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
+                {filteredBuyers.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        {buyers.length === 0
+                          ? "No buyers found. Use the Add Buyer button to get started."
+                          : "No buyers match this search/filter."}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </CardContent>
+        <CardFooter className="flex justify-between text-sm text-muted-foreground">
+          <span>Total tracked orders: {ordersTotal}</span>
+          <span>Displaying {filteredBuyers.length} buyers</span>
+        </CardFooter>
       </Card>
 
-      {/* Contracts and Dispatches */}
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Recent Contracts</CardTitle>
-            <CardDescription>Key buyer agreements</CardDescription>
+            <CardDescription>Live data derived from dispatched grain batches</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {contracts.map((c) => (
-                <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
+              {recentContracts.length === 0 && (
+                <p className="text-sm text-muted-foreground">No recent contracts.</p>
+              )}
+              {recentContracts.map((contract) => (
+                <div key={contract.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
-                    <div className="font-medium">{c.id} • {c.buyer}</div>
-                    <div className="text-sm text-muted-foreground">{c.grain} • {c.qty} • {c.price}</div>
+                    <div className="font-medium">
+                      {contract.id} • {contract.buyer}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {contract.grain || "—"} •{" "}
+                      {contract.quantity_kg ? `${Math.round(contract.quantity_kg).toLocaleString()} kg` : "—"}{" "}
+                      • {contract.price_per_kg ? `$${contract.price_per_kg}/kg` : "N/A"}
+                    </div>
                   </div>
-                  <Badge className={contractStatusClass(c.status)}>{capitalize(c.status)}</Badge>
+                  <Badge className={contractStatusClass(contract.status)}>
+                    {contract.status}
+                  </Badge>
                 </div>
               ))}
             </div>
@@ -276,32 +691,43 @@ export default function BuyersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Upcoming Dispatches</CardTitle>
-            <CardDescription>Scheduled deliveries to buyers</CardDescription>
+            <CardDescription>Based on expected dispatch dates in grain batches</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {dispatches.map((d) => (
-                <div key={d.id} className="flex items-center justify-between p-3 border rounded-lg">
+              {upcomingDispatches.length === 0 && (
+                <p className="text-sm text-muted-foreground">No upcoming dispatches.</p>
+              )}
+              {upcomingDispatches.map((dispatch) => (
+                <div key={dispatch.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
-                    <div className="font-medium">{d.id} • {d.buyer}</div>
-                    <div className="text-sm text-muted-foreground">{d.batch} • {d.qty} • {d.eta}</div>
+                    <div className="font-medium">
+                      {dispatch.id} • {dispatch.buyer}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {dispatch.batch} •{" "}
+                      {dispatch.quantity_kg ? `${Math.round(dispatch.quantity_kg).toLocaleString()} kg` : "—"} •{" "}
+                      {dispatch.eta ? new Date(dispatch.eta).toLocaleString() : "—"}
+                    </div>
                   </div>
-                  <Badge className={dispatchStatusClass(d.status)}>{capitalize(d.status)}</Badge>
+                  <Badge className={dispatchStatusClass(dispatch.status)}>
+                    {dispatch.status.charAt(0).toUpperCase() + dispatch.status.slice(1)}
+                  </Badge>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
       {buyers.length === 0 && (
         <Card>
           <CardContent className="text-center py-12">
             <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500">No buyers found</p>
+            <p className="text-gray-500">No buyers found.</p>
           </CardContent>
         </Card>
       )}
-      </>
     </div>
   )
 }

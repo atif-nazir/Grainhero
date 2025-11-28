@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { WheatIcon as Sheep, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react"
 import { config } from "@/config"
 import { useTranslations } from 'next-intl';
+import { useRouter } from "@/i18n/navigation"
 import {
   validateSignupForm,
   validateField,
@@ -59,6 +60,17 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, feedback: [], isValid: false })
+
+  const handlePostSignupRedirect = (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pendingSignupEmail', normalizedEmail)
+    }
+    setMessage("Account created successfully! Redirecting you to login.")
+    setTimeout(() => {
+      router.push(`/auth/login?prefill=${encodeURIComponent(normalizedEmail)}`)
+    }, 1500)
+  }
 
   // Verify invitation token and handle payment success on component mount
   useEffect(() => {
@@ -159,10 +171,7 @@ export default function SignUpPage() {
           const error = await res.json().catch(() => ({}))
           setMessage(error?.message || "Signup failed. Please try again.")
         } else {
-          setMessage("Account created successfully! Please login to access your dashboard.")
-          setTimeout(() => {
-            router.push("/auth/login")
-          }, 2000)
+          handlePostSignupRedirect(formData.email)
         }
       } else {
         // First-time users need to verify payment first
@@ -212,25 +221,7 @@ export default function SignUpPage() {
           const error = await res.json().catch(() => ({}))
           setMessage(error?.message || "Signup failed. Please try again.")
         } else {
-          const data = await res.json()
-          console.log("Signup response:", data)
-          
-          if (data.token && data.user) {
-            // User is already logged in, redirect to dashboard
-            setMessage("Account created successfully! Redirecting to dashboard...")
-            localStorage.setItem("token", data.token)
-            localStorage.setItem("farm-home-user", JSON.stringify(data.user))
-            localStorage.setItem("farm-home-access", data.hasAccess || "none")
-            setTimeout(() => {
-              router.push("/dashboard")
-            }, 2000)
-          } else {
-            // Regular signup, redirect to login
-            setMessage("Account created successfully! Please login to access your dashboard.")
-            setTimeout(() => {
-              router.push("/auth/login")
-            }, 2000)
-          }
+          handlePostSignupRedirect(formData.email)
         }
       }
     } catch {

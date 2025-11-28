@@ -28,6 +28,7 @@ const iotRoute = require("./routes/iot");
 const dataVisualizationRoute = require("./routes/dataVisualization");
 const silosRoute = require("./routes/silos");
 const insuranceRoute = require("./routes/insurance");
+const buyersRoute = require("./routes/buyers");
 const environmentalRoute = require("./routes/environmental");
 
 // Super Admin routes
@@ -158,6 +159,10 @@ app.use("/api/environmental", environmentalRoute);
 app.use("/api/tenant-management", tenantManagementRoute);
 app.use("/api/plan-management", planManagementRoute);
 
+// Subscription Analytics routes
+const subscriptionAnalyticsRoute = require("./routes/subscriptionAnalytics");
+app.use("/api/subscription-analytics", subscriptionAnalyticsRoute);
+
 // User Management routes
 app.use("/api/user-management", userManagementRoute);
 
@@ -177,9 +182,9 @@ const swaggerOptions = {
   swaggerDefinition: {
     openapi: "3.0.0",
     info: {
-      title: "Farm Home Backend API",
+      title: "GrainHero Backend API",
       version: "1.0.0",
-      description: "API documentation for Farm Home Backend",
+      description: "API documentation for GrainHero Backend",
     },
     servers: [
       {

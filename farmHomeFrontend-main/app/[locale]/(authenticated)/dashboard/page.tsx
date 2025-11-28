@@ -8,42 +8,33 @@ import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
 import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { 
-  AlertCircle, 
-  Package, 
-  TrendingUp, 
-  Users, 
-  Activity, 
-  Warehouse, 
-  DollarSign, 
-  AlertTriangle, 
-  PieChart, 
-  Shield, 
-  Thermometer, 
-  Droplets, 
+import {
+  AlertCircle,
+  Package,
+  TrendingUp,
+  Users,
+  Activity,
+  Warehouse,
+  DollarSign,
+  AlertTriangle,
+  Shield,
+  Thermometer,
+  Droplets,
   Wind,
-  BarChart3,
-  Clock
+  Smartphone
 } from "lucide-react"
-import { AnimatedSilo, SiloGrid } from "@/components/animations/AnimatedSilo"
-import { 
-  AnimatedBarChart, 
-  AnimatedLineChart, 
-  AnimatedPieChart, 
+import {
+  AnimatedBarChart,
+  AnimatedLineChart,
+  AnimatedPieChart,
   AnimatedAreaChart,
-  AnimatedMetricCard 
+  AnimatedMetricCard
 } from "@/components/animations/AnimatedCharts"
-import { 
-  AnimatedBackground, 
-  FloatingElements, 
-  InteractiveCard,
-  AnimatedText,
-  AnimatedCounter,
-  AnimatedProgressBar,
-  AnimatedFeatureGrid
+import {
+  AnimatedBackground,
+  AnimatedCounter
 } from "@/components/animations/MotionGraphics"
 
 // Helper function for status colors
@@ -85,93 +76,148 @@ const getRiskColor = (risk: string) => {
   }
 }
 
-// Mock data for dashboard
-const dashboardData = {
-  overview: {
-    totalBatches: 156,
-    totalSilos: 12,
-    totalCapacity: 50000, // kg
-    currentStock: 42500, // kg
-    utilizationRate: 85, // %
-    activeAlerts: 8,
-    monthlyRevenue: 2850000, // PKR
-    activeBuyers: 24
-  },
-  recentBatches: [
-    { id: "GH001", grain: "Wheat", quantity: 2500, status: "Stored", silo: "Silo A", date: "2024-01-15", risk: "Low" },
-    { id: "GH002", grain: "Rice", quantity: 3200, status: "Processing", silo: "Silo B", date: "2024-01-14", risk: "Medium" },
-    { id: "GH003", grain: "Corn", quantity: 1800, status: "Dispatched", silo: "Silo C", date: "2024-01-13", risk: "Low" },
-    { id: "GH004", grain: "Wheat", quantity: 2100, status: "Quality Check", silo: "Silo D", date: "2024-01-12", risk: "High" }
-  ],
-  siloStatus: [
-    { id: "Silo A", capacity: 5000, current: 4200, grain: "Wheat", temp: 22, humidity: 45, status: "Optimal" },
-    { id: "Silo B", capacity: 4500, current: 3800, grain: "Rice", temp: 24, humidity: 52, status: "Warning" },
-    { id: "Silo C", capacity: 3000, current: 1500, grain: "Corn", temp: 21, humidity: 40, status: "Optimal" },
-    { id: "Silo D", capacity: 4000, current: 3200, grain: "Mixed", temp: 26, humidity: 58, status: "Critical" }
-  ],
-  alerts: [
-    { id: 1, type: "Temperature", message: "High temperature detected in Silo B", severity: "Medium", time: "2 hours ago" },
-    { id: 2, type: "Humidity", message: "Humidity levels critical in Silo D", severity: "High", time: "30 minutes ago" },
-    { id: 3, type: "Stock", message: "Silo C running low on stock", severity: "Low", time: "1 hour ago" },
-    { id: 4, type: "Quality", message: "Quality check required for Batch GH004", severity: "High", time: "45 minutes ago" }
-  ],
-  analytics: {
-    monthlyIntake: [
-      { month: "Jan", wheat: 12000, rice: 8000, corn: 5000 },
-      { month: "Feb", wheat: 15000, rice: 9500, corn: 6200 },
-      { month: "Mar", wheat: 13500, rice: 7800, corn: 5800 },
-      { month: "Apr", wheat: 16000, rice: 10200, corn: 7000 }
-    ],
-    grainDistribution: [
-      { grain: "Wheat", percentage: 45, quantity: 19125 },
-      { grain: "Rice", percentage: 32, quantity: 13600 },
-      { grain: "Corn", percentage: 23, quantity: 9775 }
-    ],
-    qualityMetrics: {
-      excellent: 65,
-      good: 25,
-      fair: 8,
-      poor: 2
-    }
-  },
-  sensors: [
-    { id: "TEMP-001", type: "Temperature", value: 22.5, unit: "°C", status: "Normal", location: "Silo A" },
-    { id: "HUM-001", type: "Humidity", value: 45.2, unit: "%", status: "Normal", location: "Silo A" },
-    { id: "TEMP-002", type: "Temperature", value: 26.8, unit: "°C", status: "Warning", location: "Silo D" },
-    { id: "CO2-001", type: "CO2", value: 420, unit: "ppm", status: "Normal", location: "Silo B" }
-  ]
+interface DashboardStat {
+  title: string
+  value: string | number
 }
+
+interface DashboardBatch {
+  id: string
+  grain: string
+  quantity: number
+  status: string
+  silo: string
+  date: string
+  risk: string
+}
+
+interface DashboardAlert {
+  id: string
+  type: string
+  message: string
+  severity: string
+  time: string
+}
+
+interface DashboardAnalytics {
+  monthlyIntake: Array<{ month: string; total: number }>
+  grainDistribution: Array<{ grain: string; percentage: number; quantity: number }>
+  qualityMetrics: Array<{ quality: string; value: number }>
+}
+
+interface DashboardSensor {
+  id: string
+  type: string
+  value: number
+  unit: string
+  status: string
+  location: string
+  lastReading: string
+  battery: number
+  signal: number
+}
+
+interface DashboardBusiness {
+  activeBuyers: number
+  avgPricePerKg: number
+  dispatchRate: number
+  qualityScore: number
+}
+
+interface DashboardSuggestion {
+  siloId: string
+  name: string
+  reason: string
+}
+
+interface DashboardApi {
+  stats: DashboardStat[]
+  storageDistribution: Array<{ status: string; count: number }>
+  grainTypeDistribution: Array<{ grainType: string; count: number }>
+  capacityStats: {
+    totalCapacity: number
+    totalCurrentQuantity: number
+    utilizationPercentage: number
+  }
+  suggestions: {
+    criticalStorage: DashboardSuggestion[]
+    optimization: DashboardSuggestion[]
+  }
+  recentBatches: DashboardBatch[]
+  alerts: DashboardAlert[]
+  analytics: DashboardAnalytics
+  sensors: DashboardSensor[]
+  business: DashboardBusiness
+}
+
+type IconType = typeof Package
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const [aiStats, setAiStats] = useState<{
-    total_predictions?: number
-    high_risk_predictions?: number
-    [key: string]: any
-  } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [dashboard, setDashboard] = useState<DashboardApi | null>(null)
+  const [error, setError] = useState<string>("")
+  const [sensors, setSensors] = useState<DashboardSensor[]>([])
+  const [loadingSensors, setLoadingSensors] = useState(false)
+  const [errorSensors, setErrorSensors] = useState<string>('')
 
   useEffect(() => {
-    const fetchAIData = async () => {
+    const fetchData = async () => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
-        const res = await fetch(`${backendUrl}/ai-spoilage/statistics`, {
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-        })
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        // Dashboard Overview
+        const res = await fetch(`${backendUrl}/dashboard`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
         if (res.ok) {
           const data = await res.json()
-          setAiStats(data)
+          setDashboard(data)
+        } else {
+          setError('Failed to load dashboard stats')
         }
-      } catch (error) {
-        console.error('Error fetching AI stats:', error)
+      } catch {
+        setError('Server Error')
       } finally {
         setLoading(false)
       }
     }
-    fetchAIData()
+    fetchData()
   }, [])
+
   const userRole = user?.role || "technician"
+
+  const metricIconMap: Record<string, { icon: IconType; color: string }> = {
+    "Total Grain Batches": { icon: Package, color: "blue" },
+    "Storage Utilization": { icon: Warehouse, color: "green" },
+    "Recent Incidents (last month)": { icon: AlertTriangle, color: "yellow" },
+    "Active Users": { icon: Users, color: "purple" },
+    "Active Alerts": { icon: AlertTriangle, color: "red" },
+  }
+
+  const formatDate = (value?: string | Date) => {
+    if (!value) return "N/A"
+    const date = typeof value === "string" ? new Date(value) : value
+    return date.toLocaleDateString()
+  }
+
+  const fetchLiveSensors = async () => {
+    setLoadingSensors(true)
+    setErrorSensors('')
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      const res = await fetch(`${backendUrl}/dashboard/live-sensors`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+      if (res.ok) {
+        const data = await res.json()
+        setSensors(Array.isArray(data) ? data : data.sensors || [])
+      } else {
+        setErrorSensors('Failed to load live sensor data.')
+      }
+    } catch {
+      setErrorSensors('Could not fetch live sensor data.')
+    } finally {
+      setLoadingSensors(false)
+    }
+  }
 
   // Render role-specific dashboard
   const renderDashboard = () => {
@@ -196,306 +242,299 @@ export default function DashboardPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="mx-auto mb-4 animate-pulse">
+            <svg className="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.3" strokeWidth="4" />
+            </svg>
+          </div>
+          <p className="text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center text-red-500 font-bold">{error}</div>
+      </div>
+    )
+  }
+
   return (
     <AnimatedBackground className="min-h-screen">
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">
-            Welcome back, {user?.name || "User"}!
-          </h2>
-          <p className="text-muted-foreground">
-            Here's what's happening with your {userRole.replace('_', ' ')} dashboard today.
-          </p>
+        <div className="flex items-center justify-between space-y-2">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">
+              Welcome back, {user?.name || "User"}!
+            </h2>
+            <p className="text-muted-foreground">
+              Here&apos;s what&apos;s happening with your {userRole.replace('_', ' ')} dashboard today.
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Animated Key Metrics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <AnimatedMetricCard
-          title="Total Batches"
-          value={<AnimatedCounter end={aiStats?.total_predictions || dashboardData.overview.totalBatches} />}
-          change={12}
-          icon={Package}
-          color="blue"
-        />
+        {/* Animated Key Metrics Cards (using real dashboard API) */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {dashboard?.stats?.map((stat, i) => {
+            const config = metricIconMap[stat.title] || { icon: Activity, color: "blue" }
+            const valueNode =
+              typeof stat.value === 'number'
+                ? <AnimatedCounter end={stat.value} />
+                : stat.value
+            return (
+              <AnimatedMetricCard
+                key={i}
+                title={stat.title}
+                value={valueNode}
+                icon={config.icon}
+                color={config.color}
+              />
+            )
+          })}
+        </div>
 
-        <AnimatedMetricCard
-          title="Storage Utilization"
-          value={`${dashboardData.overview.utilizationRate}%`}
-          change={5}
-          icon={Warehouse}
-          color="green"
-        />
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+            {(userRole === "super_admin" || userRole === "admin") && (
+              <TabsTrigger value="business">Business</TabsTrigger>
+            )}
+          </TabsList>
 
-        <AnimatedMetricCard
-          title="Monthly Revenue"
-          value={`PKR ${(dashboardData.overview.monthlyRevenue / 1000000).toFixed(1)}M`}
-          change={8}
-          icon={DollarSign}
-          color="purple"
-        />
-
-        <AnimatedMetricCard
-          title="Active Alerts"
-          value={aiStats?.high_risk_predictions || dashboardData.overview.activeAlerts}
-          change={-2}
-          icon={AlertTriangle}
-          color="red"
-        />
-      </div>
-
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="monitoring">Live Monitoring</TabsTrigger>
-          {(userRole === "super_admin" || userRole === "admin") && (
-            <TabsTrigger value="business">Business</TabsTrigger>
-          )}
-        </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            {/* Recent Batches */}
-            <Card className="col-span-4">
-              <CardHeader>
-                <CardTitle>Recent Grain Batches</CardTitle>
-                <CardDescription>Latest batch activities and status updates</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {dashboardData.recentBatches.map((batch) => (
-                    <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <div>
-                          <div className="font-medium">{batch.id} - {batch.grain}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {batch.quantity} kg • {batch.silo} • {batch.date}
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+              <Card className="col-span-4">
+                <CardHeader>
+                  <CardTitle>Recent Grain Batches</CardTitle>
+                  <CardDescription>Latest batch activities and status updates</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {dashboard?.recentBatches?.length ? (
+                      dashboard.recentBatches.map((batch) => (
+                        <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                            <div>
+                              <div className="font-medium">{batch.id} - {batch.grain}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {batch.quantity} kg • {batch.silo} • {formatDate(batch.date)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant={getStatusColor(batch.status)}>{batch.status}</Badge>
+                            <span className={`text-xs font-medium ${getRiskColor(batch.risk)}`}>
+                              {batch.risk} Risk
+                            </span>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={getStatusColor(batch.status)}>{batch.status}</Badge>
-                        <span className={`text-xs font-medium ${getRiskColor(batch.risk)}`}>
-                          {batch.risk} Risk
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No recent batches yet.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Animated 3D Silo Status */}
-            <Card className="col-span-3">
+              {/* Storage Distribution chart */}
+              <Card className="col-span-3">
+                <CardHeader>
+                  <CardTitle>Storage Distribution</CardTitle>
+                  <CardDescription>Real-time storage status across all silos</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {dashboard?.storageDistribution?.length ? (
+                    <AnimatedPieChart
+                      data={dashboard.storageDistribution.map(d => ({ name: d.status, value: d.count }))}
+                      title="Silo Storage Status"
+                    />
+                  ) : <div>No silo data</div>}
+                </CardContent>
+              </Card>
+
+            </div>
+
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Warehouse className="w-5 h-5 mr-2" />
-                  Silo Status
+                  <AlertTriangle className="mr-2 h-5 w-5 text-orange-500" />
+                  Active Alerts
                 </CardTitle>
-                <CardDescription>Interactive 3D storage visualization</CardDescription>
               </CardHeader>
               <CardContent>
-                <SiloGrid 
-                  silos={dashboardData.siloStatus.map(silo => ({
-                    fillLevel: (silo.current / silo.capacity) * 100,
-                    capacity: silo.capacity,
-                    grainType: silo.grain,
-                    temperature: silo.temp,
-                    humidity: silo.humidity,
-                    status: silo.status.toLowerCase() as 'optimal' | 'warning' | 'critical'
-                  }))}
-                />
+                <div className="grid gap-4 md:grid-cols-2">
+                  {dashboard?.alerts?.length ? (
+                    dashboard.alerts.map((alert) => (
+                      <div key={alert.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${alert.severity.toLowerCase() === "high" ? "bg-red-500" :
+                            alert.severity.toLowerCase() === "medium" ? "bg-yellow-500" : "bg-blue-500"
+                            }`} />
+                          <div>
+                            <div className="font-medium text-sm">{alert.type}</div>
+                            <div className="text-sm text-muted-foreground">{alert.message}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant={getStatusColor(alert.severity)}>{alert.severity}</Badge>
+                          <div className="text-xs text-muted-foreground mt-1">{formatDate(alert.time)}</div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No active alerts 🎉</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
-        </div>
-
-          {/* Alerts */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <AlertTriangle className="mr-2 h-5 w-5 text-orange-500" />
-                Active Alerts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                {dashboardData.alerts.map((alert) => (
-                  <div key={alert.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        alert.severity === "High" ? "bg-red-500" :
-                        alert.severity === "Medium" ? "bg-yellow-500" : "bg-blue-500"
-                      }`}></div>
-                      <div>
-                        <div className="font-medium text-sm">{alert.type}</div>
-                        <div className="text-sm text-muted-foreground">{alert.message}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={getStatusColor(alert.severity)}>{alert.severity}</Badge>
-                      <div className="text-xs text-muted-foreground mt-1">{alert.time}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Animated Analytics Tab */}
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <AnimatedPieChart
-              data={dashboardData.analytics.grainDistribution.map(grain => ({
-                name: grain.grain,
-                value: grain.percentage
-              }))}
-              title="Grain Distribution"
-            />
-
-            <AnimatedBarChart
-              data={Object.entries(dashboardData.analytics.qualityMetrics).map(([quality, percentage]) => ({
-                name: quality.charAt(0).toUpperCase() + quality.slice(1),
-                value: percentage
-              }))}
-              title="Quality Distribution"
-            />
-          </div>
-
-          <AnimatedAreaChart
-            data={dashboardData.analytics.monthlyIntake.map(month => ({
-              name: month.month,
-              value: month.wheat + month.rice + month.corn
-            }))}
-            title="Monthly Grain Intake Trends"
-          />
-        </TabsContent>
-
-        {/* Live Monitoring Tab */}
-        <TabsContent value="monitoring" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {dashboardData.sensors.map((sensor) => (
-              <Card key={sensor.id}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center">
-                    {sensor.type === "Temperature" && <Thermometer className="mr-2 h-4 w-4" />}
-                    {sensor.type === "Humidity" && <Droplets className="mr-2 h-4 w-4" />}
-                    {sensor.type === "CO2" && <Wind className="mr-2 h-4 w-4" />}
-                    {sensor.type}
-                  </CardTitle>
-                  <CardDescription>{sensor.location}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-2xl font-bold">
-                      {sensor.value} {sensor.unit}
-                    </div>
-                    <Badge variant={getStatusColor(sensor.status)}>{sensor.status}</Badge>
-                    <div className="flex items-center text-xs text-muted-foreground">
-                      <Clock className="mr-1 h-3 w-3" />
-                      Last updated: 2 min ago
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Environmental Trends */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Activity className="mr-2 h-5 w-5" />
-                Environmental Trends (Last 24 Hours)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-2" />
-                  <p>Live environmental data visualization</p>
-                  <p className="text-sm">Charts will be integrated with real sensor data</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Business Tab (Admin/Super Admin only) */}
-        {(userRole === "super_admin" || userRole === "admin") && (
-          <TabsContent value="business" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Buyers</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{dashboardData.overview.activeBuyers}</div>
-                  <p className="text-xs text-muted-foreground">+3 new this month</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Avg. Price/kg</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-                  <div className="text-2xl font-bold">PKR 85</div>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="text-green-600">+5%</span> from last week
-                  </p>
-          </CardContent>
-        </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Dispatch Rate</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-                  <div className="text-2xl font-bold">92%</div>
-                  <p className="text-xs text-muted-foreground">On-time deliveries</p>
-          </CardContent>
-        </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Quality Score</CardTitle>
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">4.8/5</div>
-                  <p className="text-xs text-muted-foreground">Customer satisfaction</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Revenue Chart */}
-            <Card>
-          <CardHeader>
-                <CardTitle>Revenue & Profit Analysis</CardTitle>
-          </CardHeader>
-          <CardContent>
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <TrendingUp className="h-12 w-12 mx-auto mb-2" />
-                    <p>Revenue trends and profit margins</p>
-                    <p className="text-sm">Financial analytics dashboard</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
           </TabsContent>
-        )}
-      </Tabs>
-      {renderDashboard()}
+
+          <TabsContent value="analytics" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <AnimatedPieChart
+                data={dashboard?.analytics?.grainDistribution?.map(grain => ({
+                  name: grain.grain,
+                  value: grain.percentage
+                })) || []}
+                title="Grain Distribution"
+              />
+
+              <AnimatedBarChart
+                data={dashboard?.analytics?.qualityMetrics?.map(metric => ({
+                  name: metric.quality,
+                  value: metric.value
+                })) || []}
+                title="Quality Distribution"
+              />
+            </div>
+
+            <AnimatedAreaChart
+              data={dashboard?.analytics?.monthlyIntake?.map(month => ({
+                name: month.month,
+                value: month.total
+              })) || []}
+              title="Monthly Grain Intake Trends"
+            />
+          </TabsContent>
+
+          <TabsContent value="monitoring" className="space-y-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xl font-semibold">IoT Sensors (Live)</h3>
+              <button className="rounded px-3 py-1 border text-sm hover:bg-muted transition" onClick={fetchLiveSensors} disabled={loadingSensors}>Refresh</button>
+            </div>
+            {loadingSensors ? (
+              <div className="py-6 text-center text-gray-500">Loading live sensors...</div>
+            ) : errorSensors ? (
+              <div className="py-6 text-center text-red-500">{errorSensors}</div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {sensors.length ? sensors.map(sensor => (
+                  <Card key={sensor.id}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center">
+                        {sensor.type === 'temperature' && <Thermometer className="mr-2 h-4 w-4" />}
+                        {sensor.type === 'humidity' && <Droplets className="mr-2 h-4 w-4" />}
+                        {sensor.type === 'co2' && <Wind className="mr-2 h-4 w-4" />}
+                        {sensor.type.charAt(0).toUpperCase() + sensor.type.slice(1)}
+                      </CardTitle>
+                      <CardDescription>{sensor.location}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="text-2xl font-bold">
+                          {sensor.value} {sensor.unit}
+                        </div>
+                        <Badge variant={getStatusColor(sensor.status)}>{sensor.status}</Badge>
+                        <div className="text-xs text-muted-foreground">Last reading: {formatDate(sensor.lastReading)}</div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Battery</span> <span>{sensor.battery}%</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Signal</span> <span>{sensor.signal} dBm</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )) : (
+                  <Card className="col-span-full">
+                    <CardContent className="text-center py-12">
+                      <Smartphone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                      <p className="text-gray-500">No sensors registered yet.</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          {(userRole === "super_admin" || userRole === "admin") && (
+            <TabsContent value="business" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Buyers</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{dashboard?.business?.activeBuyers ?? 0}</div>
+                    <p className="text-xs text-muted-foreground">Engaged buyers this month</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Avg. Price/kg</CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">PKR {dashboard?.business?.avgPricePerKg?.toFixed(2) ?? "0.00"}</div>
+                    <p className="text-xs text-muted-foreground">Based on recent batches</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Dispatch Rate</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{dashboard?.business?.dispatchRate ?? 0}%</div>
+                    <p className="text-xs text-muted-foreground">On-time deliveries</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Quality Score</CardTitle>
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{dashboard?.business?.qualityScore ?? 0}/5</div>
+                    <p className="text-xs text-muted-foreground">Customer satisfaction</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <AnimatedLineChart
+                data={dashboard?.analytics?.monthlyIntake?.map(month => ({
+                  name: month.month,
+                  value: month.total
+                })) || []}
+                title="Revenue & Throughput Trends"
+              />
+            </TabsContent>
+          )}
+        </Tabs>
+        {renderDashboard()}
       </div>
     </AnimatedBackground>
   )

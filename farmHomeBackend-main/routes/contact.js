@@ -91,13 +91,18 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Create email transporter
+    // Create email transporter (prefer STARTTLS on 587; fall back to service if needed)
+    const smtpUser = process.env.EMAIL_USER || "noreply.grainhero1@gmail.com";
+    const smtpPass = process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD;
+
     const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER || "noreply.grainhero1@gmail.com",
-        pass: process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD,
-      },
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: false, // STARTTLS
+      auth: { user: smtpUser, pass: smtpPass },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 15000,
+      socketTimeout: 20000,
     });
 
     // Email content
@@ -120,8 +125,11 @@ Submitted on: ${new Date().toLocaleString()}
 
     // Send email to admin
     const mailOptions = {
-      from: process.env.EMAIL_USER || "noreply.grainhero1@gmail.com",
-      to: "noreply.grainhero1@gmail.com",
+      from: smtpUser,
+      to:
+        process.env.SUPPORT_EMAIL ||
+        process.env.EMAIL_TO ||
+        "noreply.grainhero1@gmail.com",
       subject: `GrainHero Contact: ${inquiry} - ${name}`,
       text: emailContent,
       replyTo: email,
@@ -147,7 +155,7 @@ GrainHero Team
     `;
 
     const autoReplyOptions = {
-      from: process.env.EMAIL_USER || "noreply.grainhero1@gmail.com",
+      from: smtpUser,
       to: email,
       subject: "Thank you for contacting GrainHero",
       text: autoReplyContent,

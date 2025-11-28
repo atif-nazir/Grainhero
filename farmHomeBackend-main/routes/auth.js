@@ -205,12 +205,29 @@ router.post("/signup", async (req, res) => {
             "Found pending user with payment, updating to admin:",
             email
           );
+
+          // Import plan mapping to set subscription_plan correctly
+          const {
+            checkoutPlanIdToPlanKey,
+          } = require("../configs/plan-mapping");
+
           // Update the existing user with password and role
           existingUser.name = name;
           existingUser.phone = phone || existingUser.phone;
           existingUser.password = password;
           existingUser.role = "admin"; // Set as admin since they paid
           existingUser.emailVerified = true;
+
+          // Ensure subscription_plan is set from hasAccess
+          if (
+            existingUser.hasAccess &&
+            existingUser.hasAccess !== "none" &&
+            !existingUser.subscription_plan
+          ) {
+            existingUser.subscription_plan = checkoutPlanIdToPlanKey(
+              existingUser.hasAccess
+            );
+          }
 
           try {
             await existingUser.save();
@@ -676,7 +693,7 @@ router.post("/forget-password", async (req, res) => {
                 <a href="${resetLink}" style="display: inline-block; margin: 24px 0; padding: 12px 28px; background: #3182ce; color: #fff; text-decoration: none; border-radius: 4px; font-weight: bold;">Reset Password</a>
                 <p style="color: #718096; font-size: 13px;">If you did not request a password reset, you can safely ignore this email.</p>
                 <hr style="margin: 24px 0; border: none; border-top: 1px solid #e2e8f0;">
-                <p style="color: #a0aec0; font-size: 12px;">&copy; ${new Date().getFullYear()} FarmHome. All rights reserved.</p>
+                <p style="color: #a0aec0; font-size: 12px;">&copy; ${new Date().getFullYear()} GrainHero. All rights reserved.</p>
             </div>
         `;
     // Send email with HTML content

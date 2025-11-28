@@ -30,7 +30,7 @@
   },
   "AuthPage": {
     "welcomeBack": "Nnọọ laghachi",
-    "signInToAccount": "Banye na akaụntụ Farm Home gị",
+    "signInToAccount": "Banye na akaụntụ GrainHero gị",
     "email": "Email",
     "password": "Okwuntughe",
     "signingIn": "Na-abanye...",
@@ -42,7 +42,7 @@
     "networkError": "Njehie netwọk. Biko gbalịa ọzọ.",
     "loginSuccess": "Mbanye gara nke ọma! Ana ebuga gị...",
     "createAccount": "Mepụta Akaụntụ",
-    "signUpForFarmHome": "Debanye aha maka Farm Home (Ndebanye Admin)",
+    "signUpForFarmHome": "Debanye aha maka GrainHero (Ndebanye Admin)",
     "fullName": "Aha zuru ezu",
     "phoneNumber": "Nọmba ekwentị",
     "optional": "(nhọrọ)",

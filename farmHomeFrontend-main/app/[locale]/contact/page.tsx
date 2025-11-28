@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { WheatIcon as Sheep, Mail, Phone, MapPin, CheckCircle, AlertCircle } from "lucide-react"
+import { Wheat as WheatIcon, Mail, Phone, MapPin, CheckCircle, AlertCircle } from "lucide-react"
 
 export default function ContactPage() {
     const searchParams = useSearchParams()
@@ -82,22 +82,22 @@ export default function ContactPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
+        <div className="min-h-screen bg-white">
             {/* Hero Section */}
-            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white py-16">
+            <div className="bg-gradient-to-r from-[#effbf7] to-white text-black py-16 border-b">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center">
                         <div className="flex justify-center mb-6">
-                            <div className="bg-white/10 backdrop-blur-sm rounded-full p-4">
-                                <Sheep className="h-12 w-12 text-white" />
+                            <div className="bg-[#00a63e]/10 rounded-full p-4">
+                                <WheatIcon className="h-12 w-12 text-[#00a63e]" />
                             </div>
                         </div>
                         <h1 className="text-4xl md:text-5xl font-bold mb-6">
                             {planType === 'custom' ? 'Custom Solution Inquiry' : 'Contact Us'}
                         </h1>
-                        <p className="text-xl md:text-2xl text-green-100 max-w-4xl mx-auto leading-relaxed">
+                        <p className="text-xl md:text-2xl text-gray-700 max-w-4xl mx-auto leading-relaxed">
                             {planType === 'custom'
-                                ? 'Let&apos;s discuss your custom grain management solution requirements and create the perfect solution for your business'
+                                ? "Let's discuss your custom grain management solution requirements and create the perfect solution for your business"
                                 : 'Get in touch with our team for support, questions, or partnership opportunities'
                             }
                         </p>
@@ -112,7 +112,7 @@ export default function ContactPage() {
                         {/* Contact Form */}
                         <div className="lg:col-span-2">
                             <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-                                <CardHeader className="bg-gradient-to-r from-green-50 to-blue-50 border-b">
+                                <CardHeader className="bg-gradient-to-r from-[#effbf7] to-white border-b">
                                     <CardTitle className="text-2xl font-bold text-gray-900">Send us a message</CardTitle>
                                     <CardDescription className="text-gray-600 text-lg">
                                         Fill out the form below and we&apos;ll get back to you within 24 hours.
@@ -207,7 +207,7 @@ export default function ContactPage() {
                                         <Button
                                             type="submit"
                                             disabled={isSubmitting || !formData.name || !formData.email || !formData.message}
-                                            className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold py-3 px-6 text-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-full bg-[#00a63e] hover:bg-[#029238] text-white font-semibold py-3 px-6 text-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {isSubmitting ? (
                                                 <div className="flex items-center gap-2">

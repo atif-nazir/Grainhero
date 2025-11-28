@@ -1,21 +1,16 @@
 'use client'
-import { Wheat as WheatIcon, Menu, X, BarChart3, Brain, Thermometer, TrendingUp, Bell, Check, Shield, Zap } from "lucide-react"
+import { Wheat as WheatIcon, Menu, X, BarChart3, Brain, Thermometer, TrendingUp, Bell, Check } from "lucide-react"
 import { Link } from '@/i18n/navigation'
 import { useState, useEffect } from 'react'
 import pricingData from './pricing-data.js'
-import { 
-  AnimatedHero, 
-  AnimatedFeatureCards, 
-  AnimatedStatsSection, 
-  AnimatedTestimonials, 
-  AnimatedCTA 
+import {
+  AnimatedHero,
+  AnimatedFeatureCards,
+  AnimatedCTA
 } from '@/components/animations/AnimatedLanding'
-import { 
-  AnimatedBackground, 
-  FloatingElements, 
-  InteractiveCard,
-  AnimatedText,
-  AnimatedCounter
+import {
+  AnimatedBackground,
+  AnimatedText
 } from '@/components/animations/MotionGraphics'
 
 type Plan = {
@@ -28,7 +23,7 @@ type Plan = {
   price?: number
   duration?: string
 }
-
+  
 export default function HomePage() {
   return (
     <AnimatedBackground className="min-h-screen">
@@ -44,7 +39,6 @@ export default function HomePage() {
         <Features />
         <PricingShowcase />
         <CTA />
-        <Contact />
         <Footer />
       </main>
     </AnimatedBackground>
@@ -63,9 +57,10 @@ function Navigation() {
   }, [])
 
   const navItems = [
-    { href: '#plans', label: 'Pricing' },
-    { href: '#features', label: 'Features' },
-    { href: '#contact', label: 'Contact' }
+    { href: '/pricing', label: 'Pricing' },
+    { href: '/about', label: 'About' },
+    { href: '/faq', label: 'FAQ' },
+    { href: '/contact', label: 'Contact' }
   ]
 
   return (
@@ -76,7 +71,7 @@ function Navigation() {
           <Link href="/" className="flex items-center space-x-2 mr-6">
             <WheatIcon className="w-8 h-8 text-[#00a63e]" />
             <span className="text-xl font-bold">GrainHero</span>
-          </Link>
+              </Link>
           {/* Middle: Tabs */}
           <div className="hidden md:flex items-center gap-6">
             {navItems.map((item) => (
@@ -102,60 +97,21 @@ function Navigation() {
               {navItems.map((item) => (
                 <Link key={item.href} href={item.href} className="block text-gray-700 hover:text-[#00a63e] py-2" onClick={() => setMobileMenuOpen(false)}>
                   {item.label}
-                </Link>
+              </Link>
               ))}
               <div className="flex items-center gap-3 pt-2">
                 <Link href="/auth/login" className="text-gray-700 hover:text-[#00a63e]" onClick={() => setMobileMenuOpen(false)}>Login</Link>
                 <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
-              </div>
             </div>
           </div>
+        </div>
         )}
       </div>
     </nav>
   )
 }
 
-// Hero - Clean design with project theme colors
-function Hero() {
-  return (
-    <section id="home" className="pt-28 md:pt-32 pb-12 px-4 sm:px-6 lg:px-8 bg-[#effbf7]">
-      <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-10 items-center">
-        <div className="transition-all duration-700">
-          <h1 className="text-4xl md:text-6xl font-bold leading-tight text-gray-900">
-            Your grain success
-            <br /> starts here
-          </h1>
-          <p className="mt-6 text-lg text-gray-700 max-w-xl">
-            From monitoring to AI predictions, GrainHero has you covered.
-          </p>
-          <div className="mt-8 flex flex-col sm:flex-row gap-4">
-            <Link href="/checkout" className="bg-black text-white px-6 py-3 rounded-full font-semibold hover:opacity-90 transition">
-              Start now
-            </Link>
-            <Link href="/pricing" className="px-6 py-3 rounded-full font-semibold border border-gray-300 text-gray-900 hover:border-[#00a63e] hover:text-[#00a63e] transition">
-              Plans and prices
-            </Link>
-          </div>
-        </div>
-        <div className="transition-all duration-700">
-          <div className="relative">
-            <div className="absolute -top-6 -left-6 w-24 h-24 bg-[#00a63e]/10 rounded-lg"></div>
-            <div className="absolute -bottom-8 -right-8 w-20 h-20 bg-[#00a63e]/10 rounded-lg"></div>
-            <div className="rounded-2xl bg-white shadow-xl p-4">
-              <div className="aspect-video rounded-xl bg-gray-50 flex items-center justify-center">
-                <div className="text-center">
-                  <BarChart3 className="w-16 h-16 text-[#00a63e] mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">bold moves</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
+// (removed legacy Hero component)
 
 // Highlights row (Professional showcase with multiple cards)
 function Highlights() {
@@ -180,7 +136,7 @@ function Highlights() {
       title: "24/7 Support",
       description: "Round-the-clock assistance from our grain storage experts.",
       button: "Get Support",
-      link: "#contact",
+      link: "/contact",
       icon: <Bell className="w-6 h-6" />,
       color: "bg-purple-600"
     }
@@ -201,8 +157,8 @@ function Highlights() {
               <p className="text-gray-600 mb-4 text-sm leading-relaxed">{highlight.description}</p>
               <Link href={highlight.link} className={`inline-block ${highlight.color} text-white px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 group-hover:scale-105`}>
                 {highlight.button}
-              </Link>
-            </div>
+            </Link>
+          </div>
           ))}
         </div>
       </div>
@@ -213,39 +169,39 @@ function Highlights() {
 // Animated Features
 function Features() {
   const features = [
-    { 
-      icon: Brain, 
-      title: "AI-Powered Spoilage Prediction", 
+    {
+      icon: Brain,
+      title: "AI-Powered Spoilage Prediction",
       description: "Predict deterioration before it happens, saving costs.",
       color: "bg-blue-500"
     },
-    { 
-      icon: Thermometer, 
-      title: "IoT Sensor Management", 
+    {
+      icon: Thermometer,
+      title: "IoT Sensor Management",
       description: "Real-time monitoring of temperature and humidity.",
       color: "bg-green-500"
     },
-    { 
-      icon: TrendingUp, 
-      title: "Analytics Dashboard", 
+    {
+      icon: TrendingUp,
+      title: "Analytics Dashboard",
       description: "Comprehensive trends, history and facility comparisons.",
       color: "bg-purple-500"
     },
-    { 
-      icon: Bell, 
-      title: "Smart Alerts", 
+    {
+      icon: Bell,
+      title: "Smart Alerts",
       description: "Instant notifications on threshold breaches.",
       color: "bg-yellow-500"
     },
-    { 
-      icon: BarChart3, 
-      title: "Grain Batch Tracking", 
+    {
+      icon: BarChart3,
+      title: "Grain Batch Tracking",
       description: "Complete traceability from harvest to storage.",
       color: "bg-red-500"
     },
-    { 
-      icon: WheatIcon, 
-      title: "Silo Management", 
+    {
+      icon: WheatIcon,
+      title: "Silo Management",
       description: "Monitor and manage multiple storage silos efficiently.",
       color: "bg-indigo-500"
     }
@@ -255,14 +211,14 @@ function Features() {
     <section id="features" className="py-12 px-4 sm:px-6 lg:px-8 bg-white">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
-          <AnimatedText 
+          <AnimatedText
             text="Built for modern grain operations"
             className="text-3xl md:text-4xl font-bold mb-3"
           />
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">Comprehensive tools to optimize your grain storage, reduce losses, and maximize profitability.</p>
         </div>
         <AnimatedFeatureCards features={features} />
-      </div>
+        </div>
     </section>
   )
 }
@@ -293,7 +249,7 @@ function PricingShowcase() {
                     <li key={idx} className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00a63e]" />{f}</li>
                   ))}
                 </ul>
-                <Link href="/auth/signup" className={`mt-6 inline-block w-full text-center py-2.5 rounded-full font-semibold transition ${isSelected ? 'bg-[#00a63e] text-white hover:bg-[#029238]' : 'border border-gray-300 hover:border-[#00a63e] hover:text-[#00a63e]'}`}>Choose plan</Link>
+                <Link href="/checkout" onClick={() => { try { localStorage.setItem('selectedPlanId', p.id) } catch { } }} className={`mt-6 inline-block w-full text-center py-2.5 rounded-full font-semibold transition ${isSelected ? 'bg-[#00a63e] text-white hover:bg-[#029238]' : 'border border-gray-300 hover:border-[#00a63e] hover:text-[#00a63e]'}`}>Choose plan</Link>
               </label>
             )
           })}
@@ -315,230 +271,21 @@ function CTA() {
   )
 }
 
-// Contact section (redesigned with project-specific content and modern practices)
-function Contact() {
-  const [sending, setSending] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    company: '',
-    phone: '',
-    inquiry: 'general',
-    message: '',
-    subscribe: false
-  })
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSending(true)
-    setStatus(null)
-    try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
-      })
-      if (!res.ok) throw new Error('Failed')
-      setStatus('Thank you! We\'ll get back to you within 24 hours.')
-      setForm({ name: '', email: '', company: '', phone: '', inquiry: 'general', message: '', subscribe: false })
-    } catch {
-      // Fallback to mailto
-      const subject = `GrainHero Inquiry: ${form.inquiry}`
-      const body = `Name: ${form.name}\nEmail: ${form.email}\nCompany: ${form.company}\nPhone: ${form.phone}\nInquiry: ${form.inquiry}\n\nMessage:\n${form.message}`
-      window.location.href = `mailto:noreply.grainhero1@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#effbf7] to-white">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">Get in touch with our team</h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Questions about grain storage management, AI predictions, or IoT sensors?
-            Our experts are here to help you optimize your operations.
-          </p>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-12">
-          {/* Left: Contact info and benefits */}
-          <div className="space-y-8">
-            <div>
-              <h3 className="text-2xl font-semibold mb-4">Why contact GrainHero?</h3>
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-[#00a63e] rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <Check className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">AI-Powered Solutions</h4>
-                    <p className="text-gray-600 text-sm">Get personalized recommendations for your grain storage optimization</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-[#00a63e] rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <Check className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">IoT Integration Support</h4>
-                    <p className="text-gray-600 text-sm">Expert guidance on sensor deployment and data analysis</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-[#00a63e] rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <Check className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Custom Implementation</h4>
-                    <p className="text-gray-600 text-sm">Tailored solutions for your specific grain storage challenges</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-              <h4 className="font-semibold mb-3">Quick Response Times</h4>
-              <div className="space-y-2 text-sm text-gray-600">
-                <p>• General inquiries: Within 24 hours</p>
-                <p>• Technical support: Within 4 hours</p>
-                <p>• Sales questions: Within 2 hours</p>
-                <p>• Emergency support: Immediate response</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-              <h4 className="font-semibold mb-3">Contact Information</h4>
-              <div className="space-y-2 text-sm text-gray-600">
-                <p>📧 noreply.grainhero1@gmail.com</p>
-                <p>📞 03110851784</p>
-                <p>🏢 Available 24/7 for critical alerts</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Contact form */}
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
-            <h3 className="text-2xl font-semibold mb-6">Send us a message</h3>
-            <form onSubmit={submit} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                  <input
-                    required
-                    value={form.name}
-                    onChange={e => setForm({ ...form, name: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00a63e]/30 focus:border-[#00a63e]"
-                    placeholder="John Doe"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                  <input
-                    required
-                    type="email"
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00a63e]/30 focus:border-[#00a63e]"
-                    placeholder="john@company.com"
-                  />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
-                  <input
-                    value={form.company}
-                    onChange={e => setForm({ ...form, company: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00a63e]/30 focus:border-[#00a63e]"
-                    placeholder="Your Company"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00a63e]/30 focus:border-[#00a63e]"
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Inquiry Type *</label>
-                <select
-                  required
-                  value={form.inquiry}
-                  onChange={e => setForm({ ...form, inquiry: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00a63e]/30 focus:border-[#00a63e]"
-                  aria-label="Select inquiry type"
-                >
-                  <option value="general">General Information</option>
-                  <option value="sales">Sales & Pricing</option>
-                  <option value="technical">Technical Support</option>
-                  <option value="integration">IoT Integration</option>
-                  <option value="partnership">Partnership</option>
-                  <option value="media">Media & Press</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Message *</label>
-                <textarea
-                  required
-                  rows={5}
-                  value={form.message}
-                  onChange={e => setForm({ ...form, message: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#00a63e]/30 focus:border-[#00a63e]"
-                  placeholder="Tell us about your grain storage challenges, current setup, or specific questions about our AI-powered solutions..."
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="subscribe"
-                  checked={form.subscribe}
-                  onChange={e => setForm({ ...form, subscribe: e.target.checked })}
-                  className="w-4 h-4 text-[#00a63e] border-gray-300 rounded focus:ring-[#00a63e]/30"
-                />
-                <label htmlFor="subscribe" className="text-sm text-gray-600">
-                  Subscribe to our newsletter for grain storage insights and AI updates
-                </label>
-              </div>
-
-              {status && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-800 text-sm">{status}</p>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={sending}
-                className="w-full bg-[#00a63e] hover:bg-[#029238] text-white px-6 py-4 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {sending ? 'Sending...' : 'Send Message'}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
+// Contact removed (use /contact page)
 
 // Footer (simplified, no sensitive information)
 function Footer() {
   const currentYear = new Date().getFullYear()
   const footerColumns = [
-    { title: 'Product', links: [{ href: '#plans', label: 'Pricing' }, { href: '/auth/signup', label: 'Sign up' }, { href: '/auth/login', label: 'Login' }] },
-    { title: 'Company', links: [{ href: '#contact', label: 'Contact' }] }
+    { title: 'Product', links: [{ href: '/pricing', label: 'Pricing' }, { href: '/auth/login', label: 'Login' }] },
+    {
+      title: 'Company', links: [
+        { href: '/about', label: 'About Us' },
+        { href: '/faq', label: 'FAQs' },
+        { href: '/contact', label: 'Contact' },
+        { href: '/privacy-policy', label: 'Privacy Policy' }
+      ]
+    }
   ]
   return (
     <footer className="bg-white text-gray-800 pt-12 px-4 sm:px-6 lg:px-8 border-t">
@@ -576,7 +323,7 @@ function Footer() {
         <div className="py-6 border-t text-center text-gray-500">
           <p>&copy; {currentYear} GrainHero. All rights reserved.</p>
         </div>
-      </div>
+    </div>
     </footer>
   )
 }

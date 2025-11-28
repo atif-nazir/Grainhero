@@ -132,9 +132,9 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  { 
-    name: "ai-spoilage", 
-    href: "/ai-spoilage", 
+  {
+    name: "ai-spoilage",
+    href: "/ai-spoilage",
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: "AI"
@@ -155,24 +155,31 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  { 
-    name: "model-performance", 
-    href: "/model-performance", 
+  {
+    name: "model-performance",
+    href: "/model-performance",
     icon: Brain,
     roles: ["super_admin", "admin", "manager"],
     badge: "ML"
   },
-  { 
-    name: "data-management", 
-    href: "/data-management", 
+  {
+    name: "data-management",
+    href: "/data-management",
     icon: Database,
     roles: ["super_admin", "admin", "manager"],
     badge: "ML"
   },
-
-  { 
-    name: "data-visualization", 
-    href: "/data-visualization", 
+  {
+    name: "environmental-data",
+    label: "Environmental Data",
+    href: "/environmental-data",
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: undefined
+  },
+  {
+    name: "data-visualization",
+    href: "/data-visualization",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: "NEW"
@@ -210,7 +217,6 @@ const businessNav = [
 // System Administration
 const systemNav = [
   { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
-  { name: "users", label: "Users", href: "/users", icon: Users, roles: ["super_admin", "admin"], badge: undefined },
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 
@@ -291,7 +297,6 @@ const milestone2Navigation = [
 
 const adminNavigation = [
   { name: "team-management", href: "/team-management", icon: Users },
-  { name: "users", href: "/users", icon: Users },
   { name: "settings", href: "/settings", icon: Settings },
 ]
 
@@ -327,7 +332,7 @@ export function Sidebar() {
     <div className="flex h-full w-72 flex-col bg-white border-r border-gray-200">
       {/* Logo */}
       <div className="flex h-16 items-center px-6 border-b border-gray-200 justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Farm Home</h1>
+        <h1 className="text-xl font-bold text-gray-900">GrainHero</h1>
         <div className="ml-2">
           <LanguageSelector />
         </div>

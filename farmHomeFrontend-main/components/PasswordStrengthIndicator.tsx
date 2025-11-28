@@ -12,14 +12,17 @@ export const PasswordStrengthIndicator: React.FC<PasswordStrengthIndicatorProps>
   strength,
   showFeedback = true
 }) => {
+  const widthClasses = ['w-0', 'w-1/4', 'w-2/4', 'w-3/4', 'w-full']
+  const clampedScore = Math.max(0, Math.min(widthClasses.length - 1, Math.round(strength.score)))
+  const progressWidthClass = widthClasses[clampedScore]
+
   return (
     <div className="space-y-2">
       {/* Strength Bar */}
       <div className="flex items-center gap-2">
         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
           <div
-            className={`h-full transition-all duration-300 ${getPasswordStrengthColor(strength.score)}`}
-            style={{ width: `${Math.max(0, Math.min(100, (strength.score / 4) * 100))}%` }}
+            className={`h-full transition-all duration-300 ${progressWidthClass} ${getPasswordStrengthColor(strength.score)}`}
           />
         </div>
         <span className="text-xs font-medium text-gray-600 min-w-[60px]">

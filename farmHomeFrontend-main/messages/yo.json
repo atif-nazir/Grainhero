@@ -30,7 +30,7 @@
   },
   "AuthPage": {
     "welcomeBack": "Kaabo pada",
-    "signInToAccount": "Wọle si akọọlẹ Farm Home rẹ",
+    "signInToAccount": "Wọle si akọọlẹ GrainHero rẹ",
     "email": "Imeeli",
     "password": "Ọrọ aṣínà",
     "signingIn": "Nwọle...",
@@ -42,7 +42,7 @@
     "networkError": "Aṣiṣe nẹtiwọọki. Jọwọ gbiyanju lẹẹkansi.",
     "loginSuccess": "Iwọle ṣaṣeyọri! Nṣiṣẹ pada...",
     "createAccount": "Ṣẹda Akọọlẹ",
-    "signUpForFarmHome": "Forukọsilẹ fun Farm Home (Ìforúkọsílẹ Alákóso)",
+    "signUpForFarmHome": "Forukọsilẹ fun GrainHero (Ìforúkọsílẹ Alákóso)",
     "fullName": "Orukọ kikun",
     "phoneNumber": "Nọmba foonu",
     "optional": "(aṣayan)",
