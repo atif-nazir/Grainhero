@@ -3,6 +3,8 @@ const router = express.Router();
 const weatherService = require('../services/weatherService');
 const SensorReading = require('../models/SensorReading');
 const { body, validationResult } = require('express-validator');
+const { auth } = require('../middleware/auth');
+const Silo = require('../models/Silo');
 
 // Get current environmental data for a location
 router.get('/current/:lat/:lon', async (req, res) => {
@@ -132,11 +134,86 @@ router.post('/store', [
   }
 });
 
+function calculateDewPoint(tempC, humidity) {
+  if (tempC === undefined || humidity === undefined || humidity <= 0) return null;
+  const a = 17.27;
+  const b = 237.7;
+  const alpha = ((a * tempC) / (b + tempC)) + Math.log(humidity / 100);
+  return Number(((b * alpha) / (a - alpha)).toFixed(2));
+}
+
+function calculateHeatIndex(tempC, humidity) {
+  if (tempC === undefined || humidity === undefined) return null;
+  const tempF = (tempC * 9) / 5 + 32;
+  const hi =
+    -42.379 +
+    2.04901523 * tempF +
+    10.14333127 * humidity -
+    0.22475541 * tempF * humidity -
+    6.83783e-3 * tempF * tempF -
+    5.481717e-2 * humidity * humidity +
+    1.22874e-3 * tempF * tempF * humidity +
+    8.5282e-4 * tempF * humidity * humidity -
+    1.99e-6 * tempF * tempF * humidity * humidity;
+  const hiC = ((hi - 32) * 5) / 9;
+  return Number(hiC.toFixed(2));
+}
+
+async function buildFallbackHistory(lat, lon, limit) {
+  const environmentalData = await weatherService.getEnvironmentalData(lat, lon);
+  const baseReading = {
+    _id: `fallback-${Date.now()}`,
+    timestamp: environmentalData.weather.timestamp,
+    environmental_context: {
+      weather: environmentalData.weather,
+      air_quality_index: environmentalData.airQuality.aqi,
+      pmd_data: {
+        pm25: environmentalData.airQuality.pm2_5,
+        pm10: environmentalData.airQuality.pm10,
+        ozone: environmentalData.airQuality.o3
+      }
+    },
+    derived_metrics: {
+      dew_point: calculateDewPoint(
+        environmentalData.weather.temperature,
+        environmentalData.weather.humidity
+      ),
+      heat_index: calculateHeatIndex(
+        environmentalData.weather.temperature,
+        environmentalData.weather.humidity
+      )
+    },
+    source: 'openweather_current'
+  };
+
+  const forecastReadings = (environmentalData.forecast || [])
+    .slice(0, parseInt(limit) || 8)
+    .map((entry, index) => ({
+      _id: `fallback-forecast-${index}`,
+      timestamp: entry.timestamp,
+      environmental_context: {
+        weather: {
+          temperature: entry.temperature,
+          humidity: entry.humidity,
+          pressure: entry.pressure,
+          wind_speed: entry.wind_speed,
+          precipitation: entry.precipitation
+        }
+      },
+      derived_metrics: {
+        dew_point: calculateDewPoint(entry.temperature, entry.humidity)
+      },
+      source: 'openweather_forecast'
+    }));
+
+  return [baseReading, ...forecastReadings];
+}
+
 // Get environmental data history
 router.get('/history/:tenant_id', async (req, res) => {
   try {
     const { tenant_id } = req.params;
-    const { limit = 100, start_date, end_date } = req.query;
+    const { limit = 100, start_date, end_date, lat, lon } = req.query;
 
     let query = { 
       tenant_id,
@@ -155,11 +232,24 @@ router.get('/history/:tenant_id', async (req, res) => {
       .limit(parseInt(limit))
       .populate('silo_id', 'silo_id name location')
       .populate('device_id', 'device_id name type')
-      .select('timestamp environmental_context silo_id device_id');
+      .select('timestamp environmental_context derived_metrics silo_id device_id');
+
+    if (readings.length === 0) {
+      const fallbackLat = lat ? parseFloat(lat) : 31.5204;
+      const fallbackLon = lon ? parseFloat(lon) : 74.3587;
+      const fallbackHistory = await buildFallbackHistory(fallbackLat, fallbackLon, limit);
+      
+      return res.json({
+        success: true,
+        data: fallbackHistory,
+        fallback: true
+      });
+    }
 
     res.json({
       success: true,
-      data: readings
+      data: readings,
+      fallback: false
     });
   } catch (error) {
     console.error('Error fetching environmental history:', error);
@@ -337,6 +427,179 @@ router.get('/service/status', (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to get service status',
+      message: error.message 
+    });
+  }
+});
+
+// Get environmental data for all user's locations (role-based)
+router.get('/my-locations', auth, async (req, res) => {
+  try {
+    const user = req.user;
+    let silos = [];
+
+    // Super Admin: See ALL silos
+    if (user.role === 'super_admin') {
+      silos = await Silo.find({
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .populate('admin_id', 'name email')
+      .select('silo_id name location admin_id');
+    }
+    // Admin: See all their silos across all locations
+    else if (user.role === 'admin') {
+      silos = await Silo.find({
+        admin_id: user._id,
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .select('silo_id name location');
+    }
+    // Manager: See silos they manage (specific warehouse/location)
+    else if (user.role === 'manager') {
+      // Assuming manager_id field or admin_id for managers under admin
+      silos = await Silo.find({
+        admin_id: user.admin_id,
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .select('silo_id name location');
+    }
+    // Technician: See all silos under their admin
+    else if (user.role === 'technician') {
+      silos = await Silo.find({
+        admin_id: user.admin_id,
+        'location.coordinates.latitude': { $exists: true },
+        'location.coordinates.longitude': { $exists: true }
+      })
+      .select('silo_id name location');
+    }
+
+    // If user has no silos with location data, return a sensible default demo location
+    if (!silos || silos.length === 0) {
+      try {
+        // Default to Lahore coordinates used in the frontend page
+        const defaultLat = 31.5204;
+        const defaultLon = 74.3587;
+
+        const environmentalData = await weatherService.getEnvironmentalData(
+          defaultLat,
+          defaultLon
+        );
+
+        const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
+        const regionalAnalysis = weatherService.analyzeRegionalClimate(
+          environmentalData,
+          defaultLat,
+          defaultLon
+        );
+
+        return res.json({
+          success: true,
+          data: {
+            total_locations: 1,
+            total_silos: 0,
+            locations: [{
+              city: 'Default Location',
+              latitude: defaultLat,
+              longitude: defaultLon,
+              address: 'Demo location for environmental data',
+              silos: [],
+              silo_count: 0,
+              weather: environmentalData.weather,
+              air_quality: environmentalData.airQuality,
+              aqi_level: weatherService.getAQILevel(environmentalData.airQuality.aqi),
+              impact_assessment: impactAssessment,
+              regional_analysis: regionalAnalysis
+            }]
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching default environmental location:', error);
+        // fall through to normal error handling below
+      }
+    }
+
+    // Group silos by location (city/coordinates)
+    const locationGroups = {};
+    
+    for (const silo of silos) {
+      if (!silo.location?.coordinates?.latitude || !silo.location?.coordinates?.longitude) {
+        continue;
+      }
+
+      const lat = silo.location.coordinates.latitude;
+      const lon = silo.location.coordinates.longitude;
+      const city = silo.location.city || 'Unknown City';
+      const key = `${city}_${lat.toFixed(2)}_${lon.toFixed(2)}`;
+
+      if (!locationGroups[key]) {
+        locationGroups[key] = {
+          city: city,
+          latitude: lat,
+          longitude: lon,
+          address: silo.location.address,
+          silos: [],
+          silo_count: 0
+        };
+      }
+
+      locationGroups[key].silos.push({
+        silo_id: silo.silo_id,
+        name: silo.name,
+        admin: silo.admin_id
+      });
+      locationGroups[key].silo_count++;
+    }
+
+    // Fetch weather for each unique location
+    const locationsWithWeather = [];
+    
+    for (const [key, location] of Object.entries(locationGroups)) {
+      try {
+        const environmentalData = await weatherService.getEnvironmentalData(
+          location.latitude,
+          location.longitude
+        );
+        
+        const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
+        const regionalAnalysis = weatherService.analyzeRegionalClimate(
+          environmentalData,
+          location.latitude,
+          location.longitude
+        );
+
+        locationsWithWeather.push({
+          ...location,
+          weather: environmentalData.weather,
+          air_quality: environmentalData.airQuality,
+          aqi_level: weatherService.getAQILevel(environmentalData.airQuality.aqi),
+          impact_assessment: impactAssessment,
+          regional_analysis: regionalAnalysis
+        });
+      } catch (error) {
+        console.error(`Failed to fetch weather for ${location.city}:`, error);
+        locationsWithWeather.push({
+          ...location,
+          error: 'Failed to fetch weather data'
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        total_locations: locationsWithWeather.length,
+        total_silos: silos.length,
+        locations: locationsWithWeather
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching my locations:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch environmental data for your locations',
       message: error.message 
     });
   }

@@ -14,19 +14,16 @@ const spoilagePredictionSchema = new mongoose.Schema({
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
-    index: true
+    required: [true, "Tenant ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Silo',
-    required: [true, "Silo ID is required"],
-    index: true
+    required: [true, "Silo ID is required"]
   },
   batch_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'GrainBatch',
-    index: true
+    ref: 'GrainBatch'
   },
   
   // Prediction details

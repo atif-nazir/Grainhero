@@ -332,42 +332,56 @@ class AISpoilageService extends EventEmitter {
      * Prepare features for SmartBin ML model
      */
     prepareFeatures(environmentalData, batch) {
-        // SmartBin model expects these specific features
+        // IoT Spec: SmartBin model expects these exact features (VOC-first)
+        // Inputs: T_core, RH_core, Dew_Point, VOC_index, VOC_relative, VOC_rate,
+        // Grain_Moisture, Airflow/fan telemetry, Rainfall, derived trends/deltas
         return {
-            Temperature: environmentalData.temperature || 25,
-            Humidity: environmentalData.humidity || 60,
+            Temperature: environmentalData.temperature || 25, // T_core
+            Humidity: environmentalData.humidity || 60, // RH_core
             Storage_Days: this.calculateStorageDuration(batch),
-            Grain_Type: this.encodeGrainType(batch.grain_type),
-            Airflow: environmentalData.airflow || 1.0,
+            Grain_Type: this.encodeGrainType(batch.grain_type), // Rice=1, Wheat=2
+            Airflow: environmentalData.airflow || 0, // Fan_Speed_Factor × Fan_Duty_Cycle (0.0-1.0)
             Dew_Point: this.calculateDewPoint(environmentalData.temperature, environmentalData.humidity),
-            Ambient_Light: environmentalData.light || 100,
-            Pest_Presence: environmentalData.pest_presence || 0,
-            Grain_Moisture: batch.moisture_content || environmentalData.moisture || 12,
-            Rainfall: environmentalData.rainfall || 0,
+            Ambient_Light: environmentalData.light || 100, // Optional BH1750
+            Pest_Presence: environmentalData.pest_presence || environmentalData.pest_presence_score || 0, // Derived from VOC patterns
+            Grain_Moisture: batch.moisture_content || environmentalData.moisture || 12, // Capacitive probe (0-10%=dry, 13-14%=risk, >=15%=spoilage)
+            Rainfall: environmentalData.rainfall || environmentalData.precipitation || 0, // OpenWeather API
+            // VOC-first features (IoT spec)
+            VOC_index: environmentalData.voc || environmentalData.voc_index || 0,
+            VOC_relative: environmentalData.voc_relative || environmentalData.voc_relative_5min || 0,
+            VOC_rate_5min: environmentalData.voc_rate_5min || 0,
+            VOC_rate_30min: environmentalData.voc_rate_30min || 0,
             
-            // Additional features for fallback
-            co2: environmentalData.co2 || 400,
-            voc: environmentalData.voc || 100,
-            pressure: environmentalData.pressure || 1013,
+            // Additional features for fallback/context
+            co2: environmentalData.co2 || 400, // Optional CCS811
+            pressure: environmentalData.pressure || 1013, // BME680
             ph: environmentalData.ph || 7,
             
             // Grain-specific features
             initial_quality: batch.quality_score || 85,
             
-            // Temporal features
+            // Temporal features (IoT spec: rolling windows)
             hour_of_day: new Date().getHours(),
             day_of_year: Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24)),
             season: this.getSeason(),
             
-            // Historical features
+            // Historical features (IoT spec: rolling 5m/30m/6h + deltas)
             temperature_trend: this.calculateTrend(environmentalData.temperature_history),
             humidity_trend: this.calculateTrend(environmentalData.humidity_history),
+            delta_temp: environmentalData.delta_temp || 0, // ΔT_core
+            delta_rh: environmentalData.delta_rh || 0, // ΔRH_core
+            moisture_trend_6h: environmentalData.moisture_trend_6h || 0,
             
             // Data quality
             data_quality: this.assessDataQuality(environmentalData),
             
             // Seasonal risk
-            seasonal_risk: this.calculateSeasonalRisk()
+            seasonal_risk: this.calculateSeasonalRisk(),
+            
+            // Fan telemetry (IoT spec)
+            fan_state: environmentalData.fan_state || 0, // 0=OFF, 1=ON
+            fan_duty: environmentalData.fan_duty_cycle || 0, // 0-100%
+            fan_rpm: environmentalData.fan_rpm || 0
         };
     }
 

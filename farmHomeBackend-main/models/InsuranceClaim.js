@@ -13,14 +13,12 @@ const insuranceClaimSchema = new mongoose.Schema({
   policy_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'InsurancePolicy',
-    required: [true, "Policy ID is required"],
-    index: true
+    required: [true, "Policy ID is required"]
   },
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
     required: [true, "Tenant ID is required"],
-    index: true
   },
   
   // Claim details

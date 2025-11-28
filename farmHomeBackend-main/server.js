@@ -62,6 +62,26 @@ console.log(
   connectionString.replace(process.env.MONGO_PASS, "***")
 );
 
+// Add a flag to track if server has started
+let serverStarted = false;
+
+// Function to start the server
+function startServer() {
+  if (serverStarted) return;
+  serverStarted = true;
+  
+  const PORT = process.env.PORT || 5000;
+  server.listen(PORT, () =>
+    console.log(`Server & WebSocket running on port ${PORT}`)
+  );
+}
+
+// Set a timeout to start server even if MongoDB connection fails
+const mongoTimeout = setTimeout(() => {
+  console.log("MongoDB connection timeout - starting server without database");
+  startServer();
+}, 10000); // 10 seconds timeout
+
 mongoose.connect(connectionString, {
   serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
   socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
@@ -69,10 +89,18 @@ mongoose.connect(connectionString, {
 
 const db = mongoose.connection;
 
-db.on("error", console.error.bind(console, "connection error: "));
+db.on("error", (err) => {
+  console.error("MongoDB connection error:", err);
+  clearTimeout(mongoTimeout);
+  // Start server even if MongoDB connection fails
+  console.log("Starting server without MongoDB connection");
+  startServer();
+});
+
 db.once("open", () => {
   console.log("MongoDB Connection Successfull");
-
+  clearTimeout(mongoTimeout);
+  
   // Start environmental data collection service
   try {
     environmentalDataService.start();
@@ -80,16 +108,18 @@ db.once("open", () => {
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
   }
-
-  // Start limit warning scheduler
+  
+  // Start data aggregation service (30s raw → 5min averages)
   try {
-    const {
-      startLimitWarningScheduler,
-    } = require("./services/limitWarningService");
-    startLimitWarningScheduler();
+    const dataAggregationService = require("./services/dataAggregationService");
+    dataAggregationService.start();
+    console.log("Data aggregation service started (IoT spec: 5-minute averaging)");
   } catch (error) {
-    console.error("Failed to start limit warning scheduler:", error);
+    console.error("Failed to start data aggregation service:", error);
   }
+  
+  // Start the server
+  startServer();
 });
 
 // Stripe webhook endpoint must use express.raw before express.json
@@ -123,7 +153,7 @@ app.use("/api/iot", iotRoute);
 app.use("/api/data-viz", dataVisualizationRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
-app.use("/api/buyers", buyersRoute);
+app.use("/api/environmental", environmentalRoute);
 
 // Super Admin routes
 app.use("/api/tenant-management", tenantManagementRoute);
@@ -235,8 +265,3 @@ wss.on("connection", async function connection(ws, req) {
     alertChangeStream.close();
   });
 });
-
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () =>
-  console.log(`Server & WebSocket running on port ${PORT}`)
-);

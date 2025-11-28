@@ -14,6 +14,7 @@ import {
   CheckCircle,
   Activity
 } from 'lucide-react'
+import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 
 interface DataSummary {
   base_records: number
@@ -42,8 +43,7 @@ export default function DataManagementPage() {
   const [sampleData, setSampleData] = useState<TrainingRecord[]>([])
   const [generating, setGenerating] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string>('')
-  const [statusMessage, setStatusMessage] = useState<string>('')
+  const { data: envHistory, latest } = useEnvironmentalHistory({ limit: 50 })
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
 
@@ -246,7 +246,7 @@ export default function DataManagementPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold text-gray-900 flex items-center gap-3">
             <div className="p-2 bg-gray-100 rounded-lg">
@@ -266,6 +266,34 @@ export default function DataManagementPage() {
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
+          </Button>
+          <Button
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('token')
+                const response = await fetch(`${backendUrl}/sensors/export/iot-csv`, {
+                  headers: {
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                  }
+                })
+                if (!response.ok) throw new Error('Failed to export dataset')
+                const blob = await response.blob()
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `iot-dataset-${new Date().toISOString().split('T')[0]}.csv`
+                a.click()
+                window.URL.revokeObjectURL(url)
+              } catch (error) {
+                alert('Dataset export failed. Please try again.')
+                console.error(error)
+              }
+            }}
+            size="sm"
+            className="bg-gray-900 hover:bg-gray-800"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export IoT Dataset
           </Button>
         </div>
       </div>
@@ -339,6 +367,68 @@ export default function DataManagementPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Latest IoT Records</CardTitle>
+          <CardDescription>
+            {latest
+              ? `Last update at ${new Date(latest.timestamp).toLocaleString()}`
+              : 'No environmental history yet'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs uppercase text-gray-500 text-left">
+                <th className="py-2 pr-4">Timestamp</th>
+                <th className="py-2 pr-4">Silo</th>
+                <th className="py-2 pr-4">T_core</th>
+                <th className="py-2 pr-4">RH_core</th>
+                <th className="py-2 pr-4">Grain Moist</th>
+                <th className="py-2 pr-4">Fan Duty</th>
+                <th className="py-2 pr-4">VOC_rel</th>
+                <th className="py-2 pr-4">Rainfall</th>
+              </tr>
+            </thead>
+            <tbody>
+              {envHistory.slice(-10).map((record) => (
+                <tr key={record.timestamp} className="border-t text-gray-700">
+                  <td className="py-2 pr-4">{new Date(record.timestamp).toLocaleString()}</td>
+                  <td className="py-2 pr-4">{record.silo_id || '—'}</td>
+                  <td className="py-2 pr-4">
+                    {record.temperature?.value ??
+                      record.environmental_context?.weather?.temperature ??
+                      '--'}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {record.humidity?.value ??
+                      record.environmental_context?.weather?.humidity ??
+                      '--'}
+                  </td>
+                  <td className="py-2 pr-4">{record.moisture?.value ?? '--'}</td>
+                  <td className="py-2 pr-4">
+                    {record.actuation_state?.fan_duty_cycle?.toFixed(0) ?? 0}%
+                  </td>
+                  <td className="py-2 pr-4">
+                    {record.derived_metrics?.voc_relative?.toFixed(1) ?? '0'}%
+                  </td>
+                  <td className="py-2 pr-4">
+                    {record.environmental_context?.weather?.precipitation ?? 0} mm
+                  </td>
+                </tr>
+              ))}
+              {envHistory.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-4 text-center text-gray-500">
+                    No IoT history available.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

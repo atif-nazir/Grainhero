@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 // import { useTranslations } from 'next-intl' // Removed to fix missing translation error
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,11 +26,14 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  ArrowRight
+  ArrowRight,
+  X
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatConfidence, formatRisk, formatSmart } from '@/lib/percentageUtils';
 import SiloVisualization from '../silo-visualization/page';
+import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from '@/lib/useEnvironmentalData';
+import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 
 interface AIPrediction {
   batch_id: string
@@ -51,6 +54,15 @@ export default function AIPredictionsPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedSiloId, setSelectedSiloId] = useState<string | null>(null)
+  const { locations } = useEnvironmentalLocations()
+  const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(null)
+  const { data: envHistory, latest: latestRecord, loading: datasetLoading } = useEnvironmentalHistory({
+    limit: 288,
+    latitude: selectedLocation?.latitude,
+    longitude: selectedLocation?.longitude,
+  })
+const [showActuatorPanel, setShowActuatorPanel] = useState(false)
+const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(null)
 
   // Fetch recent predictions overview
   useEffect(() => {
@@ -176,6 +188,27 @@ export default function AIPredictionsPage() {
     run()
   }, [])
 
+  useEffect(() => {
+    if (!selectedLocation && locations.length > 0) {
+      setSelectedLocation(locations[0])
+    }
+  }, [locations, selectedLocation])
+
+  const rainfallTrend = useMemo(() => {
+    return envHistory.map((record) => ({
+      timestamp: new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      rainfall: record.environmental_context?.weather?.precipitation ?? 0,
+      humidity: record.environmental_context?.weather?.humidity ?? record.humidity?.value ?? 0,
+      temperature: record.environmental_context?.weather?.temperature ?? record.temperature?.value ?? 0,
+      vocRelative: record.derived_metrics?.voc_relative ?? 0,
+    }))
+  }, [envHistory])
+
+const openActuatorPanel = (prediction: AIPrediction) => {
+  setActionPrediction(prediction)
+  setShowActuatorPanel(true)
+}
+
   const getRiskColor = (riskScore: number) => {
     if (riskScore < 30) return 'text-green-600'
     if (riskScore < 60) return 'text-yellow-600'
@@ -223,6 +256,25 @@ export default function AIPredictionsPage() {
             Machine learning powered grain quality and spoilage predictions
           </p>
         </div>
+        {locations.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Location:</span>
+            <select
+              className="border rounded-md px-3 py-1 text-sm"
+              value={selectedLocation?.city || ''}
+              onChange={(event) => {
+                const location = locations.find((loc) => loc.city === event.target.value)
+                if (location) setSelectedLocation(location)
+              }}
+            >
+              {locations.map((loc) => (
+                <option key={`${loc.city}-${loc.latitude}`} value={loc.city}>
+                  {loc.city} ({loc.silo_count} silos)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <Button className="gap-2 bg-gray-900 hover:bg-gray-800 text-white" onClick={async () => {
           try {
             const backendUrl = (await import('@/config')).config.backendUrl
@@ -355,6 +407,79 @@ export default function AIPredictionsPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          <Card className="border border-gray-200">
+            <CardHeader>
+              <CardTitle>Environmental Snapshot</CardTitle>
+              <CardDescription>
+                Latest 5-minute averaged data {datasetLoading ? '(loading...)' : latestRecord ? `from ${new Date(latestRecord.timestamp).toLocaleString()}` : '(no data)'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {latestRecord ? (
+                <div className="grid gap-4 md:grid-cols-4 text-sm">
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">T_core</div>
+                    <div className="text-lg font-medium">{(latestRecord.temperature?.value ?? latestRecord.environmental_context?.weather?.temperature ?? '--')}°C</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">RH_core</div>
+                    <div className="text-lg font-medium">{(latestRecord.humidity?.value ?? latestRecord.environmental_context?.weather?.humidity ?? '--')}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">Grain Moisture</div>
+                    <div className="text-lg font-medium">{latestRecord.moisture?.value ?? '--'}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">Rainfall (last hr)</div>
+                    <div className="text-lg font-medium">{latestRecord.environmental_context?.weather?.precipitation ?? 0} mm</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">VOC Relative</div>
+                    <div className="text-lg font-medium">{latestRecord.derived_metrics?.voc_relative?.toFixed(1) ?? '0'}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">Fan Duty</div>
+                    <div className="text-lg font-medium">{latestRecord.actuation_state?.fan_duty_cycle?.toFixed(0) ?? 0}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">Dew Point</div>
+                    <div className="text-lg font-medium">{latestRecord.derived_metrics?.dew_point?.toFixed(1) ?? '--'}°C</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-gray-500">Guardrails</div>
+                    <div className="text-sm font-medium">
+                      {latestRecord.derived_metrics?.guardrails?.venting_blocked
+                        ? `Active (${latestRecord.derived_metrics.guardrails.reasons?.join(', ')})`
+                        : 'Clear'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No environmental history available yet.</p>
+              )}
+              {rainfallTrend.length > 0 && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium">Rainfall & Humidity Trend</h4>
+                    <span className="text-xs text-gray-500">Last {rainfallTrend.length} points</span>
+                  </div>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={rainfallTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="timestamp" interval={Math.floor(rainfallTrend.length / 6)} />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip />
+                        <Line yAxisId="left" type="monotone" dataKey="rainfall" stroke="#3b82f6" name="Rainfall (mm)" />
+                        <Line yAxisId="right" type="monotone" dataKey="humidity" stroke="#10b981" name="Humidity (%)" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
                   {/* Predictions Grid - Silo Style */}
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {predictions.map((prediction, index) => (

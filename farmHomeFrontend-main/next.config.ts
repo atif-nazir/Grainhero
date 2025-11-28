@@ -1,6 +1,8 @@
 import { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
+const withNextIntl = createNextIntlPlugin();
+
 const nextConfig: NextConfig = {
   // Turbopack configuration
   turbopack: {
@@ -28,15 +30,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  turbopack: {
-    rules: {
-      '*.svg': {
-        loaders: ['@svgr/webpack'],
-        as: '*.js',
-      },
-    },
-  },
+  // Remove duplicate turbopack configuration
 };
 
-const withNextIntl = createNextIntlPlugin();
 export default withNextIntl(nextConfig);

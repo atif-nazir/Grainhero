@@ -45,7 +45,10 @@ const siloSchema = new mongoose.Schema({
       latitude: Number,
       longitude: Number
     },
-    address: String
+    address: String,
+    city: String,
+    country: String,
+    postal_code: String
   },
   
   // Current status and occupancy

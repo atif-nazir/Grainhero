@@ -55,7 +55,7 @@ export function hasRouteAccess(userRole: string, route: string): boolean {
     // All authenticated users
     '/dashboard': ['super_admin', 'admin', 'manager', 'technician'],
     '/sensors': ['super_admin', 'admin', 'technician'],
-    '/environmental-data': ['super_admin', 'admin', 'manager', 'technician'],
+    '/environmental': ['super_admin', 'admin', 'manager', 'technician'],
     '/grain-alerts': ['super_admin', 'admin', 'manager', 'technician'],
     '/silos': ['super_admin', 'admin', 'manager', 'technician'],
     '/profile': ['super_admin', 'admin', 'manager', 'technician'],
@@ -204,30 +204,16 @@ export function validateUserSession(user: User | null, currentPath: string): { i
 /**
  * Get user's tenant information for display
  */
-export function getUserTenantInfo(user: User): { name: string; type: 'owned' | 'member' | 'none' } {
+export function getUserTenantInfo(_user: User): { name: string; type: 'owned' | 'member' | 'none' } {
   // This would need to be implemented based on your data structure
   // For now, returning placeholder
   return { name: 'Default Tenant', type: 'member' }
 }
 
 /**
- * Check if user can perform administrative actions
- */
-export function isAdmin(user: User): boolean {
-  return user.role === 'admin' || user.role === 'super_admin'
-}
-
-/**
- * Check if user is super admin
- */
-export function isSuperAdmin(user: User): boolean {
-  return user.role === 'super_admin'
-}
-
-/**
  * Get appropriate sidebar navigation items based on user role
  */
-export function getSidebarNavigation(userRole: string): any[] {
+export function getSidebarNavigation(userRole: string): Array<{ name: string; label: string; href: string; icon: string; roles: string[] }> {
   const allNavItems = [
     { name: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', roles: ['super_admin', 'admin', 'manager', 'technician'] },
     { name: 'grain-batches', label: 'Grain Batches', href: '/grain-batches', icon: 'Package', roles: ['super_admin', 'admin', 'manager'] },
