@@ -370,7 +370,7 @@ export function TenantDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <Users className="h-5 w-5 mr-2" />
-              User Management
+              Team Management
             </CardTitle>
             <CardDescription>
               Manage your team members and their roles
@@ -392,16 +392,16 @@ export function TenantDashboard() {
                     </p>
                   </div>
                   <div className="flex space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => router.push('/users')}>Edit</Button>
+                    <Button size="sm" variant="outline" onClick={() => router.push('/team-management')}>Edit</Button>
                     <Button size="sm" variant="outline">View</Button>
                   </div>
                 </div>
               ))}
             </div>
             <div className="mt-4">
-              <Button className="w-full" onClick={() => router.push('/users')}>
+              <Button className="w-full" onClick={() => router.push('/team-management')}>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Add New User
+                Team Management
               </Button>
             </div>
           </CardContent>
@@ -506,10 +506,10 @@ export function TenantDashboard() {
           <div className="grid gap-4 md:grid-cols-3">
             <Button 
               className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => router.push('/users')}
+              onClick={() => router.push('/team-management')}
             >
               <UserPlus className="h-6 w-6" />
-              <span>Add User</span>
+              <span>Invite Team Member</span>
             </Button>
             <Button 
               className="h-20 flex flex-col items-center justify-center space-y-2" 

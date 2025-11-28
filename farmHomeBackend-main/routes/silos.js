@@ -240,7 +240,12 @@ router.post(
       } = req.body;
 
       // Check if silo_id already exists for this tenant
-      console.log("Checking for existing silo with silo_id:", silo_id, "admin_id:", req.user.admin_id);
+      console.log(
+        "Checking for existing silo with silo_id:",
+        silo_id,
+        "admin_id:",
+        req.user.admin_id
+      );
       const existingSilo = await Silo.findOne({
         silo_id,
         admin_id: req.user.admin_id,

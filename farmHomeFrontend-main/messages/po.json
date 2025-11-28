@@ -23,7 +23,7 @@
   },
   "AuthPage": {
     "welcomeBack": "Bem-vindo de volta",
-    "signInToAccount": "Faça login na sua conta Farm Home",
+    "signInToAccount": "Faça login na sua conta GrainHero",
     "email": "Email",
     "password": "Senha",
     "signingIn": "Entrando...",
@@ -35,7 +35,7 @@
     "networkError": "Erro de rede. Por favor, tente novamente.",
     "loginSuccess": "Login bem-sucedido! Redirecionando...",
     "createAccount": "Criar Conta",
-    "signUpForFarmHome": "Inscreva-se no Farm Home (Cadastro de Admin)",
+    "signUpForFarmHome": "Inscreva-se no GrainHero (Cadastro de Admin)",
     "fullName": "Nome completo",
     "phoneNumber": "Número de telefone",
     "optional": "(opcional)",

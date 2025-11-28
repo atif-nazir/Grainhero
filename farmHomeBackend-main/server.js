@@ -28,6 +28,7 @@ const iotRoute = require("./routes/iot");
 const dataVisualizationRoute = require("./routes/dataVisualization");
 const silosRoute = require("./routes/silos");
 const insuranceRoute = require("./routes/insurance");
+const buyersRoute = require("./routes/buyers");
 const environmentalRoute = require("./routes/environmental");
 
 // Super Admin routes
@@ -71,13 +72,23 @@ const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error: "));
 db.once("open", () => {
   console.log("MongoDB Connection Successfull");
-  
+
   // Start environmental data collection service
   try {
     environmentalDataService.start();
     console.log("Environmental data service started");
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
+  }
+
+  // Start limit warning scheduler
+  try {
+    const {
+      startLimitWarningScheduler,
+    } = require("./services/limitWarningService");
+    startLimitWarningScheduler();
+  } catch (error) {
+    console.error("Failed to start limit warning scheduler:", error);
   }
 });
 
@@ -112,10 +123,15 @@ app.use("/api/iot", iotRoute);
 app.use("/api/data-viz", dataVisualizationRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
+app.use("/api/buyers", buyersRoute);
 
 // Super Admin routes
 app.use("/api/tenant-management", tenantManagementRoute);
 app.use("/api/plan-management", planManagementRoute);
+
+// Subscription Analytics routes
+const subscriptionAnalyticsRoute = require("./routes/subscriptionAnalytics");
+app.use("/api/subscription-analytics", subscriptionAnalyticsRoute);
 
 // User Management routes
 app.use("/api/user-management", userManagementRoute);
@@ -136,9 +152,9 @@ const swaggerOptions = {
   swaggerDefinition: {
     openapi: "3.0.0",
     info: {
-      title: "Farm Home Backend API",
+      title: "GrainHero Backend API",
       version: "1.0.0",
-      description: "API documentation for Farm Home Backend",
+      description: "API documentation for GrainHero Backend",
     },
     servers: [
       {

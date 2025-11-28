@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { Wheat as WheatIcon } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 
@@ -71,13 +72,39 @@ export default function AboutPage() {
                 <div className="max-w-6xl mx-auto">
                     <h2 className="text-2xl md:text-3xl font-bold text-center mb-8">Platform in Action</h2>
                     <div className="grid md:grid-cols-3 gap-6">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="group relative overflow-hidden rounded-2xl border border-[#00a63e]/20 bg-white">
-                                <div className="aspect-video bg-cover bg-center" style={{ backgroundImage: "url('/images/grain-fields-hero.jpg')" }} />
-                                <div className="p-4">
-                                    <p className="text-sm text-gray-700">{i === 1 ? 'Real-time dashboard' : i === 2 ? 'AI spoilage prediction' : 'Traceability & QR tagging'}</p>
+                        {[
+                            {
+                                title: 'Real-time dashboard',
+                                image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop&q=80',
+                                description: 'Monitor your grain storage operations with live data and analytics'
+                            },
+                            {
+                                title: 'AI spoilage prediction',
+                                image: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&h=600&fit=crop&q=80',
+                                description: 'Predictive analytics powered by AI to prevent grain spoilage'
+                            },
+                            {
+                                title: 'Traceability & QR tagging',
+                                image: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&h=600&fit=crop&q=80',
+                                description: 'Complete batch tracking with QR codes for full traceability'
+                            }
+                        ].map((feature, i) => (
+                            <div key={i} className="group relative overflow-hidden rounded-2xl border border-[#00a63e]/20 bg-white hover:shadow-lg transition-all">
+                                <div className="relative aspect-video bg-gray-200 overflow-hidden">
+                                    <Image
+                                        src={feature.image}
+                                        alt={feature.title}
+                                        fill
+                                        sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                                        className="object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                                 </div>
-                                <div className="absolute inset-0 bg-[#00a63e]/0 group-hover:bg-[#00a63e]/5 transition-colors" />
+                                <div className="p-4">
+                                    <h3 className="font-semibold text-gray-900 mb-1">{feature.title}</h3>
+                                    <p className="text-sm text-gray-600">{feature.description}</p>
+                                </div>
+                                <div className="absolute inset-0 bg-[#00a63e]/0 group-hover:bg-[#00a63e]/5 transition-colors pointer-events-none" />
                             </div>
                         ))}
                     </div>

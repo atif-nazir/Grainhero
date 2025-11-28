@@ -1,22 +1,17 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Database, 
-  Upload, 
-  Download,
+import {
+  Database,
+  Upload,
   Plus,
   RefreshCw,
-  FileText,
   BarChart3,
-  Settings,
-  Zap,
   CheckCircle,
-  AlertTriangle,
   Activity
 } from 'lucide-react'
 
@@ -47,53 +42,55 @@ export default function DataManagementPage() {
   const [sampleData, setSampleData] = useState<TrainingRecord[]>([])
   const [generating, setGenerating] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string>('')
+  const [statusMessage, setStatusMessage] = useState<string>('')
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
 
-  useEffect(() => {
-    loadDataSummary()
-  }, [])
-
-  const loadDataSummary = async () => {
+  const loadDataSummary = useCallback(async (showStatus: boolean = false) => {
+    setLoading(true)
+    setError('')
+    if (showStatus) {
+      setStatusMessage('')
+    }
     try {
-      const token = localStorage.getItem('token')
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       const response = await fetch(`${backendUrl}/ai-spoilage/data-summary`, {
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setDataSummary(data)
-      } else {
-        // Fallback to mock data if backend is not available
-        setDataSummary({
-          base_records: 319,
-          new_records: 0,
-          total_records: 319,
-          last_updated: new Date().toISOString()
-        })
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error || 'Failed to load data summary')
       }
-    } catch (error) {
-      console.error('Error loading data summary:', error)
-      // Fallback to mock data
-      setDataSummary({
-        base_records: 319,
-        new_records: 0,
-        total_records: 319,
-        last_updated: new Date().toISOString()
-      })
+
+      const data = await response.json()
+      setDataSummary(data)
+      if (showStatus) {
+        setStatusMessage('Data summary updated.')
+      }
+    } catch (err) {
+      console.error('Error loading data summary:', err)
+      setDataSummary(null)
+      setError((err as Error).message || 'Failed to load data summary')
     } finally {
       setLoading(false)
     }
-  }
+  }, [backendUrl])
+
+  useEffect(() => {
+    void loadDataSummary(false)
+  }, [loadDataSummary])
 
   const generateSampleData = async (count: number = 10) => {
     setGenerating(true)
+    setError('')
+    setStatusMessage('')
     try {
-      const token = localStorage.getItem('token')
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       const response = await fetch(`${backendUrl}/ai-spoilage/generate-sample-data`, {
         method: 'POST',
         headers: {
@@ -102,59 +99,35 @@ export default function DataManagementPage() {
         },
         body: JSON.stringify({ count })
       })
-      
-      if (response.ok) {
-        const result = await response.json()
-        setSampleData(result.sample_data)
-        alert(`Generated ${result.count} sample records!`)
-      } else {
-        // Fallback to mock data generation
-        const mockData = generateMockSampleData(count)
-        setSampleData(mockData)
-        alert(`Generated ${count} sample records (mock data)!`)
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error || 'Failed to generate sample data')
       }
-    } catch (error) {
-      console.error('Error generating sample data:', error)
-      // Fallback to mock data generation
-      const mockData = generateMockSampleData(count)
-      setSampleData(mockData)
-      alert(`Generated ${count} sample records (mock data)!`)
+
+      const result = await response.json()
+      setSampleData(result.sample_data || [])
+      setStatusMessage(`Generated ${result.sample_data?.length ?? count} sample records.`)
+    } catch (err) {
+      console.error('Error generating sample data:', err)
+      setSampleData([])
+      setError((err as Error).message || 'Failed to generate sample data')
     } finally {
       setGenerating(false)
     }
   }
 
-  const generateMockSampleData = (count: number): TrainingRecord[] => {
-    const sampleData: TrainingRecord[] = []
-    
-    for (let i = 0; i < count; i++) {
-      const record: TrainingRecord = {
-        Temperature: Math.round((Math.random() * 15 + 20) * 10) / 10, // 20-35°C
-        Humidity: Math.round((Math.random() * 30 + 50) * 10) / 10, // 50-80%
-        Grain_Moisture: Math.round((Math.random() * 6 + 12) * 10) / 10, // 12-18%
-        Dew_Point: Math.round((Math.random() * 8 + 15) * 10) / 10, // 15-23°C
-        Storage_Days: Math.floor(Math.random() * 30) + 1, // 1-30 days
-        Airflow: Math.round((Math.random() * 0.8 + 0.6) * 10) / 10, // 0.6-1.4
-        Ambient_Light: Math.round((Math.random() * 40 + 80) * 10) / 10, // 80-120 lux
-        Pest_Presence: Math.random() > 0.8 ? 1 : 0, // 20% chance
-        Rainfall: Math.round((Math.random() * 8) * 10) / 10, // 0-8mm
-        Spoilage_Label: Math.random() > 0.7 ? (Math.random() > 0.5 ? 'Risky' : 'Spoiled') : 'Safe'
-      }
-      sampleData.push(record)
-    }
-    
-    return sampleData
-  }
-
   const uploadSampleData = async () => {
     if (sampleData.length === 0) {
-      alert('No sample data to upload. Generate some first!')
+      setError('No sample data to upload. Generate some first.')
       return
     }
 
     setUploading(true)
+    setError('')
+    setStatusMessage('')
     try {
-      const token = localStorage.getItem('token')
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       const response = await fetch(`${backendUrl}/ai-spoilage/add-data`, {
         method: 'POST',
         headers: {
@@ -163,73 +136,79 @@ export default function DataManagementPage() {
         },
         body: JSON.stringify({ records: sampleData })
       })
-      
-      if (response.ok) {
-        const result = await response.json()
-        alert(`Successfully uploaded ${result.records_added} records!`)
-        setSampleData([])
-        loadDataSummary() // Refresh data summary
-      } else {
-        // Mock upload for demo purposes
-        alert(`Successfully uploaded ${sampleData.length} records (mock upload)!`)
-        setSampleData([])
-        // Update data summary with mock data
-        setDataSummary(prev => ({
-          base_records: prev?.base_records || 319,
-          new_records: (prev?.new_records || 0) + sampleData.length,
-          total_records: (prev?.total_records || 319) + sampleData.length,
-          last_updated: new Date().toISOString()
-        }))
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error || 'Failed to upload training data')
       }
-    } catch (error) {
-      console.error('Error uploading data:', error)
-      // Mock upload for demo purposes
-      alert(`Successfully uploaded ${sampleData.length} records (mock upload)!`)
+
+      const result = await response.json()
+      setStatusMessage(`Successfully uploaded ${result.records_added ?? sampleData.length} records.`)
       setSampleData([])
-      // Update data summary with mock data
-      setDataSummary(prev => ({
-        base_records: prev?.base_records || 319,
-        new_records: (prev?.new_records || 0) + sampleData.length,
-        total_records: (prev?.total_records || 319) + sampleData.length,
-        last_updated: new Date().toISOString()
-      }))
+      await loadDataSummary()
+    } catch (err) {
+      console.error('Error uploading data:', err)
+      setError((err as Error).message || 'Failed to upload training data')
     } finally {
       setUploading(false)
     }
   }
 
   const uploadCustomData = async (file: File) => {
+    setError('')
+    setStatusMessage('')
     try {
       const text = await file.text()
       const lines = text.split('\n')
       const headers = lines[0].split(',')
-      
-      // Validate headers
-      const requiredHeaders = ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point', 
-                              'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence', 
-                              'Rainfall', 'Spoilage_Label']
-      
+
+      const requiredHeaders = ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point',
+        'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence',
+        'Rainfall', 'Spoilage_Label']
+
       const missingHeaders = requiredHeaders.filter(h => !headers.includes(h))
       if (missingHeaders.length > 0) {
-        alert(`Missing required columns: ${missingHeaders.join(', ')}`)
+        setError(`Missing required columns: ${missingHeaders.join(', ')}`)
         return
       }
-      
-      // Parse CSV data
+
       const records: TrainingRecord[] = []
       for (let i = 1; i < lines.length; i++) {
         if (lines[i].trim()) {
           const values = lines[i].split(',')
-          const record: any = {}
+          const rowData: Record<string, string> = {}
           headers.forEach((header, index) => {
-            record[header] = isNaN(Number(values[index])) ? values[index] : Number(values[index])
+            rowData[header] = (values[index] ?? '').trim()
           })
-          records.push(record)
+
+          const toNumber = (field: string, fallback = 0) => {
+            const num = Number(rowData[field])
+            return isNaN(num) ? fallback : num
+          }
+
+          const parsedRecord: TrainingRecord = {
+            Temperature: toNumber('Temperature'),
+            Humidity: toNumber('Humidity'),
+            Grain_Moisture: toNumber('Grain_Moisture'),
+            Dew_Point: toNumber('Dew_Point'),
+            Storage_Days: toNumber('Storage_Days'),
+            Airflow: toNumber('Airflow'),
+            Ambient_Light: toNumber('Ambient_Light'),
+            Pest_Presence: toNumber('Pest_Presence'),
+            Rainfall: toNumber('Rainfall'),
+            Spoilage_Label: rowData['Spoilage_Label'] || 'Safe'
+          }
+
+          records.push(parsedRecord)
         }
       }
-      
-      // Upload data
-      const token = localStorage.getItem('token')
+
+      if (!records.length) {
+        setError('CSV file does not contain any records.')
+        return
+      }
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       const response = await fetch(`${backendUrl}/ai-spoilage/add-data`, {
         method: 'POST',
         headers: {
@@ -238,15 +217,18 @@ export default function DataManagementPage() {
         },
         body: JSON.stringify({ records })
       })
-      
-      if (response.ok) {
-        const result = await response.json()
-        alert(`Successfully uploaded ${result.records_added} records from CSV!`)
-        loadDataSummary()
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error || 'Failed to upload CSV data')
       }
-    } catch (error) {
-      console.error('Error uploading CSV:', error)
-      alert('Error uploading CSV file')
+
+      const result = await response.json()
+      setStatusMessage(`Successfully uploaded ${result.records_added ?? records.length} records from CSV.`)
+      await loadDataSummary()
+    } catch (err) {
+      console.error('Error uploading CSV:', err)
+      setError((err as Error).message || 'Error uploading CSV file')
     }
   }
 
@@ -277,8 +259,8 @@ export default function DataManagementPage() {
           </p>
         </div>
         <div className="flex space-x-2">
-          <Button 
-            onClick={loadDataSummary}
+          <Button
+            onClick={() => void loadDataSummary(true)}
             variant="outline"
             size="sm"
           >
@@ -287,6 +269,17 @@ export default function DataManagementPage() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {statusMessage && (
+        <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+          {statusMessage}
+        </div>
+      )}
 
       {/* Data Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -416,7 +409,7 @@ export default function DataManagementPage() {
                   Upload a CSV file with the following columns:
                 </p>
                 <div className="text-xs text-gray-500 mb-4">
-                  Temperature, Humidity, Grain_Moisture, Dew_Point, Storage_Days, 
+                  Temperature, Humidity, Grain_Moisture, Dew_Point, Storage_Days,
                   Airflow, Ambient_Light, Pest_Presence, Rainfall, Spoilage_Label
                 </div>
                 <input
@@ -451,7 +444,7 @@ export default function DataManagementPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-4">
-                <Button 
+                <Button
                   onClick={() => generateSampleData(10)}
                   disabled={generating}
                   variant="outline"
@@ -459,7 +452,7 @@ export default function DataManagementPage() {
                   <Plus className="h-4 w-4 mr-2" />
                   {generating ? 'Generating...' : 'Generate 10 Records'}
                 </Button>
-                <Button 
+                <Button
                   onClick={() => generateSampleData(50)}
                   disabled={generating}
                   variant="outline"
@@ -467,7 +460,7 @@ export default function DataManagementPage() {
                   <Plus className="h-4 w-4 mr-2" />
                   {generating ? 'Generating...' : 'Generate 50 Records'}
                 </Button>
-                <Button 
+                <Button
                   onClick={() => generateSampleData(100)}
                   disabled={generating}
                   variant="outline"
@@ -482,7 +475,7 @@ export default function DataManagementPage() {
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold">Generated Sample Data ({sampleData.length} records)</h3>
                     <div className="flex space-x-2">
-                      <Button 
+                      <Button
                         onClick={uploadSampleData}
                         disabled={uploading}
                         className="bg-gray-900 hover:bg-gray-800"
@@ -490,8 +483,12 @@ export default function DataManagementPage() {
                         <Upload className="h-4 w-4 mr-2" />
                         {uploading ? 'Uploading...' : 'Upload to Training Data'}
                       </Button>
-                      <Button 
-                        onClick={() => setSampleData([])}
+                      <Button
+                        onClick={() => {
+                          setSampleData([])
+                          setStatusMessage('Sample data cleared.')
+                          setError('')
+                        }}
                         variant="outline"
                       >
                         Clear
@@ -520,7 +517,7 @@ export default function DataManagementPage() {
                             <td className="px-3 py-2 text-sm">
                               <Badge variant="outline" className={
                                 record.Spoilage_Label === 'Safe' ? 'text-green-600' :
-                                record.Spoilage_Label === 'Risky' ? 'text-yellow-600' : 'text-red-600'
+                                  record.Spoilage_Label === 'Risky' ? 'text-yellow-600' : 'text-red-600'
                               }>
                                 {record.Spoilage_Label}
                               </Badge>
@@ -544,3 +541,4 @@ export default function DataManagementPage() {
     </div>
   )
 }
+

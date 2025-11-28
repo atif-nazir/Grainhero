@@ -23,7 +23,7 @@ type Plan = {
   price?: number
   duration?: string
 }
-
+  
 export default function HomePage() {
   return (
     <AnimatedBackground className="min-h-screen">
@@ -71,7 +71,7 @@ function Navigation() {
           <Link href="/" className="flex items-center space-x-2 mr-6">
             <WheatIcon className="w-8 h-8 text-[#00a63e]" />
             <span className="text-xl font-bold">GrainHero</span>
-          </Link>
+              </Link>
           {/* Middle: Tabs */}
           <div className="hidden md:flex items-center gap-6">
             {navItems.map((item) => (
@@ -97,14 +97,14 @@ function Navigation() {
               {navItems.map((item) => (
                 <Link key={item.href} href={item.href} className="block text-gray-700 hover:text-[#00a63e] py-2" onClick={() => setMobileMenuOpen(false)}>
                   {item.label}
-                </Link>
+              </Link>
               ))}
               <div className="flex items-center gap-3 pt-2">
                 <Link href="/auth/login" className="text-gray-700 hover:text-[#00a63e]" onClick={() => setMobileMenuOpen(false)}>Login</Link>
                 <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
-              </div>
             </div>
           </div>
+        </div>
         )}
       </div>
     </nav>
@@ -157,8 +157,8 @@ function Highlights() {
               <p className="text-gray-600 mb-4 text-sm leading-relaxed">{highlight.description}</p>
               <Link href={highlight.link} className={`inline-block ${highlight.color} text-white px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 group-hover:scale-105`}>
                 {highlight.button}
-              </Link>
-            </div>
+            </Link>
+          </div>
           ))}
         </div>
       </div>
@@ -218,7 +218,7 @@ function Features() {
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">Comprehensive tools to optimize your grain storage, reduce losses, and maximize profitability.</p>
         </div>
         <AnimatedFeatureCards features={features} />
-      </div>
+        </div>
     </section>
   )
 }
@@ -323,7 +323,7 @@ function Footer() {
         <div className="py-6 border-t text-center text-gray-500">
           <p>&copy; {currentYear} GrainHero. All rights reserved.</p>
         </div>
-      </div>
+    </div>
     </footer>
   )
 }

@@ -213,6 +213,12 @@ const BUYER_TYPES = {
   GOVERNMENT: "government",
 };
 
+const BUYER_STATUSES = {
+  ACTIVE: "active",
+  PAUSED: "paused",
+  INACTIVE: "inactive",
+};
+
 const CLAIM_STATUSES = {
   PENDING: "pending",
   UNDER_REVIEW: "under_review",
@@ -295,6 +301,7 @@ module.exports = {
   ACTUATOR_TRIGGER_TYPES,
   PAYMENT_METHODS,
   BUYER_TYPES,
+  BUYER_STATUSES,
   CLAIM_STATUSES,
   REPORT_TYPES,
   BILLING_CYCLES,

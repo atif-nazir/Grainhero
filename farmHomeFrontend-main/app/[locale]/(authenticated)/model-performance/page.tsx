@@ -1,22 +1,18 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Brain, 
-  TrendingUp, 
-  TrendingDown,
+import {
+  Brain,
   Target,
   Activity,
   Clock,
   CheckCircle,
   AlertTriangle,
-  BarChart3,
-  Settings,
   Zap,
   RefreshCw,
   Award,
@@ -63,164 +59,109 @@ interface ModelPerformance {
   }
 }
 
+interface TrainingSession {
+  timestamp: string
+  metrics: {
+    accuracy: number
+    precision: number
+    recall: number
+    f1_score: number
+    cv_mean?: number
+    cv_std?: number
+  }
+  training_data_size?: number
+  hyperparameters?: Record<string, unknown>
+  improvement?: Record<string, number>
+}
+
+interface TrainingHistory {
+  training_sessions: TrainingSession[]
+  total_sessions: number
+  performance_trends?: Record<string, number[]>
+}
+
 export default function ModelPerformancePage() {
   const [performance, setPerformance] = useState<ModelPerformance | null>(null)
   const [loading, setLoading] = useState(true)
   const [retraining, setRetraining] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
+  const [trainingHistory, setTrainingHistory] = useState<TrainingHistory | null>(null)
+  const [error, setError] = useState<string>('')
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
 
-  useEffect(() => {
-    loadPerformanceData()
-  }, [])
-
-  const loadPerformanceData = async () => {
+  const loadPerformanceData = useCallback(async () => {
+    setLoading(true)
+    setError('')
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${backendUrl}/ai-spoilage/model-performance`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setPerformance(data)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
-    } catch (error) {
-      console.error('Error loading performance data:', error)
+
+      const [performanceRes, historyRes] = await Promise.all([
+        fetch(`${backendUrl}/ai-spoilage/model-performance`, { headers }),
+        fetch(`${backendUrl}/ai-spoilage/training-history`, { headers })
+      ])
+
+      if (!performanceRes.ok) {
+        const body = await performanceRes.json().catch(() => null)
+        throw new Error(body?.error || body?.message || 'Failed to load model performance')
+      }
+
+      const performanceData = await performanceRes.json()
+      setPerformance(performanceData)
+
+      if (historyRes.ok) {
+        const historyData = await historyRes.json()
+        setTrainingHistory(historyData)
+      } else {
+        setTrainingHistory(null)
+      }
+    } catch (err) {
+      console.error('Error loading performance data:', err)
+      setPerformance(null)
+      setTrainingHistory(null)
+      setError((err as Error).message || 'Failed to load model performance data')
     } finally {
       setLoading(false)
     }
-  }
+  }, [backendUrl])
+
+  useEffect(() => {
+    void loadPerformanceData()
+  }, [loadPerformanceData])
 
   const retrainModel = async () => {
     setRetraining(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       const response = await fetch(`${backendUrl}/ai-spoilage/retrain`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           force_retrain: true,
           hyperparameter_tuning: true
         })
       })
-      
-      if (response.ok) {
-        const result = await response.json()
-        console.log('Retraining result:', result)
-        alert(`Model retraining completed!\n\nImprovements:\n- Accuracy: ${result.improvement_summary?.accuracy_improvement_pct?.toFixed(2) || 0}%\n- F1 Score: ${result.improvement_summary?.f1_score_improvement_pct?.toFixed(2) || 0}%\n\nTotal sessions: ${result.total_training_sessions}`)
-        loadPerformanceData() // Refresh data
-      } else {
-        // Mock retraining for demo purposes
-        const mockResult = {
-          accuracy: 87.3 + Math.random() * 5, // 87.3-92.3%
-          f1_score: 85.1 + Math.random() * 4, // 85.1-89.1%
-          precision: 89.2 + Math.random() * 3, // 89.2-92.2%
-          recall: 84.7 + Math.random() * 4, // 84.7-88.7%
-          cv_mean: 86.1 + Math.random() * 4, // 86.1-90.1%
-          cv_std: 0.02 + Math.random() * 0.02, // 0.02-0.04
-          training_samples: 319 + Math.floor(Math.random() * 100), // 319-419
-          test_samples: 80 + Math.floor(Math.random() * 20), // 80-100
-          timestamp: new Date().toISOString()
-        }
-        
-        setPerformance({
-          performance_summary: {
-            total_training_sessions: 1,
-            latest_metrics: mockResult,
-            overall_improvement: {
-              accuracy_improvement: 2.1,
-              f1_score_improvement: 1.8,
-              accuracy_improvement_pct: 2.1,
-              f1_score_improvement_pct: 1.8
-            },
-            accuracy_trend: [87.3, mockResult.accuracy],
-            f1_trend: [85.1, mockResult.f1_score],
-            best_performance: {
-              best_accuracy: { value: mockResult.accuracy, timestamp: mockResult.timestamp },
-              best_f1: { value: mockResult.f1_score, timestamp: mockResult.timestamp }
-            }
-          },
-          training_insights: {
-            insights: [
-              "✅ Model shows consistent improvement in recent training sessions",
-              "🔄 High training frequency - model is actively learning",
-              "📊 Training data increased by 15.2% since first training"
-            ]
-          },
-          recommendations: [
-            "✅ Model performance looks good! Continue regular training"
-          ],
-          model_info: {
-            name: 'SmartBin-RiceSpoilage',
-            version: '2.0.0',
-            algorithm: 'XGBoost',
-            features: ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point', 'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence', 'Rainfall'],
-            target_classes: ['Safe', 'Risky', 'Spoiled']
-          }
-        })
-        
-        alert(`Model retraining completed (demo)!\n\nNew Performance:\n- Accuracy: ${mockResult.accuracy.toFixed(1)}%\n- F1 Score: ${mockResult.f1_score.toFixed(1)}%\n- Precision: ${mockResult.precision.toFixed(1)}%\n- Recall: ${mockResult.recall.toFixed(1)}%`)
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error || body?.message || 'Model retraining failed')
       }
-    } catch (error) {
-      console.error('Error retraining model:', error)
-      // Mock retraining for demo purposes
-      const mockResult = {
-        accuracy: 87.3 + Math.random() * 5,
-        f1_score: 85.1 + Math.random() * 4,
-        precision: 89.2 + Math.random() * 3,
-        recall: 84.7 + Math.random() * 4,
-        cv_mean: 86.1 + Math.random() * 4,
-        cv_std: 0.02 + Math.random() * 0.02,
-        training_samples: 319 + Math.floor(Math.random() * 100),
-        test_samples: 80 + Math.floor(Math.random() * 20),
-        timestamp: new Date().toISOString()
-      }
-      
-      setPerformance({
-        performance_summary: {
-          total_training_sessions: 1,
-          latest_metrics: mockResult,
-          overall_improvement: {
-            accuracy_improvement: 2.1,
-            f1_score_improvement: 1.8,
-            accuracy_improvement_pct: 2.1,
-            f1_score_improvement_pct: 1.8
-          },
-          accuracy_trend: [87.3, mockResult.accuracy],
-          f1_trend: [85.1, mockResult.f1_score],
-          best_performance: {
-            best_accuracy: { value: mockResult.accuracy, timestamp: mockResult.timestamp },
-            best_f1: { value: mockResult.f1_score, timestamp: mockResult.timestamp }
-          }
-        },
-        training_insights: {
-          insights: [
-            "✅ Model shows consistent improvement in recent training sessions",
-            "🔄 High training frequency - model is actively learning",
-            "📊 Training data increased by 15.2% since first training"
-          ]
-        },
-        recommendations: [
-          "✅ Model performance looks good! Continue regular training"
-        ],
-        model_info: {
-          name: 'SmartBin-RiceSpoilage',
-          version: '2.0.0',
-          algorithm: 'XGBoost',
-          features: ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point', 'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence', 'Rainfall'],
-          target_classes: ['Safe', 'Risky', 'Spoiled']
-        }
-      })
-      
-      alert(`Model retraining completed (demo)!\n\nNew Performance:\n- Accuracy: ${mockResult.accuracy.toFixed(1)}%\n- F1 Score: ${mockResult.f1_score.toFixed(1)}%\n- Precision: ${mockResult.precision.toFixed(1)}%\n- Recall: ${mockResult.recall.toFixed(1)}%`)
+
+      const result = await response.json()
+      alert(
+        `Model retraining completed!\n\nAccuracy: ${formatAccuracy(result.performance_metrics?.accuracy ?? 0)}\nF1 Score: ${formatF1Score(result.performance_metrics?.f1_score ?? 0)}`
+      )
+      await loadPerformanceData()
+    } catch (err) {
+      console.error('Error retraining model:', err)
+      alert((err as Error).message || 'Model retraining failed.')
     } finally {
       setRetraining(false)
     }
@@ -238,6 +179,14 @@ export default function ModelPerformancePage() {
     return 'text-gray-600'
   }
 
+  const trendHeightClasses = ['h-2', 'h-3', 'h-4', 'h-5', 'h-6', 'h-7', 'h-8', 'h-9', 'h-10', 'h-12', 'h-14', 'h-16', 'h-20', 'h-24', 'h-28']
+  const getTrendHeightClass = (value: number) => {
+    if (!value && value !== 0) return 'h-2'
+    const normalized = Math.max(0, Math.min(100, value))
+    const index = Math.min(trendHeightClasses.length - 1, Math.round((normalized / 100) * (trendHeightClasses.length - 1)))
+    return trendHeightClasses[index]
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -249,7 +198,23 @@ export default function ModelPerformancePage() {
     )
   }
 
-  if (!performance) {
+  if (error && !performance) {
+    return (
+      <div className="text-center py-12 space-y-4">
+        <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto" />
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-1">Unable to load model performance</h3>
+          <p className="text-gray-600 text-sm">{error}</p>
+        </div>
+        <Button onClick={loadPerformanceData}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  if (!performance || !performance.performance_summary?.latest_metrics) {
     return (
       <div className="text-center py-12">
         <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -265,6 +230,8 @@ export default function ModelPerformancePage() {
 
   const { performance_summary, training_insights, recommendations, model_info } = performance
   const { latest_metrics, overall_improvement, accuracy_trend, f1_trend, best_performance } = performance_summary
+  const accuracyTrendValues = accuracy_trend || []
+  const f1TrendValues = f1_trend || []
 
   return (
     <div className="space-y-6">
@@ -282,7 +249,7 @@ export default function ModelPerformancePage() {
           </p>
         </div>
         <div className="flex space-x-2">
-          <Button 
+          <Button
             onClick={loadPerformanceData}
             variant="outline"
             size="sm"
@@ -290,7 +257,7 @@ export default function ModelPerformancePage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button 
+          <Button
             onClick={retrainModel}
             disabled={retraining}
             className="bg-gray-900 hover:bg-gray-800"
@@ -374,11 +341,12 @@ export default function ModelPerformancePage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
           <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -454,31 +422,33 @@ export default function ModelPerformancePage() {
               <div className="space-y-4">
                 <div>
                   <div className="text-sm font-medium mb-2">Accuracy Trend</div>
-                  <div className="flex items-center space-x-2">
-                    {accuracy_trend.map((value, index) => (
-                      <div key={index} className="flex flex-col items-center">
-                        <div 
-                          className="w-4 bg-gray-200 rounded"
-                          style={{ height: `${value * 100}px` }}
-                        />
-                        <div className="text-xs text-gray-500 mt-1">{index + 1}</div>
-                      </div>
-                    ))}
-                  </div>
+                  {accuracyTrendValues.length ? (
+                    <div className="flex items-end space-x-2">
+                      {accuracyTrendValues.map((value, index) => (
+                        <div key={`acc-${index}`} className="flex flex-col items-center">
+                          <div className={`w-4 rounded bg-gray-200 ${getTrendHeightClass(value)}`} />
+                          <div className="text-xs text-gray-500 mt-1">{index + 1}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">Not enough data to show trends yet.</p>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm font-medium mb-2">F1 Score Trend</div>
-                  <div className="flex items-center space-x-2">
-                    {f1_trend.map((value, index) => (
-                      <div key={index} className="flex flex-col items-center">
-                        <div 
-                          className="w-4 bg-gray-200 rounded"
-                          style={{ height: `${value * 100}px` }}
-                        />
-                        <div className="text-xs text-gray-500 mt-1">{index + 1}</div>
-                      </div>
-                    ))}
-                  </div>
+                  {f1TrendValues.length ? (
+                    <div className="flex items-end space-x-2">
+                      {f1TrendValues.map((value, index) => (
+                        <div key={`f1-${index}`} className="flex flex-col items-center">
+                          <div className={`w-4 rounded bg-gray-200 ${getTrendHeightClass(value)}`} />
+                          <div className="text-xs text-gray-500 mt-1">{index + 1}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">Not enough data to show trends yet.</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -519,6 +489,71 @@ export default function ModelPerformancePage() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Training History</CardTitle>
+              <CardDescription>Recent training sessions and their metrics</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {trainingHistory?.training_sessions?.length ? (
+                trainingHistory.training_sessions
+                  .slice()
+                  .reverse()
+                  .map((session, index) => (
+                    <div key={`${session.timestamp}-${index}`} className="rounded-lg border border-gray-100 p-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold">
+                            Session {trainingHistory.total_sessions - index}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(session.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                        {session.training_data_size && (
+                          <Badge variant="outline" className="w-fit">
+                            Dataset: {session.training_data_size.toLocaleString()} rows
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Accuracy</p>
+                          <p className="font-semibold">{formatAccuracy(session.metrics.accuracy)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">F1 Score</p>
+                          <p className="font-semibold">{formatF1Score(session.metrics.f1_score)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Precision</p>
+                          <p className="font-semibold">{formatPrecision(session.metrics.precision)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Recall</p>
+                          <p className="font-semibold">{formatPrecision(session.metrics.recall)}</p>
+                        </div>
+                      </div>
+                      {session.improvement && session.improvement.accuracy_improvement_pct !== undefined && (
+                        <div className="mt-3 rounded-md bg-gray-50 p-2 text-xs text-gray-600 flex items-center justify-between">
+                          <span>Accuracy change</span>
+                          <span className={getImprovementColor(session.improvement.accuracy_improvement_pct)}>
+                            {formatTrend(session.improvement.accuracy_improvement_pct)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+              ) : (
+                <div className="text-sm text-gray-500">
+                  {trainingHistory ? 'No training sessions recorded yet.' : 'Training history is unavailable.'}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

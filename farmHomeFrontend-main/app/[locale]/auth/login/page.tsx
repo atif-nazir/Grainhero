@@ -2,9 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,6 +17,7 @@ import {
   validateEmail,
   createFieldValidation
 } from "@/lib/validation";
+import { Link, useRouter } from "@/i18n/navigation"
 
 export default function LoginPage() {
   const t = useTranslations('AuthPage');
@@ -38,15 +38,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setMessage(null)
+    const normalizedEmail = email.trim().toLowerCase()
 
     // Validate form
-    const validation = validateLoginForm(email, password)
+    const validation = validateLoginForm(normalizedEmail, password)
 
     if (!validation.isValid) {
       // Mark all fields as touched and update validation state
@@ -72,7 +74,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: email.trim().toLowerCase(),
+          email: normalizedEmail,
           password
         }),
       })
@@ -90,7 +92,10 @@ export default function LoginPage() {
         localStorage.setItem("role", data.role)
         localStorage.setItem("avatar", data.avatar)
         console.log(data)
-        await login(email, password)
+        await login(normalizedEmail, password)
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('pendingSignupEmail')
+        }
         setMessage("Login successful! Redirecting...")
         setTimeout(() => router.push("/dashboard"), 1000)
       }
@@ -130,6 +135,28 @@ export default function LoginPage() {
       }
     }))
   }
+
+  useEffect(() => {
+    if (!searchParams) return
+    let prefillEmail = searchParams.get('prefill') || searchParams.get('email') || ""
+    if (!prefillEmail && typeof window !== 'undefined') {
+      prefillEmail = localStorage.getItem('pendingSignupEmail') || ""
+    }
+    if (prefillEmail) {
+      setEmail(prefillEmail)
+      const validation = validateEmail(prefillEmail)
+      setFieldValidations(prev => ({
+        ...prev,
+        email: {
+          ...prev.email,
+          value: prefillEmail,
+          touched: true,
+          isValid: validation.isValid,
+          message: validation.message
+        }
+      }))
+    }
+  }, [searchParams])
 
   // Check if form is valid
   const isFormValid = fieldValidations.email.isValid && fieldValidations.password.isValid &&

@@ -149,8 +149,16 @@ const userSchema = new mongoose.Schema(
     hasAccess: {
       type: String,
       default: "none",
-      enum: ["none", "basic", "intermediate", "pro"],
-    }, // Subscription access flag
+      enum: [
+        "none",
+        "basic",
+        "intermediate",
+        "pro",
+        "standard",
+        "professional",
+        "enterprise",
+      ],
+    }, // Subscription access flag (checkout plan IDs: basic, intermediate, pro)
     customerId: { type: String }, // Stripe customer ID
 
     // Preferences and settings
@@ -180,40 +188,48 @@ const userSchema = new mongoose.Schema(
         created_at: { type: Date, default: Date.now },
       },
     ],
-    
+
     // GrainHero specific fields
     employee_id: {
-        type: String,
-        unique: true,
-        sparse: true
+      type: String,
+      unique: true,
+      sparse: true,
     },
     department: String,
     shift_pattern: {
-        type: String,
-        enum: ['day', 'night', 'rotating', 'on_call'],
-        default: 'day'
+      type: String,
+      enum: ["day", "night", "rotating", "on_call"],
+      default: "day",
     },
     certification_level: {
-        type: String,
-        enum: ['basic', 'intermediate', 'advanced', 'expert'],
-        default: 'basic'
+      type: String,
+      enum: ["basic", "intermediate", "advanced", "expert"],
+      default: "basic",
     },
-    access_zones: [{
-        zone_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone' },
+    access_zones: [
+      {
+        zone_id: { type: mongoose.Schema.Types.ObjectId, ref: "Zone" },
         zone_name: String,
-        access_level: { type: String, enum: ['read', 'write', 'admin'], default: 'read' }
-    }],
-    
+        access_level: {
+          type: String,
+          enum: ["read", "write", "admin"],
+          default: "read",
+        },
+      },
+    ],
+
     // Session management
-    active_sessions: [{
+    active_sessions: [
+      {
         session_id: String,
         device_info: String,
         ip_address: String,
         login_time: { type: Date, default: Date.now },
         last_activity: { type: Date, default: Date.now },
-        is_active: { type: Boolean, default: true }
-    }],
-    
+        is_active: { type: Boolean, default: true },
+      },
+    ],
+
     // Two-factor authentication
     two_factor_enabled: { type: Boolean, default: false },
     two_factor_secret: { type: String, select: false },
