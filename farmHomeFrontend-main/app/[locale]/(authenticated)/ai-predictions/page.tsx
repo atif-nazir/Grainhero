@@ -98,89 +98,16 @@ const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(nu
           
           // If no data or empty data, use mock data for demonstration
           if (!mapped.length || mapped.every(p => p.risk_score === 0 && p.confidence === 0)) {
-            mapped = [
-              {
-                batch_id: 'RICE001',
-                grain_type: 'Rice',
-                risk_score: 26,
-                confidence: 87,
-                spoilage_prediction: 'Low Risk',
-                days_until_spoilage: 20,
-                contributing_factors: ['high_humidity'],
-                recommendations: ['Increase ventilation', 'Monitor humidity'],
-                silo_name: 'Rice Silo 1',
-                last_updated: new Date().toISOString(),
-              },
-              {
-                batch_id: 'RICE002',
-                grain_type: 'Rice',
-                risk_score: 12,
-                confidence: 83,
-                spoilage_prediction: 'Low Risk',
-                days_until_spoilage: 32,
-                contributing_factors: ['high_moisture'],
-                recommendations: ['Check grain moisture', 'Adjust storage conditions'],
-                silo_name: 'Rice Silo 1',
-                last_updated: new Date().toISOString(),
-              },
-              {
-                batch_id: 'RICE003',
-                grain_type: 'Rice',
-                risk_score: 0,
-                confidence: 89,
-                spoilage_prediction: 'Low Risk',
-                days_until_spoilage: 70,
-                contributing_factors: [],
-                recommendations: ['Continue monitoring'],
-                silo_name: 'Rice Silo 1',
-                last_updated: new Date().toISOString(),
-              }
-            ]
+            // Show an empty UI state instead of mock data when no predictions exist
+            mapped = [];
           }
           setPredictions(mapped)
         } else {
           // If API fails, use mock data
-          setPredictions([
-            {
-              batch_id: 'RICE001',
-              grain_type: 'Rice',
-              risk_score: 26,
-              confidence: 87,
-              spoilage_prediction: 'Low Risk',
-              days_until_spoilage: 20,
-              contributing_factors: ['high_humidity'],
-              recommendations: ['Increase ventilation', 'Monitor humidity'],
-              silo_name: 'Rice Silo 1',
-              last_updated: new Date().toISOString(),
-            },
-            {
-              batch_id: 'RICE002',
-              grain_type: 'Rice',
-              risk_score: 12,
-              confidence: 83,
-              spoilage_prediction: 'Low Risk',
-              days_until_spoilage: 32,
-              contributing_factors: ['high_moisture'],
-              recommendations: ['Check grain moisture', 'Adjust storage conditions'],
-              silo_name: 'Rice Silo 1',
-              last_updated: new Date().toISOString(),
-            },
-            {
-              batch_id: 'RICE003',
-              grain_type: 'Rice',
-              risk_score: 0,
-              confidence: 89,
-              spoilage_prediction: 'Low Risk',
-              days_until_spoilage: 70,
-              contributing_factors: [],
-              recommendations: ['Continue monitoring'],
-              silo_name: 'Rice Silo 1',
-              last_updated: new Date().toISOString(),
-            }
-          ])
+          setPredictions([])
         }
       } catch (e) {
-        setPredictions([])
+        setPredictions([]) // Display no predictions in case of error; do not set mock data
       } finally {
         setLoading(false)
       }
