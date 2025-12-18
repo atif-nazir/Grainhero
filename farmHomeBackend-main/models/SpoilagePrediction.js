@@ -203,23 +203,38 @@ spoilagePredictionSchema.virtual('prediction_accuracy').get(function() {
 
 // Method to update validation status
 spoilagePredictionSchema.methods.updateValidation = function(actualOutcome) {
-  this.validation_status = 'validated';
+  // Store validation data
   this.actual_outcome = {
-    ...actualOutcome,
-    validated_at: new Date()
+    spoilage_occurred: actualOutcome.spoilage_occurred || false,
+    spoilage_type: actualOutcome.spoilage_type || null,
+    spoilage_date: actualOutcome.spoilage_date ? new Date(actualOutcome.spoilage_date) : null,
+    severity_level: actualOutcome.severity_level || null,
+    validation_notes: actualOutcome.validation_notes || '',
+    validated_by: actualOutcome.validated_by || null,
+    validated_at: actualOutcome.validated_at || new Date()
   };
   
-  // Calculate accuracy
-  const predictedSpoilage = this.risk_score > 70;
-  const actualSpoilage = actualOutcome.spoilage_occurred;
+  // Determine validation status based on prediction vs actual outcome
+  // High risk threshold: 60 (medium/high/critical)
+  const predictedHighRisk = this.risk_score >= 60;
+  const actualSpoilage = actualOutcome.spoilage_occurred || false;
   
-  if (predictedSpoilage === actualSpoilage) {
+  if (predictedHighRisk === actualSpoilage) {
+    // Prediction matches reality
     this.validation_status = 'validated';
-  } else if (predictedSpoilage && !actualSpoilage) {
+  } else if (predictedHighRisk && !actualSpoilage) {
+    // Predicted risk but no spoilage occurred (false alarm)
     this.validation_status = 'false_positive';
-  } else if (!predictedSpoilage && actualSpoilage) {
+  } else if (!predictedHighRisk && actualSpoilage) {
+    // Did not predict risk but spoilage occurred (missed case)
     this.validation_status = 'false_negative';
+  } else {
+    // Default to validated if unclear
+    this.validation_status = 'validated';
   }
+  
+  // Update timestamp
+  this.updated_at = new Date();
   
   return this.save();
 };
