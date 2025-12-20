@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatConfidence, formatRisk, formatSmart } from '@/lib/percentageUtils';
-import SiloVisualization from '../silo-visualization/page';
+import SiloVisualization from '@/components/silo-visualization';
 import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from '@/lib/useEnvironmentalData';
 import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 

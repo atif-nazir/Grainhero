@@ -124,7 +124,11 @@ router.get("/dashboard/test", (req, res) => {
   });
 });
 
-router.get("/dashboard", auth, async (req, res) => {
+// Import cache middleware
+const { createCacheMiddleware } = require('../middleware/cache');
+
+// Cache dashboard for 30 seconds (frequently accessed, but needs to be relatively fresh)
+router.get("/dashboard", auth, createCacheMiddleware(30 * 1000), async (req, res) => {
   try {
     const scopeConditions = [];
     if (req.user?.tenant_id) {
@@ -148,25 +152,61 @@ router.get("/dashboard", auth, async (req, res) => {
       return { $and: [{ $or: scopeConditions }, extra] };
     };
 
-    // Grain batch stats
-    const grainBatches = await GrainBatch.find(applyScope({ deleted_at: null }))
-      .populate("silo_id", "name")
-      .lean();
-    const totalBatches = grainBatches.length;
+    // Optimized: Use aggregation pipelines instead of fetching all records
+    const scopeQuery = applyScope({ deleted_at: null });
 
-    // Silo stats
-    const silos = await Silo.find(applyScope({ deleted_at: null })).lean();
-    const totalSilos = silos.length;
-    let totalCapacity = 0;
-    let totalCurrentQuantity = 0;
+    // Parallel queries for better performance
+    const [
+      totalBatches,
+      grainTypesResult,
+      siloStats,
+      silosForRecommendations,
+      grainBatches // Fetch batches for quality metrics and business KPIs
+    ] = await Promise.all([
+      // Total batches count
+      GrainBatch.countDocuments(scopeQuery),
+      
+      // Grain type distribution using aggregation
+      GrainBatch.aggregate([
+        { $match: scopeQuery },
+        { $group: { _id: "$grain_type", count: { $sum: 1 } } },
+        { $match: { _id: { $ne: null } } }
+      ]),
+      
+      // Silo statistics using aggregation
+      Silo.aggregate([
+        { $match: scopeQuery },
+        {
+          $group: {
+            _id: null,
+            totalSilos: { $sum: 1 },
+            totalCapacity: { $sum: { $ifNull: ["$capacity_kg", 0] } },
+            totalCurrentQuantity: { $sum: { $ifNull: ["$current_occupancy_kg", 0] } }
+          }
+        }
+      ]),
+      
+      // Only fetch silos needed for recommendations (with limited fields)
+      Silo.find(scopeQuery)
+        .select("_id name capacity_kg current_occupancy_kg")
+        .lean()
+        .limit(100), // Reasonable limit for recommendations
+      
+      // Fetch batches for quality metrics and business KPIs (limited fields for performance)
+      GrainBatch.find(scopeQuery)
+        .select("spoilage_label purchase_price_per_kg status risk_score")
+        .lean()
+    ]);
+
+    const totalSilos = siloStats[0]?.totalSilos || 0;
+    const totalCapacity = siloStats[0]?.totalCapacity || 0;
+    const totalCurrentQuantity = siloStats[0]?.totalCurrentQuantity || 0;
+
+    // Calculate storage status distribution (simplified - calculate from limited silos)
     const storageStatus = { Low: 0, Medium: 0, High: 0, Critical: 0 };
-    const grainTypes = {};
-
-    silos.forEach((silo) => {
-      totalCapacity += silo.capacity_kg || 0;
-      totalCurrentQuantity += silo.current_occupancy_kg || 0;
-
-      // Storage status
+    silosForRecommendations.forEach((silo) => {
+      const utilization =
+        ((silo.current_occupancy_kg || 0) / (silo.capacity_kg || 1)) * 100;
       const status = getStorageStatus(
         silo.capacity_kg || 0,
         silo.current_occupancy_kg || 0
@@ -174,11 +214,10 @@ router.get("/dashboard", auth, async (req, res) => {
       storageStatus[status] = (storageStatus[status] || 0) + 1;
     });
 
-    // Grain type distribution
-    grainBatches.forEach((batch) => {
-      if (batch.grain_type) {
-        grainTypes[batch.grain_type] = (grainTypes[batch.grain_type] || 0) + 1;
-      }
+    // Convert grain types aggregation to object
+    const grainTypes = {};
+    grainTypesResult.forEach(item => {
+      if (item._id) grainTypes[item._id] = item.count;
     });
 
     // Storage utilization percentage
@@ -204,8 +243,8 @@ router.get("/dashboard", auth, async (req, res) => {
       applyScope({ status: "active" })
     );
 
-    // Storage recommendations
-    const criticalSilos = silos
+    // Storage recommendations (using already fetched limited silos)
+    const criticalSilos = silosForRecommendations
       .filter((s) => {
         const utilization =
           ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
@@ -217,7 +256,7 @@ router.get("/dashboard", auth, async (req, res) => {
         reason: "Near capacity - consider offloading",
       }));
 
-    const lowUtilizationSilos = silos
+    const lowUtilizationSilos = silosForRecommendations
       .filter((s) => {
         const utilization =
           ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
@@ -229,14 +268,15 @@ router.get("/dashboard", auth, async (req, res) => {
         reason: "Low utilization - optimize storage",
       }));
 
-    // Recent batch activity (latest 5)
-    const recentBatches = grainBatches
-      .sort(
-        (a, b) =>
-          new Date(b.intake_date || b.created_at) -
-          new Date(a.intake_date || a.created_at)
-      )
-      .slice(0, 5)
+    // Recent batch activity (latest 5) - fetch separately for performance
+    const recentBatchesData = await GrainBatch.find(scopeQuery)
+      .populate("silo_id", "name")
+      .select("batch_id grain_type intake_date created_at quantity_kg")
+      .sort({ created_at: -1 })
+      .limit(5)
+      .lean();
+    
+    const recentBatches = recentBatchesData
       .map((batch) => ({
         id: batch.batch_id,
         grain: batch.grain_type,

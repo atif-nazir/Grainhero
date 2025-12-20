@@ -12,7 +12,8 @@ import {
   RefreshCw,
   BarChart3,
   CheckCircle,
-  Activity
+  Activity,
+  Download
 } from 'lucide-react'
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 
@@ -43,6 +44,8 @@ export default function DataManagementPage() {
   const [sampleData, setSampleData] = useState<TrainingRecord[]>([])
   const [generating, setGenerating] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string>('')
+  const [statusMessage, setStatusMessage] = useState<string>('')
   const { data: envHistory, latest } = useEnvironmentalHistory({ limit: 50 })
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
@@ -55,12 +58,18 @@ export default function DataManagementPage() {
     }
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      
+      // Add timeout to prevent hanging
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      
       const response = await fetch(`${backendUrl}/ai-spoilage/data-summary`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      })
+        },
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeoutId))
 
       if (!response.ok) {
         const body = await response.json().catch(() => null)
@@ -74,8 +83,13 @@ export default function DataManagementPage() {
       }
     } catch (err) {
       console.error('Error loading data summary:', err)
-      setDataSummary(null)
-      setError((err as Error).message || 'Failed to load data summary')
+      if ((err as Error).name === 'AbortError') {
+        setError('Request timed out. The server may be slow or the endpoint may not exist.')
+        setDataSummary({ base_records: 0, new_records: 0, total_records: 0, last_updated: new Date().toISOString() })
+      } else {
+        setDataSummary({ base_records: 0, new_records: 0, total_records: 0, last_updated: new Date().toISOString() })
+        setError((err as Error).message || 'Failed to load data summary. Using default values.')
+      }
     } finally {
       setLoading(false)
     }

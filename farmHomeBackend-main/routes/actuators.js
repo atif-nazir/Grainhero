@@ -276,8 +276,11 @@ router.put('/:id', [
  *     security:
  *       - bearerAuth: []
  */
+const noCache = require('../middleware/noCache');
+
 router.post('/:id/control', [
     auth,
+    noCache, // Critical: Actuator control must never be cached
     requirePermission('actuator.control'),
     requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required'),

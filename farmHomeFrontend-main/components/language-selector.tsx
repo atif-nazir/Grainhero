@@ -28,7 +28,8 @@ export function LanguageSelector() {
     } else {
       newPath = `/${languageCode}${pathname}`
     }
-    router.push(newPath)
+    // Use replace instead of push for instant switching without history entry
+    router.replace(newPath)
   }
 
   return (

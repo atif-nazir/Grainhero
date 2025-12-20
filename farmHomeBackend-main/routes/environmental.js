@@ -5,6 +5,7 @@ const SensorReading = require('../models/SensorReading');
 const { body, validationResult } = require('express-validator');
 const { auth } = require('../middleware/auth');
 const Silo = require('../models/Silo');
+const { createCacheMiddleware } = require('../middleware/cache');
 
 // Get current environmental data for a location
 router.get('/current/:lat/:lon', async (req, res) => {
@@ -209,11 +210,18 @@ async function buildFallbackHistory(lat, lon, limit) {
   return [baseReading, ...forecastReadings];
 }
 
-// Get environmental data history
-router.get('/history/:tenant_id', async (req, res) => {
+// Get environmental data history (cached for 15 seconds, but limit is configurable)
+router.get('/history/:tenant_id', createCacheMiddleware(15 * 1000, null, { allowBypass: true }), async (req, res) => {
   try {
     const { tenant_id } = req.params;
-    const { limit = 100, start_date, end_date, lat, lon } = req.query;
+    // Smart default: Use 50 for quick loads, but allow up to 288 (24h) for detailed analysis
+    // 288 = 24 hours * 12 readings/hour (5-min intervals)
+    // Frontend can request more by passing limit explicitly
+    const requestedLimit = parseInt(req.query.limit);
+    const limit = requestedLimit && requestedLimit > 0 && requestedLimit <= 500 
+      ? requestedLimit 
+      : 50; // Default to 50 for performance, but allow override
+    const { start_date, end_date, lat, lon } = req.query;
 
     let query = { 
       tenant_id,
@@ -261,8 +269,8 @@ router.get('/history/:tenant_id', async (req, res) => {
   }
 });
 
-// Get environmental data statistics
-router.get('/stats/:tenant_id', async (req, res) => {
+// Get environmental data statistics (cached for 30 seconds)
+router.get('/stats/:tenant_id', createCacheMiddleware(30 * 1000), async (req, res) => {
   try {
     const { tenant_id } = req.params;
     const { days = 30 } = req.query;
@@ -433,7 +441,8 @@ router.get('/service/status', (req, res) => {
 });
 
 // Get environmental data for all user's locations (role-based)
-router.get('/my-locations', auth, async (req, res) => {
+// Cache locations for 60 seconds (they don't change often)
+router.get('/my-locations', auth, createCacheMiddleware(60 * 1000), async (req, res) => {
   try {
     const user = req.user;
     let silos = [];
@@ -600,6 +609,36 @@ router.get('/my-locations', auth, async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to fetch environmental data for your locations',
+      message: error.message 
+    });
+  }
+});
+
+// Get regional thresholds for a location
+router.get('/thresholds/:lat/:lon', async (req, res) => {
+  try {
+    const { lat, lon } = req.params;
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lon);
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid latitude or longitude' 
+      });
+    }
+
+    const thresholds = weatherService.getRegionalThresholds(latitude, longitude);
+    
+    res.json({
+      success: true,
+      data: thresholds
+    });
+  } catch (error) {
+    console.error('Error fetching regional thresholds:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch regional thresholds',
       message: error.message 
     });
   }

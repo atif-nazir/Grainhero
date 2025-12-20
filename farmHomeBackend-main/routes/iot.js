@@ -210,9 +210,12 @@ router.get('/devices/:id', [
   }
 });
 
-// POST /iot/devices/:id/control - Control device (ON/OFF)
+const noCache = require('../middleware/noCache');
+
+// POST /iot/devices/:id/control - Control device (ON/OFF) - NEVER CACHE
 router.post('/devices/:id/control', [
   auth,
+  noCache, // Critical: Real-time control must never be cached
   requirePermission('iot.control'),
   requireTenantAccess
 ], async (req, res) => {

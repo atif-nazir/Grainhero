@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
 import {
   Card,
   CardContent,
@@ -19,6 +18,7 @@ import {
   Zap,
   CheckCircle,
   Shield,
+  Download,
 } from 'lucide-react';
 import {
   LineChart,
@@ -71,7 +71,6 @@ const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 const AISpoilagePage = () => {
-  const t = useTranslations('aiSpoilage');
   const [predictions, setPredictions] = useState<SpoilagePrediction[]>([]);
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
   const [statistics, setStatistics] = useState<SpoilageStatistics | null>(null);
@@ -168,13 +167,10 @@ const AISpoilagePage = () => {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Brain className="h-6 w-6 text-gray-700" />
-            {t('title', { default: 'AI Spoilage Intelligence' })}
+            AI Spoilage Intelligence
           </h1>
           <p className="text-sm text-gray-600">
-            {t('subtitle', {
-              default:
-                'Monitor VOC-first predictions, advisories, and environmental conditions.',
-            })}
+            Monitor VOC-first predictions, advisories, and environmental conditions.
           </p>
         </div>
         {locations.length > 0 && (
