@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { SENSOR_TYPES } = require('../configs/enum');
+const { getRiskLevel } = require('../configs/risk-thresholds');
 
 const sensorReadingSchema = new mongoose.Schema({
   // Device and location references
@@ -585,6 +586,17 @@ sensorReadingSchema.pre('save', async function(next) {
       }
       derived.ml_risk_score = riskScore;
       derived.ml_confidence = derived.ml_risk_class === 'safe' ? 0.75 : 0.88;
+      
+      // Use centralized risk level calculation
+      const riskLevel = getRiskLevel(riskScore);
+      // Map 'safe'/'risky'/'spoiled' to standard risk levels for consistency
+      if (derived.ml_risk_class === 'spoiled') {
+        derived.ml_risk_level = 'critical';
+      } else if (derived.ml_risk_class === 'risky') {
+        derived.ml_risk_level = 'high';
+      } else {
+        derived.ml_risk_level = 'low';
+      }
     }
 
     // --- Enhanced spoilage detection metrics ---

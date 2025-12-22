@@ -78,16 +78,37 @@ export interface LocationOption {
 }
 
 interface UseEnvHistoryOptions {
-  limit?: number;
+  limit?: number; // Default: 50 for quick loads, use 288 for full 24h analysis
   latitude?: number;
   longitude?: number;
+  forceFresh?: boolean; // Set to true to bypass cache and get real-time data
 }
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
+// Simple in-memory cache for API responses (client-side)
+const responseCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 15 * 1000; // 15 seconds
+
+function getCachedResponse(key: string) {
+  const cached = responseCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  responseCache.delete(key);
+  return null;
+}
+
+function setCachedResponse(key: string, data: any) {
+  responseCache.set(key, { data, timestamp: Date.now() });
+}
+
 export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
-  const { limit = 288, latitude, longitude } = options;
+  // Smart default: 50 for quick loads, but allow override for detailed analysis
+  // Use 288 (24h of 5-min data) when you need full day visualization
+  // Use 50 for dashboard cards and quick overviews
+  const { limit = 50, latitude, longitude, forceFresh = false } = options;
   const [data, setData] = useState<EnvironmentalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +130,21 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
           params.append("lat", String(latitude));
           params.append("lon", String(longitude));
         }
+        // Allow bypassing cache for real-time data
+        if (forceFresh) {
+          params.append("fresh", "true");
+        }
+
+        // Check cache first (only if not forcing fresh)
+        const cacheKey = `env-history-${tenantId}-${limit}-${latitude}-${longitude}`;
+        if (!forceFresh) {
+          const cached = getCachedResponse(cacheKey);
+          if (cached && mounted) {
+            setData(cached);
+            setLoading(false);
+            return;
+          }
+        }
 
         const resp = await fetch(
           `${backendUrl}/api/environmental/history/${tenantId}?${params.toString()}`,
@@ -126,6 +162,10 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
 
         const json = await resp.json();
         const records: EnvironmentalRecord[] = json.data || [];
+        
+        // Cache the response
+        setCachedResponse(cacheKey, records);
+        
         if (mounted) {
           setData(records);
         }
@@ -164,6 +204,16 @@ export function useEnvironmentalLocations() {
       try {
         setLoading(true);
         setError(null);
+        
+        // Check cache first (locations don't change often)
+        const cacheKey = "env-locations";
+        const cached = getCachedResponse(cacheKey);
+        if (cached && mounted) {
+          setLocations(cached);
+          setLoading(false);
+          return;
+        }
+        
         const token =
           typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const resp = await fetch(
@@ -182,6 +232,10 @@ export function useEnvironmentalLocations() {
           json.locations ||
           json.data ||
           [];
+        
+        // Cache the response (longer TTL for locations - 60 seconds)
+        setCachedResponse(cacheKey, options);
+        
         if (mounted) setLocations(options);
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : "Error");

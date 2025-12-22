@@ -5,6 +5,8 @@ const { requirePermission, requireTenantAccess } = require('../middleware/permis
 const { spawn } = require('child_process');
 const path = require('path');
 const riceDataService = require('../services/riceDataService');
+const trainingDataService = require('../services/trainingDataService');
+const SpoilagePrediction = require('../models/SpoilagePrediction');
 
 // SmartBin-RiceSpoilage ML Model Integration
 async function callSmartBinModel(inputData) {
@@ -821,5 +823,389 @@ router.delete('/advisories/:id', [
         res.status(500).json({ error: 'Failed to delete advisory' });
     }
 });
+
+
+// GET /ai-spoilage/training-data/export - Export training data for model retraining
+router.get('/training-data/export', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { 
+            siloId, 
+            startDate, 
+            endDate, 
+            onlyLabeled = 'true' 
+        } = req.query;
+
+        const trainingData = await trainingDataService.prepareTrainingData({
+            tenantId: req.user.tenant_id,
+            siloId,
+            startDate,
+            endDate,
+            onlyLabeled: onlyLabeled === 'true'
+        });
+
+        const stats = trainingDataService.getTrainingDataStats(trainingData);
+
+        // Export to CSV
+        const csvPath = await trainingDataService.exportToCSV(trainingData);
+
+        res.json({
+            message: 'Training data exported successfully',
+            stats: stats,
+            csv_path: csvPath,
+            record_count: trainingData.length,
+            download_url: `/api/ai-spoilage/training-data/download?path=${encodeURIComponent(csvPath)}`
+        });
+
+    } catch (error) {
+        console.error('Export training data error:', error);
+        res.status(500).json({ error: 'Failed to export training data', details: error.message });
+    }
+});
+
+// GET /ai-spoilage/training-data/download - Download exported CSV
+router.get('/training-data/download', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { path: filePath } = req.query;
+        if (!filePath) {
+            return res.status(400).json({ error: 'File path required' });
+        }
+
+        const fs = require('fs');
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        res.download(filePath, 'training_data.csv', (err) => {
+            if (err) {
+                console.error('Download error:', err);
+                res.status(500).json({ error: 'Failed to download file' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Download training data error:', error);
+        res.status(500).json({ error: 'Failed to download training data' });
+    }
+});
+
+// POST /ai-spoilage/training-data/label - Label a sensor reading
+router.post('/training-data/label', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { readingId, label, notes } = req.body;
+
+        if (!readingId || !label) {
+            return res.status(400).json({ error: 'readingId and label are required' });
+        }
+
+        const reading = await trainingDataService.labelReading(readingId, label, notes);
+
+        res.json({
+            message: 'Reading labeled successfully',
+            reading: {
+                id: reading._id,
+                label: reading.metadata.spoilage_label,
+                timestamp: reading.timestamp
+            }
+        });
+
+    } catch (error) {
+        console.error('Label reading error:', error);
+        res.status(500).json({ error: 'Failed to label reading', details: error.message });
+    }
+});
+
+// POST /ai-spoilage/training-data/bulk-label - Bulk label readings
+router.post('/training-data/bulk-label', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { labels } = req.body;
+
+        if (!Array.isArray(labels) || labels.length === 0) {
+            return res.status(400).json({ error: 'labels array is required' });
+        }
+
+        const results = await trainingDataService.bulkLabelReadings(labels);
+
+        res.json({
+            message: 'Bulk labeling completed',
+            results: results
+        });
+
+    } catch (error) {
+        console.error('Bulk label error:', error);
+        res.status(500).json({ error: 'Failed to bulk label readings', details: error.message });
+    }
+});
+
+// GET /ai-spoilage/training-data/stats - Get training data statistics
+router.get('/training-data/stats', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { siloId, startDate, endDate } = req.query;
+
+        const trainingData = await trainingDataService.prepareTrainingData({
+            tenantId: req.user.tenant_id,
+            siloId,
+            startDate,
+            endDate,
+            onlyLabeled: false
+        });
+
+        const stats = trainingDataService.getTrainingDataStats(trainingData);
+
+        res.json({
+            stats: stats,
+            total_records: trainingData.length
+        });
+
+    } catch (error) {
+        console.error('Get training data stats error:', error);
+        res.status(500).json({ error: 'Failed to get training data stats', details: error.message });
+    }
+});
+
+
+// POST /ai-spoilage/predictions/:id/validate - Validate a prediction outcome
+router.post('/predictions/:id/validate', [
+    auth,
+    requirePermission('ai.predict'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { 
+            spoilage_occurred, 
+            spoilage_type, 
+            spoilage_date, 
+            severity_level, 
+            validation_notes 
+        } = req.body;
+
+        const prediction = await SpoilagePrediction.findOne({ 
+            prediction_id: id,
+            tenant_id: req.user.tenant_id
+        });
+
+        if (!prediction) {
+            return res.status(404).json({ error: 'Prediction not found' });
+        }
+
+        // Update validation using model method
+        await prediction.updateValidation({
+            spoilage_occurred: spoilage_occurred || false,
+            spoilage_type: spoilage_type || null,
+            spoilage_date: spoilage_date ? new Date(spoilage_date) : null,
+            severity_level: severity_level || null,
+            validation_notes: validation_notes || '',
+            validated_by: req.user._id,
+            validated_at: new Date()
+        });
+
+        res.json({
+            message: 'Prediction validated successfully',
+            prediction: {
+                id: prediction.prediction_id,
+                validation_status: prediction.validation_status,
+                risk_score: prediction.risk_score,
+                actual_outcome: prediction.actual_outcome
+            }
+        });
+
+    } catch (error) {
+        console.error('Validate prediction error:', error);
+        res.status(500).json({ error: 'Failed to validate prediction', details: error.message });
+    }
+});
+
+// GET /ai-spoilage/model-performance/validation - Get model validation performance metrics
+router.get('/model-performance/validation', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const { days = 30 } = req.query;
+        const startDate = new Date(Date.now() - parseInt(days) * 24 * 60 * 60 * 1000);
+
+        // Get all validated predictions
+        const validatedPredictions = await SpoilagePrediction.find({
+            tenant_id: req.user.tenant_id,
+            validation_status: { $in: ['validated', 'false_positive', 'false_negative'] },
+            'actual_outcome.validated_at': { $gte: startDate }
+        }).select('risk_score risk_level validation_status actual_outcome model_info');
+
+        const total = validatedPredictions.length;
+        if (total === 0) {
+            return res.json({
+                message: 'No validated predictions found',
+                metrics: {
+                    total_validated: 0,
+                    accuracy: null,
+                    precision: null,
+                    recall: null,
+                    f1_score: null,
+                    false_positive_rate: null,
+                    false_negative_rate: null
+                }
+            });
+        }
+
+        // Calculate metrics
+        let truePositives = 0; // Predicted high risk, actually spoiled
+        let trueNegatives = 0; // Predicted low risk, actually safe
+        let falsePositives = 0; // Predicted high risk, actually safe
+        let falseNegatives = 0; // Predicted low risk, actually spoiled
+
+        validatedPredictions.forEach(pred => {
+            const predictedHighRisk = pred.risk_score >= 60; // High or critical
+            const actualSpoilage = pred.actual_outcome?.spoilage_occurred || false;
+
+            if (predictedHighRisk && actualSpoilage) {
+                truePositives++;
+            } else if (!predictedHighRisk && !actualSpoilage) {
+                trueNegatives++;
+            } else if (predictedHighRisk && !actualSpoilage) {
+                falsePositives++;
+            } else if (!predictedHighRisk && actualSpoilage) {
+                falseNegatives++;
+            }
+        });
+
+        // Calculate performance metrics
+        const accuracy = (truePositives + trueNegatives) / total;
+        const precision = (truePositives + falsePositives) > 0 
+            ? truePositives / (truePositives + falsePositives) 
+            : 0;
+        const recall = (truePositives + falseNegatives) > 0 
+            ? truePositives / (truePositives + falseNegatives) 
+            : 0;
+        const f1Score = (precision + recall) > 0 
+            ? 2 * (precision * recall) / (precision + recall) 
+            : 0;
+        const falsePositiveRate = (falsePositives + trueNegatives) > 0 
+            ? falsePositives / (falsePositives + trueNegatives) 
+            : 0;
+        const falseNegativeRate = (falseNegatives + truePositives) > 0 
+            ? falseNegatives / (falseNegatives + truePositives) 
+            : 0;
+
+        // Risk level distribution
+        const byRiskLevel = {
+            low: { total: 0, correct: 0 },
+            medium: { total: 0, correct: 0 },
+            high: { total: 0, correct: 0 },
+            critical: { total: 0, correct: 0 }
+        };
+
+        validatedPredictions.forEach(pred => {
+            const level = pred.risk_level;
+            if (byRiskLevel[level]) {
+                byRiskLevel[level].total++;
+                // Correct if prediction matches outcome
+                const predictedSpoilage = pred.risk_score >= 60;
+                const actualSpoilage = pred.actual_outcome?.spoilage_occurred || false;
+                if (predictedSpoilage === actualSpoilage) {
+                    byRiskLevel[level].correct++;
+                }
+            }
+        });
+
+        res.json({
+            metrics: {
+                total_validated: total,
+                accuracy: Number(accuracy.toFixed(3)),
+                precision: Number(precision.toFixed(3)),
+                recall: Number(recall.toFixed(3)),
+                f1_score: Number(f1Score.toFixed(3)),
+                false_positive_rate: Number(falsePositiveRate.toFixed(3)),
+                false_negative_rate: Number(falseNegativeRate.toFixed(3)),
+                confusion_matrix: {
+                    true_positives: truePositives,
+                    true_negatives: trueNegatives,
+                    false_positives: falsePositives,
+                    false_negatives: falseNegatives
+                },
+                by_risk_level: byRiskLevel,
+                time_period_days: parseInt(days)
+            },
+            recommendations: generatePerformanceRecommendations({
+                accuracy,
+                precision,
+                recall,
+                falsePositiveRate,
+                falseNegativeRate
+            })
+        });
+
+    } catch (error) {
+        console.error('Get model validation performance error:', error);
+        res.status(500).json({ error: 'Failed to get model performance', details: error.message });
+    }
+});
+
+// Helper function to generate performance recommendations
+function generatePerformanceRecommendations(metrics) {
+    const recommendations = [];
+
+    if (metrics.accuracy < 0.7) {
+        recommendations.push({
+            priority: 'high',
+            issue: 'Low overall accuracy',
+            suggestion: 'Consider retraining the model with more labeled data or adjusting feature engineering'
+        });
+    }
+
+    if (metrics.precision < 0.7) {
+        recommendations.push({
+            priority: 'medium',
+            issue: 'High false positive rate',
+            suggestion: 'Model may be too sensitive. Consider raising risk score thresholds or improving feature selection'
+        });
+    }
+
+    if (metrics.recall < 0.7) {
+        recommendations.push({
+            priority: 'high',
+            issue: 'High false negative rate',
+            suggestion: 'Model may be missing actual spoilage cases. Consider lowering risk thresholds or adding more sensitive features'
+        });
+    }
+
+    if (metrics.falseNegativeRate > 0.2) {
+        recommendations.push({
+            priority: 'critical',
+            issue: 'High false negative rate - missing actual spoilage',
+            suggestion: 'URGENT: Model is failing to detect real spoilage. Immediate retraining required with focus on positive cases'
+        });
+    }
+
+    if (recommendations.length === 0) {
+        recommendations.push({
+            priority: 'low',
+            issue: 'Model performance is good',
+            suggestion: 'Continue monitoring and collect more validation data for ongoing improvement'
+        });
+    }
+
+    return recommendations;
+}
 
 module.exports = router;

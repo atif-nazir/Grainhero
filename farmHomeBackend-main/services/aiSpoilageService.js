@@ -8,6 +8,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 const { v4: uuidv4 } = require('uuid');
+const { getRiskLevel, getRiskLevelDetails, requiresAction, requiresAlert } = require('../configs/risk-thresholds');
 
 class AISpoilageService extends EventEmitter {
     constructor() {
@@ -150,13 +151,13 @@ class AISpoilageService extends EventEmitter {
 
             await spoilagePrediction.save();
 
-            // Generate advisories if risk is high
-            if (spoilagePrediction.risk_score > 60) {
+            // Generate advisories if risk requires action (high or critical)
+            if (requiresAction(spoilagePrediction.risk_score)) {
                 await this.generateAdvisories(spoilagePrediction);
             }
 
             // Create alert if risk is critical
-            if (spoilagePrediction.risk_level === 'critical') {
+            if (requiresAlert(spoilagePrediction.risk_score)) {
                 await this.createSpoilageAlert(spoilagePrediction);
             }
 
@@ -470,11 +471,9 @@ class AISpoilageService extends EventEmitter {
     }
 
     // Helper methods
-    calculateRiskLevel(riskScore) {
-        if (riskScore >= 90) return 'critical';
-        if (riskScore >= 70) return 'high';
-        if (riskScore >= 40) return 'medium';
-        return 'low';
+    calculateRiskLevel(riskScore, options = {}) {
+        // Use centralized risk threshold configuration
+        return getRiskLevel(riskScore, options);
     }
 
     analyzeEnvironmentalFactors(environmentalData) {

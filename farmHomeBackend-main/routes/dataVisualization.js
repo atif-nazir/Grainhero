@@ -349,8 +349,10 @@ router.get('/export/pdf', (req, res) => {
   }
 });
 
-// Get real-time sensor data (for live updates)
-router.get('/sensor-data/live', (req, res) => {
+const noCache = require('../middleware/noCache');
+
+// Get real-time sensor data (for live updates) - NEVER CACHE
+router.get('/sensor-data/live', noCache, (req, res) => {
   try {
     const currentData = generateSensorData(1)[0]; // Get latest data point
     

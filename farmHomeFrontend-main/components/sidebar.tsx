@@ -39,7 +39,6 @@ import {
   Cloud,
 } from "lucide-react"
 import { useState } from "react"
-import { useTranslations } from "next-intl"
 import { LanguageSelector } from "@/components/language-selector"
 import { useAuth } from "@/app/[locale]/providers"
 import { useRouter } from "next/navigation"
@@ -302,7 +301,6 @@ const adminNavigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const t = useTranslations('Sidebar')
   const [milestone2Expanded, setMilestone2Expanded] = useState(true)
   const [adminExpanded, setAdminExpanded] = useState(false)
   const { user } = useAuth()
@@ -347,13 +345,13 @@ export function Sidebar() {
               {visibleDashboardNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
+                      {(item as any).label ?? humanizeName(item.name)}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -373,13 +371,13 @@ export function Sidebar() {
               {visibleGrainOpsNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
+                      {(item as any).label ?? humanizeName(item.name)}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -399,13 +397,13 @@ export function Sidebar() {
               {visibleAINav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
+                      {(item as any).label ?? humanizeName(item.name)}
                       {item.badge && (
                         <Badge variant={item.badge === "AI" ? "default" : "secondary"} className="ml-auto text-xs">
                           {item.badge}
@@ -425,13 +423,13 @@ export function Sidebar() {
               {visibleIoTNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
+                      {(item as any).label ?? humanizeName(item.name)}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -451,13 +449,13 @@ export function Sidebar() {
               {visibleBusinessNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
+                      {(item as any).label ?? humanizeName(item.name)}
                     </Button>
                   </Link>
                 )
@@ -472,13 +470,13 @@ export function Sidebar() {
               {visibleSuperAdminNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-red-50 text-red-700 border-red-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`)}
+                      {(item as any).label ?? humanizeName(item.name)}
                       {item.badge && (
                         <Badge variant="destructive" className="ml-auto text-xs">
                           {item.badge}
@@ -498,13 +496,13 @@ export function Sidebar() {
               {visibleSystemNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {t(`${item.name}`)}
+                      {(item as any).label ?? humanizeName(item.name)}
                     </Button>
                   </Link>
                 )
@@ -528,13 +526,13 @@ export function Sidebar() {
                   {milestone2Navigation.map((item) => {
                     const isActive = pathname === `/${currentLanguage}${item.href}`;
                     return (
-                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                      <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                         <Button
                           variant={isActive ? "secondary" : "ghost"}
                           className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                         >
                           <item.icon className="mr-3 h-4 w-4" />
-                          <span className="flex-1 text-left">{t(`${item.name}`)}</span>
+                      <span className="flex-1 text-left">{(item as any).label ?? humanizeName(item.name)}</span>
                           {item.badge && (
                             <Badge variant="secondary" className="ml-2 text-xs">
                               {item.badge}
@@ -550,7 +548,7 @@ export function Sidebar() {
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center space-x-2 mb-2">
                         <Search className="h-4 w-4 text-gray-600" />
-                        <span className="text-sm font-medium text-gray-700">{t("advancedSearch")}</span>
+                        <span className="text-sm font-medium text-gray-700">Advanced Search</span>
                         <Badge variant="secondary" className="text-xs">
                           New
                         </Badge>
@@ -583,13 +581,13 @@ export function Sidebar() {
                   {adminNavigation.map((item) => {
                     const isActive = pathname === `/${currentLanguage}${item.href}`;
                     return (
-                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
+                      <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
                         <Button
                           variant={isActive ? "secondary" : "ghost"}
                           className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                         >
                           <item.icon className="mr-3 h-4 w-4" />
-                          {t(`${item.name}`)}
+                      {(item as any).label ?? humanizeName(item.name)}
                         </Button>
                       </Link>
                     )
@@ -612,7 +610,7 @@ export function Sidebar() {
             }}
           >
             <BarChart3 className="mr-3 h-4 w-4" />
-            {t('plans', { defaultMessage: 'Plans' })}
+            Plans
           </Button>
         )}
         <div
@@ -638,7 +636,7 @@ export function Sidebar() {
           }}
         >
           <LogOut className="mr-3 h-4 w-4" />
-          {t("logout")}
+          Logout
         </Button>
       </div>
     </div>

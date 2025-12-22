@@ -398,7 +398,8 @@ const [forecastSeries, setForecastSeries] = useState<WeatherData[]>([])
     fetchEnvironmentalData()
     const interval = setInterval(fetchEnvironmentalData, 5 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [location])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Get risk color
   const getRiskColor = (risk: string) => {
@@ -851,7 +852,15 @@ const [forecastSeries, setForecastSeries] = useState<WeatherData[]>([])
                   and alerts. All labels now match these sources so data stays consistent across the platform.
                 </p>
               </div>
-              <Button variant="outline" className="ml-auto" size="sm">
+              <Button 
+                variant="outline" 
+                className="ml-auto" 
+                size="sm"
+                onClick={() => {
+                  const locale = window.location.pathname.split('/')[1] || 'en'
+                  window.location.href = `/${locale}/ai-spoilage`
+                }}
+              >
                 View Predictions
               </Button>
             </div>
