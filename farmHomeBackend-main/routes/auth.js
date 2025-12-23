@@ -324,13 +324,42 @@ router.post("/signup", async (req, res) => {
       invitationData.invitationExpires = undefined;
       invitationData.emailVerified = true;
 
-      // Ensure tenant_id is set for invited users
+      // Ensure tenant_id and admin_id are set for invited users
       if (userRole === "manager" || userRole === "technician") {
-        const Tenant = require("../models/Tenant");
-        const existingTenant = await Tenant.findOne().sort({ created_at: -1 });
-        if (existingTenant) {
-          invitationData.tenant_id = existingTenant._id;
-          console.log("Set tenant_id for invited user:", existingTenant._id);
+        // Set admin_id from the user who sent the invitation
+        if (invitationData.invitedBy) {
+          invitationData.admin_id = invitationData.invitedBy;
+          console.log(
+            "Set admin_id for invited user:",
+            invitationData.invitedBy
+          );
+        }
+
+        // Set tenant_id if not already set
+        if (!invitationData.tenant_id) {
+          const Tenant = require("../models/Tenant");
+          // Try to find tenant from the inviting admin
+          const invitingAdmin = await User.findById(invitationData.invitedBy);
+          if (invitingAdmin) {
+            const tenantId =
+              invitingAdmin.tenant_id || invitingAdmin.owned_tenant_id;
+            if (tenantId) {
+              invitationData.tenant_id = tenantId;
+              console.log("Set tenant_id for invited user:", tenantId);
+            } else {
+              // Fallback: find any tenant
+              const existingTenant = await Tenant.findOne().sort({
+                created_at: -1,
+              });
+              if (existingTenant) {
+                invitationData.tenant_id = existingTenant._id;
+                console.log(
+                  "Set tenant_id for invited user (fallback):",
+                  existingTenant._id
+                );
+              }
+            }
+          }
         }
       }
 
@@ -1268,6 +1297,33 @@ router.post("/invite-team-member", auth, async (req, res) => {
         .json({ error: "User with this email already exists" });
     }
 
+    // Check plan user limits before inviting
+    try {
+      const { checkLimit } = require("../middleware/subscription");
+      const { calculateUsageStats } = require("../routes/planManagement");
+
+      // Get current team member count
+      const teamMembers = await User.find({ admin_id: req.user.id });
+      const currentCount = teamMembers.length;
+
+      // Check if adding one more user would exceed limit
+      const limitCheck = await checkLimit(req.user, "users", currentCount + 1);
+
+      if (!limitCheck.withinLimit) {
+        const limit =
+          limitCheck.limit === "unlimited" ? "unlimited" : limitCheck.limit;
+        return res.status(403).json({
+          error: `You've reached your user limit (${limit}). Please upgrade your plan to invite more team members.`,
+          code: "USER_LIMIT_REACHED",
+          currentCount,
+          limit,
+        });
+      }
+    } catch (limitError) {
+      console.error("Error checking user limits:", limitError);
+      // Don't block invitation if limit check fails, but log the error
+    }
+
     // Generate invitation token
     const invitationToken = crypto.randomBytes(32).toString("hex");
     const invitationExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -1283,6 +1339,7 @@ router.post("/invite-team-member", auth, async (req, res) => {
       invitationExpires,
       invitationRole: role,
       invitedBy: req.user.id,
+      admin_id: req.user.id, // Set admin_id for manager/technician roles
       tenant_id: req.user.tenant_id || req.user.owned_tenant_id,
       emailVerified: false,
     });

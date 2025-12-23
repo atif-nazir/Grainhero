@@ -39,6 +39,7 @@ import {
   Cloud,
 } from "lucide-react"
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { LanguageSelector } from "@/components/language-selector"
 import { useAuth } from "@/app/[locale]/providers"
 import { useRouter } from "next/navigation"
@@ -59,34 +60,34 @@ const dashboardNav = [
 
 // Grain Operations & Management
 const grainOperationsNav = [
-  {
+  { 
     name: "grain-batches",
-    label: "Grain Batches",
-    href: "/grain-batches",
+    label: "Grain Batches", 
+    href: "/grain-batches", 
     icon: Package,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  {
+  { 
     name: "silos",
-    label: "Silos",
-    href: "/silos",
+    label: "Silos", 
+    href: "/silos", 
     icon: Package,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
-  {
+  { 
     name: "buyers",
-    label: "Buyers",
-    href: "/buyers",
+    label: "Buyers", 
+    href: "/buyers", 
     icon: Users,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  {
+  { 
     name: "traceability",
-    label: "Traceability",
-    href: "/traceability",
+    label: "Traceability", 
+    href: "/traceability", 
     icon: QrCode,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
@@ -95,26 +96,26 @@ const grainOperationsNav = [
 
 // IoT Monitoring & Control
 const iotMonitoringNav = [
-  {
+  { 
     name: "sensors",
-    label: "Sensors",
-    href: "/sensors",
+    label: "Sensors", 
+    href: "/sensors", 
     icon: Smartphone,
     roles: ["super_admin", "admin", "technician"],
     badge: undefined
   },
-  {
+  { 
     name: "environmental",
-    label: "Environmental Data",
+    label: "Environmental Data", 
     href: "/environmental",
     icon: Cloud,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
-  {
+  { 
     name: "grain-alerts",
-    label: "Grain Alerts",
-    href: "/grain-alerts",
+    label: "Grain Alerts", 
+    href: "/grain-alerts", 
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
@@ -123,10 +124,10 @@ const iotMonitoringNav = [
 
 // AI and Analytics features
 const aiAnalyticsNav = [
-  {
+  { 
     name: "ai-predictions",
-    label: "AI Predictions",
-    href: "/ai-predictions",
+    label: "AI Predictions", 
+    href: "/ai-predictions", 
     icon: Sparkles,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
@@ -138,18 +139,18 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: "AI"
   },
-  {
+  { 
     name: "risk-assessment",
-    label: "Risk Assessment",
-    href: "/risk-assessment",
+    label: "Risk Assessment", 
+    href: "/risk-assessment", 
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  {
+  { 
     name: "spoilage-analysis",
-    label: "Spoilage Analysis",
-    href: "/spoilage-analysis",
+    label: "Spoilage Analysis", 
+    href: "/spoilage-analysis", 
     icon: TrendingUp,
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
@@ -168,10 +169,10 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "ML"
   },
-  {
+  { 
     name: "environmental-data",
-    label: "Environmental Data",
-    href: "/environmental-data",
+    label: "Environmental Data", 
+    href: "/environmental-data", 
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
@@ -187,26 +188,26 @@ const aiAnalyticsNav = [
 
 // Business & Finance
 const businessNav = [
-  {
+  { 
     name: "insurance",
-    label: "Insurance",
-    href: "/insurance",
+    label: "Insurance", 
+    href: "/insurance", 
     icon: FileText,
     roles: ["super_admin", "admin"],
     badge: undefined
   },
-  {
+  { 
     name: "payments",
-    label: "Payments",
-    href: "/payments",
+    label: "Payments", 
+    href: "/payments", 
     icon: CreditCard,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  {
+  { 
     name: "reports",
-    label: "Reports",
-    href: "/reports",
+    label: "Reports", 
+    href: "/reports", 
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
@@ -221,69 +222,69 @@ const systemNav = [
 
 // Super Admin Exclusive Features
 const superAdminNav = [
-  {
-    name: "tenant-management",
+  { 
+    name: "tenant-management", 
     label: "Tenant Management",
-    href: "/tenant-management",
-    icon: Building2,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/tenant-management", 
+    icon: Building2, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "plan-management",
+  { 
+    name: "plan-management", 
     label: "Plan Management",
-    href: "/plan-management",
-    icon: Crown,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/plan-management", 
+    icon: Crown, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "system-health",
+  { 
+    name: "system-health", 
     label: "System Health",
-    href: "/system-health",
-    icon: Activity,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/system-health", 
+    icon: Activity, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "global-analytics",
+  { 
+    name: "global-analytics", 
     label: "Global Analytics",
-    href: "/global-analytics",
-    icon: Globe,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/global-analytics", 
+    icon: Globe, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "security-center",
+  { 
+    name: "security-center", 
     label: "Security Center",
-    href: "/security-center",
-    icon: Shield,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/security-center", 
+    icon: Shield, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "revenue-management",
+  { 
+    name: "revenue-management", 
     label: "Revenue Management",
-    href: "/revenue-management",
-    icon: DollarSign,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/revenue-management", 
+    icon: DollarSign, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "system-logs",
+  { 
+    name: "system-logs", 
     label: "System Logs",
-    href: "/system-logs",
-    icon: Database,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/system-logs", 
+    icon: Database, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
-  {
-    name: "server-monitoring",
+  { 
+    name: "server-monitoring", 
     label: "Server Monitoring",
-    href: "/server-monitoring",
-    icon: Server,
-    roles: ["super_admin"],
-    badge: "Super Admin"
+    href: "/server-monitoring", 
+    icon: Server, 
+    roles: ["super_admin"], 
+    badge: "Super Admin" 
   },
 ]
 
@@ -301,6 +302,7 @@ const adminNavigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const t = useTranslations('Sidebar')
   const [milestone2Expanded, setMilestone2Expanded] = useState(true)
   const [adminExpanded, setAdminExpanded] = useState(false)
   const { user } = useAuth()
@@ -345,13 +347,13 @@ export function Sidebar() {
               {visibleDashboardNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -371,13 +373,13 @@ export function Sidebar() {
               {visibleGrainOpsNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -397,13 +399,13 @@ export function Sidebar() {
               {visibleAINav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant={item.badge === "AI" ? "default" : "secondary"} className="ml-auto text-xs">
                           {item.badge}
@@ -423,13 +425,13 @@ export function Sidebar() {
               {visibleIoTNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                       {item.badge && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {item.badge}
@@ -449,13 +451,13 @@ export function Sidebar() {
               {visibleBusinessNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`, { fallback: (item as any).label ?? humanizeName(item.name) })}
                     </Button>
                   </Link>
                 )
@@ -470,13 +472,13 @@ export function Sidebar() {
               {visibleSuperAdminNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-red-50 text-red-700 border-red-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`)}
                       {item.badge && (
                         <Badge variant="destructive" className="ml-auto text-xs">
                           {item.badge}
@@ -496,13 +498,13 @@ export function Sidebar() {
               {visibleSystemNav.map((item) => {
                 const isActive = pathname === `/${currentLanguage}${item.href}`;
                 return (
-                  <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                  <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                     <Button
                       variant={isActive ? "secondary" : "ghost"}
                       className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                     >
                       <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                      {t(`${item.name}`)}
                     </Button>
                   </Link>
                 )
@@ -526,13 +528,13 @@ export function Sidebar() {
                   {milestone2Navigation.map((item) => {
                     const isActive = pathname === `/${currentLanguage}${item.href}`;
                     return (
-                      <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                         <Button
                           variant={isActive ? "secondary" : "ghost"}
                           className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                         >
                           <item.icon className="mr-3 h-4 w-4" />
-                      <span className="flex-1 text-left">{(item as any).label ?? humanizeName(item.name)}</span>
+                          <span className="flex-1 text-left">{t(`${item.name}`)}</span>
                           {item.badge && (
                             <Badge variant="secondary" className="ml-2 text-xs">
                               {item.badge}
@@ -548,7 +550,7 @@ export function Sidebar() {
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center space-x-2 mb-2">
                         <Search className="h-4 w-4 text-gray-600" />
-                        <span className="text-sm font-medium text-gray-700">Advanced Search</span>
+                        <span className="text-sm font-medium text-gray-700">{t("advancedSearch")}</span>
                         <Badge variant="secondary" className="text-xs">
                           New
                         </Badge>
@@ -581,13 +583,13 @@ export function Sidebar() {
                   {adminNavigation.map((item) => {
                     const isActive = pathname === `/${currentLanguage}${item.href}`;
                     return (
-                      <Link key={item.name} href={`/${currentLanguage}${item.href}`} prefetch={true}>
+                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
                         <Button
                           variant={isActive ? "secondary" : "ghost"}
                           className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
                         >
                           <item.icon className="mr-3 h-4 w-4" />
-                      {(item as any).label ?? humanizeName(item.name)}
+                          {t(`${item.name}`)}
                         </Button>
                       </Link>
                     )
@@ -602,16 +604,16 @@ export function Sidebar() {
       {/* Plans Button and User Profile & Logout */}
       <div className="border-t border-gray-200 p-4">
         {showOnlyAdmin && (
-          <Button
-            variant="outline"
-            className="w-full justify-start mb-2"
-            onClick={() => {
-              router.push('/plans');
-            }}
-          >
-            <BarChart3 className="mr-3 h-4 w-4" />
-            Plans
-          </Button>
+        <Button
+          variant="outline"
+          className="w-full justify-start mb-2"
+          onClick={() => {
+            router.push('/plans');
+          }}
+        >
+          <BarChart3 className="mr-3 h-4 w-4" />
+          {t('plans', { defaultMessage: 'Plans' })}
+        </Button>
         )}
         <div
           className="flex items-center space-x-3 mb-3 cursor-pointer hover:bg-gray-100 rounded p-2 transition"
@@ -636,7 +638,7 @@ export function Sidebar() {
           }}
         >
           <LogOut className="mr-3 h-4 w-4" />
-          Logout
+          {t("logout")}
         </Button>
       </div>
     </div>

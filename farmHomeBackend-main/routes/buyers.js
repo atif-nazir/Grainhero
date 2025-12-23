@@ -225,4 +225,124 @@ router.post(
   }
 );
 
+router.put(
+  "/:id",
+  auth,
+  [
+    body("name")
+      .optional()
+      .trim()
+      .notEmpty()
+      .withMessage("Buyer name cannot be empty"),
+    body("contactPerson.name")
+      .optional()
+      .trim()
+      .notEmpty()
+      .withMessage("Contact name cannot be empty"),
+    body("contactPerson.email")
+      .optional()
+      .isEmail()
+      .withMessage("Invalid contact email"),
+    body("status")
+      .optional()
+      .isIn(Object.values(BUYER_STATUSES))
+      .withMessage("Invalid status"),
+    body("rating")
+      .optional()
+      .isFloat({ min: 0, max: 5 })
+      .withMessage("Rating must be between 0 and 5"),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const tenantId = resolveTenantId(req.user);
+      if (!tenantId) {
+        return res.status(400).json({ message: "Tenant context missing" });
+      }
+
+      const buyer = await Buyer.findOne({
+        _id: req.params.id,
+        tenant_id: tenantId,
+      });
+
+      if (!buyer) {
+        return res.status(404).json({ message: "Buyer not found" });
+      }
+
+      const payload = req.body;
+
+      // Update fields
+      if (payload.name) buyer.name = payload.name;
+      if (payload.companyName !== undefined)
+        buyer.company_name = payload.companyName;
+      if (payload.contactPerson) {
+        if (payload.contactPerson.name)
+          buyer.contact_person.name = payload.contactPerson.name;
+        if (payload.contactPerson.email !== undefined)
+          buyer.contact_person.email = payload.contactPerson.email;
+        if (payload.contactPerson.phone !== undefined)
+          buyer.contact_person.phone = payload.contactPerson.phone;
+        if (payload.contactPerson.designation !== undefined)
+          buyer.contact_person.designation = payload.contactPerson.designation;
+      }
+      if (payload.location) {
+        if (payload.location.address !== undefined)
+          buyer.location.address = payload.location.address;
+        if (payload.location.city !== undefined)
+          buyer.location.city = payload.location.city;
+        if (payload.location.state !== undefined)
+          buyer.location.state = payload.location.state;
+        if (payload.location.country !== undefined)
+          buyer.location.country = payload.location.country;
+      }
+      if (payload.status) buyer.status = payload.status;
+      if (payload.rating !== undefined) buyer.rating = payload.rating;
+      if (payload.notes !== undefined) buyer.notes = payload.notes;
+      if (payload.tags) buyer.tags = payload.tags;
+      if (payload.preferredGrainTypes)
+        buyer.preferred_grain_types = payload.preferredGrainTypes;
+      if (payload.preferredPaymentTerms !== undefined)
+        buyer.preferred_payment_terms = payload.preferredPaymentTerms;
+
+      await buyer.save();
+
+      res.json(buyer);
+    } catch (error) {
+      console.error("Error updating buyer:", error);
+      res.status(500).json({ message: "Failed to update buyer" });
+    }
+  }
+);
+
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    const tenantId = resolveTenantId(req.user);
+    if (!tenantId) {
+      return res.status(400).json({ message: "Tenant context missing" });
+    }
+
+    const buyer = await Buyer.findOne({
+      _id: req.params.id,
+      tenant_id: tenantId,
+    });
+
+    if (!buyer) {
+      return res.status(404).json({ message: "Buyer not found" });
+    }
+
+    // Soft delete
+    buyer.deleted_at = new Date();
+    await buyer.save();
+
+    res.json({ message: "Buyer deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting buyer:", error);
+    res.status(500).json({ message: "Failed to delete buyer" });
+  }
+});
+
 module.exports = router;

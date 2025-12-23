@@ -86,8 +86,26 @@ export default function TraceabilityPage() {
     fetchBatches()
   }, [])
 
-  // Removed automatic re-fetching on visibility change for better performance
-  // Data will only refresh when user explicitly requests it or on initial load
+  // Refresh data when page becomes visible (handles data sync issues)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBatches()
+      }
+    }
+
+    const handleFocus = () => {
+      fetchBatches()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
 
   const filteredBatches = batches.filter(batch => {
     const matchesSearch = batch.batch_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
