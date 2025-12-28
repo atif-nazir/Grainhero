@@ -406,14 +406,14 @@ export default function TraceabilityPage() {
               {/* Risk Assessment */}
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="h-4 w-4 text-gray-400" />
-              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600">Risk:</span>
                   <Badge className={getRiskBadge(batch.risk_score)}>
                     {batch.spoilage_label} ({batch.risk_score}%)
                   </Badge>
                 </div>
               </div>
-              
+
               {/* Intake Date */}
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-gray-400" />
@@ -421,7 +421,7 @@ export default function TraceabilityPage() {
                   Intake: {new Date(batch.intake_date).toLocaleDateString()}
                 </span>
               </div>
-              
+
               {/* Dispatch Status */}
               {batch.dispatch_details && (
                 <div className="flex items-center space-x-2 p-2 bg-blue-50 rounded">
@@ -632,7 +632,7 @@ export default function TraceabilityPage() {
                     </div>
 
                     {/* Dispatch Event (if dispatched) */}
-                    {selectedBatch.dispatch_details ? (
+                    {selectedBatch.status === 'dispatched' && selectedBatch.dispatch_details ? (
                       <div className="flex items-start gap-4 p-4 bg-green-50 rounded-lg border border-green-200">
                         <div className="flex-shrink-0 w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
                           <Truck className="h-5 w-5 text-white" />
@@ -671,7 +671,7 @@ export default function TraceabilityPage() {
                           )}
                         </div>
                       </div>
-                    ) : (
+                    ) : selectedBatch.status !== 'dispatched' ? (
                       <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex-shrink-0 w-10 h-10 bg-gray-400 rounded-full flex items-center justify-center">
                           <Truck className="h-5 w-5 text-white" />
@@ -683,7 +683,7 @@ export default function TraceabilityPage() {
                           </p>
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Notes */}
                     {selectedBatch.notes && (

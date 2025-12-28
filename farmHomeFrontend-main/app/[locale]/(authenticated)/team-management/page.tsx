@@ -63,7 +63,9 @@ export default function TeamManagementPage() {
             setIsLoading(true)
             const res = await api.get<{ users: TeamMember[] }>('/api/user-management/users?limit=100')
             if (res.ok && res.data) {
-                setTeamMembers(res.data.users || [])
+                // Filter out admin users from the list (they have their own profile)
+                const filteredUsers = (res.data.users || []).filter(user => user.role !== 'admin')
+                setTeamMembers(filteredUsers)
             } else {
                 toast.error('Failed to fetch team members')
             }

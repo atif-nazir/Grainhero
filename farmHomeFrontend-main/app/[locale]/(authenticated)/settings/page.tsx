@@ -9,13 +9,10 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { 
-  Settings, 
-  Bell, 
-  Shield, 
-  Database, 
-  Smartphone, 
-  Mail,
+import {
+  Settings,
+  Bell,
+  Database,
   Globe,
   Save,
   AlertTriangle,
@@ -94,18 +91,50 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
-      // Mock data for now - replace with actual API call
-      setTimeout(() => {
+      setLoading(true)
+      // Fetch current user data
+      const userRes = await api.get('/api/user-management/users/profile')
+
+      if (userRes.ok && userRes.data) {
+        const user: Record<string, any> = userRes.data.user || userRes.data
+        const tenantRes = await api.get('/api/tenant/settings').catch(() => null)
         setSettings({
-          name: 'Demo Farm',
-          email: 'admin@demofarm.com',
-          phone: '+92 300 1234567',
-          business_type: 'farm',
+          name: user.organization_name || user.name || '',
+          email: user.email || '',
+          phone: user.phone || '',
+          business_type: user.business_type || 'farm',
           location: {
-            address: '123 Farm Road',
-            city: 'Lahore',
-            country: 'Pakistan'
+            address: user.address || tenantRes?.data?.location?.address || '',
+            city: user.city || tenantRes?.data?.location?.city || '',
+            country: user.country || tenantRes?.data?.location?.country || 'Pakistan'
           },
+          notifications: (tenantRes && tenantRes.data && tenantRes.data.notifications) ? tenantRes.data.notifications : {
+            email_alerts: true,
+            sms_alerts: false,
+            push_notifications: true,
+            weekly_reports: true,
+            monthly_reports: true
+          },
+          system: (tenantRes && tenantRes.data && tenantRes.data.system) ? tenantRes.data.system : {
+            auto_backup: true,
+            data_retention_days: 365,
+            session_timeout_minutes: 60,
+            two_factor_auth: false
+          },
+          integrations: (tenantRes && tenantRes.data && tenantRes.data.integrations) ? tenantRes.data.integrations : {
+            weather_api: true,
+            market_prices: true,
+            government_data: false
+          }
+        })
+      } else {
+        // Fallback to default settings if API fails
+        setSettings({
+          name: '',
+          email: '',
+          phone: '',
+          business_type: 'farm',
+          location: { address: '', city: '', country: 'Pakistan' },
           notifications: {
             email_alerts: true,
             sms_alerts: false,
@@ -125,10 +154,10 @@ export default function SettingsPage() {
             government_data: false
           }
         })
-        setLoading(false)
-      }, 1000)
+      }
     } catch (error) {
       console.error('Failed to load settings:', error)
+    } finally {
       setLoading(false)
     }
   }
@@ -136,10 +165,34 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Mock save - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      setSaveStatus('success')
-      setTimeout(() => setSaveStatus('idle'), 3000)
+      // Save user profile data
+      const profileRes = await api.put('/api/user-management/users/profile', {
+        name: settings.name,
+        email: settings.email,
+        phone: settings.phone,
+        business_type: settings.business_type,
+        address: settings.location.address,
+        city: settings.location.city,
+        country: settings.location.country
+      })
+
+      // Save tenant settings if available
+      await api.put('/api/tenant/settings', {
+        notifications: settings.notifications,
+        system: settings.system,
+        integrations: settings.integrations,
+        location: settings.location
+      }).catch(() => {
+        // If tenant settings endpoint doesn't exist, that's okay
+        console.log('Tenant settings endpoint not available')
+      })
+
+      if (profileRes.ok) {
+        setSaveStatus('success')
+        setTimeout(() => setSaveStatus('idle'), 3000)
+      } else {
+        throw new Error('Failed to save settings')
+      }
     } catch (error) {
       console.error('Failed to save settings:', error)
       setSaveStatus('error')
@@ -149,11 +202,11 @@ export default function SettingsPage() {
     }
   }
 
-  const updateSettings = (section: keyof TenantSettings, field: string, value: any) => {
+  const updateSettings = (section: keyof TenantSettings, field: string, value: unknown) => {
     setSettings(prev => ({
       ...prev,
       [section]: {
-        ...(prev[section] as any),
+        ...(prev[section] as Record<string, unknown>),
         [field]: value
       }
     }))
@@ -259,7 +312,7 @@ export default function SettingsPage() {
                   </Select>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
                 <Textarea
@@ -269,7 +322,7 @@ export default function SettingsPage() {
                   placeholder="Enter your full address"
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="city">City</Label>
@@ -317,7 +370,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('notifications', 'email_alerts', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>SMS Alerts</Label>
@@ -330,7 +383,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('notifications', 'sms_alerts', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Push Notifications</Label>
@@ -343,7 +396,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('notifications', 'push_notifications', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Weekly Reports</Label>
@@ -356,7 +409,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('notifications', 'weekly_reports', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Monthly Reports</Label>
@@ -399,7 +452,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('system', 'auto_backup', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Two-Factor Authentication</Label>
@@ -412,7 +465,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('system', 'two_factor_auth', checked)}
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="retention">Data Retention (Days)</Label>
@@ -463,7 +516,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('integrations', 'weather_api', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Market Prices</Label>
@@ -476,7 +529,7 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => updateSettings('integrations', 'market_prices', checked)}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Government Data</Label>

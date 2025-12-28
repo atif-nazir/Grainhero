@@ -153,7 +153,7 @@ router.get("/dashboard", auth, async (req, res) => {
       .populate("silo_id", "name")
       .lean();
     const totalBatches = grainBatches.length;
-
+    
     // Silo stats
     const silos = await Silo.find(applyScope({ deleted_at: null })).lean();
     const totalSilos = silos.length;
@@ -161,11 +161,11 @@ router.get("/dashboard", auth, async (req, res) => {
     let totalCurrentQuantity = 0;
     const storageStatus = { Low: 0, Medium: 0, High: 0, Critical: 0 };
     const grainTypes = {};
-
+    
     silos.forEach((silo) => {
       totalCapacity += silo.capacity_kg || 0;
       totalCurrentQuantity += silo.current_occupancy_kg || 0;
-
+      
       // Storage status
       const status = getStorageStatus(
         silo.capacity_kg || 0,
@@ -173,7 +173,7 @@ router.get("/dashboard", auth, async (req, res) => {
       );
       storageStatus[status] = (storageStatus[status] || 0) + 1;
     });
-
+    
     // Grain type distribution
     grainBatches.forEach((batch) => {
       if (batch.grain_type) {
@@ -198,7 +198,7 @@ router.get("/dashboard", auth, async (req, res) => {
     const activeUsers = await User.countDocuments(
       applyScope({ blocked: false })
     );
-
+    
     // Active alerts
     const activeAlerts = await Alert.countDocuments(
       applyScope({ status: "active" })
@@ -209,7 +209,7 @@ router.get("/dashboard", auth, async (req, res) => {
       .filter((s) => {
         const utilization =
           ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
-        return utilization >= 90;
+      return utilization >= 90;
       })
       .map((s) => ({
         siloId: s._id,
@@ -221,7 +221,7 @@ router.get("/dashboard", auth, async (req, res) => {
       .filter((s) => {
         const utilization =
           ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
-        return utilization < 25;
+      return utilization < 25;
       })
       .map((s) => ({
         siloId: s._id,
@@ -1450,4 +1450,4 @@ function getDeviceHealthStatus(device) {
   return "healthy";
 }
 
-module.exports = router;
+module.exports = router; 

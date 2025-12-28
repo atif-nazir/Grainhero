@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, FormEvent } from "react"
+import { useEffect, useMemo, useState, FormEvent, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -158,12 +158,7 @@ export default function BuyersPage() {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null
 
-  useEffect(() => {
-    fetchDashboard()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, statusFilter, cityFilter])
-
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -206,7 +201,22 @@ export default function BuyersPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [searchQuery, statusFilter, cityFilter, token])
+
+  useEffect(() => {
+    fetchDashboard()
+  }, [fetchDashboard])
+
+  // Listen for refresh events from other pages (e.g., after dispatch)
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchDashboard()
+    }
+    window.addEventListener('buyers-refresh', handleRefresh)
+    return () => {
+      window.removeEventListener('buyers-refresh', handleRefresh)
+    }
+  }, [fetchDashboard])
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -244,7 +254,26 @@ export default function BuyersPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        // Check if it's a duplicate buyer response (200 with isNew: false)
+        if (res.status === 200 && data.isNew === false) {
+          setFormError(`Buyer already exists: ${data.buyer.name}. Would you like to update this buyer instead?`)
+          setSelectedBuyer(data.buyer)
+          setIsDialogOpen(false)
+          setIsEditDialogOpen(true)
+          return
+        }
         throw new Error(data.message || "Failed to create buyer")
+      }
+
+      const data = await res.json().catch(() => ({}))
+
+      // Handle duplicate detection response
+      if (data.isNew === false && data.buyer) {
+        setFormError(`Buyer already exists: ${data.buyer.name}. Would you like to update this buyer instead?`)
+        setSelectedBuyer(data.buyer)
+        setIsDialogOpen(false)
+        setIsEditDialogOpen(true)
+        return
       }
 
       setFormState(initialFormState)

@@ -3,9 +3,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Package,
-  AlertTriangle,
+import { 
+  Package, 
+  AlertTriangle, 
   Activity,
   BarChart3,
   Smartphone,
@@ -293,8 +293,8 @@ export function TechnicianDashboard() {
   const getPriorityColor = (riskScore: number) => {
     if (riskScore >= 70) return "bg-red-100 text-red-800"
     if (riskScore >= 40) return "bg-orange-100 text-orange-800"
-    return "bg-green-100 text-green-800"
-  }
+        return "bg-green-100 text-green-800"
+    }
 
   const getPriorityLabel = (riskScore: number) => {
     if (riskScore >= 70) return "high"
@@ -416,13 +416,13 @@ export function TechnicianDashboard() {
               {recentAlerts.filter(alert => alert.status !== "resolved").map((alert) => (
                 <div key={alert._id} className={`flex items-center justify-between p-3 bg-white rounded-lg border ${alert.severity === "high" ? "border-red-200" :
                   alert.severity === "medium" ? "border-orange-200" :
-                    "border-yellow-200"
-                  }`}>
+                  "border-yellow-200"
+                }`}>
                   <div>
                     <p className={`font-medium ${alert.severity === "high" ? "text-red-900" :
                       alert.severity === "medium" ? "text-orange-900" :
-                        "text-yellow-900"
-                      }`}>
+                      "text-yellow-900"
+                    }`}>
                       {alert.message}
                     </p>
                     <p className="text-sm text-gray-600">
@@ -458,36 +458,36 @@ export function TechnicianDashboard() {
             {assignedBatches.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No batches assigned</p>
             ) : (
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {assignedBatches.slice(0, 5).map((batch) => (
                   <div key={batch._id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2">
                         {getStatusIcon(batch.status)}
                         <h4 className="font-medium">{batch.grain_type}</h4>
                         <Badge className={getPriorityColor(batch.risk_score)}>
                           {getPriorityLabel(batch.risk_score)}
-                        </Badge>
+                      </Badge>
                         <Badge className={getStatusColor(batch.status)}>
                           {batch.status}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
                         {batch.batch_id} • {batch.quantity_kg.toLocaleString()} kg
-                      </p>
-                      <div className="flex items-center space-x-4 mt-1 text-xs text-gray-500">
+                    </p>
+                    <div className="flex items-center space-x-4 mt-1 text-xs text-gray-500">
                         <span>{batch.silo_id?.name || "Unassigned"}</span>
                         <span>Quality: {batch.quality_score || "N/A"}%</span>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => router.push(`/grain-batches/${batch._id}`)}>
-                        <Eye className="h-3 w-3" />
-                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="flex space-x-2">
+                      <Button size="sm" variant="outline" onClick={() => router.push(`/grain-batches/${batch._id}`)}>
+                      <Eye className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
             )}
           </CardContent>
         </Card>
@@ -507,32 +507,32 @@ export function TechnicianDashboard() {
             {sensorReadings.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No sensor readings available</p>
             ) : (
-              <div className="space-y-4">
-                {sensorReadings.map((reading) => (
+            <div className="space-y-4">
+              {sensorReadings.map((reading) => (
                   <div key={reading._id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2">
                         {getSensorIcon(reading.sensor_type)}
                         <h4 className="font-medium capitalize">{reading.sensor_type}</h4>
-                        <Badge className={getSensorStatusColor(reading.status)}>
-                          {reading.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
+                      <Badge className={getSensorStatusColor(reading.status)}>
+                        {reading.status}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
                         <span className="text-lg font-bold">{reading.value}{reading.unit}</span>
-                        <span>{reading.location}</span>
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <span>{reading.location}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
                         Last update: {formatDate(reading.timestamp)}
                         {reading.battery && ` • Battery: ${reading.battery}%`}
-                      </div>
                     </div>
-                    <Button size="sm" variant="outline">
-                      <Settings className="h-3 w-3" />
-                    </Button>
                   </div>
-                ))}
-              </div>
+                  <Button size="sm" variant="outline">
+                    <Settings className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
             )}
           </CardContent>
         </Card>
@@ -540,67 +540,67 @@ export function TechnicianDashboard() {
 
       {/* Recent Alerts History */}
       {recentAlerts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <AlertTriangle className="h-5 w-5 mr-2" />
-              Recent Alerts
-            </CardTitle>
-            <CardDescription>
-              Alert history and resolution status
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentAlerts.map((alert) => (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <AlertTriangle className="h-5 w-5 mr-2" />
+            Recent Alerts
+          </CardTitle>
+          <CardDescription>
+            Alert history and resolution status
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {recentAlerts.map((alert) => (
                 <div key={alert._id} className={`flex items-center justify-between p-3 rounded-lg border ${alert.status === "resolved" ? "bg-green-50 border-green-200" :
-                  alert.status === "acknowledged" ? "bg-blue-50 border-blue-200" :
-                    "bg-yellow-50 border-yellow-200"
-                  }`}>
-                  <div className="flex items-center space-x-3">
-                    {alert.status === "resolved" ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : alert.status === "acknowledged" ? (
-                      <Clock className="h-4 w-4 text-blue-500" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                    )}
-                    <div>
+                alert.status === "acknowledged" ? "bg-blue-50 border-blue-200" :
+                "bg-yellow-50 border-yellow-200"
+              }`}>
+                <div className="flex items-center space-x-3">
+                  {alert.status === "resolved" ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : alert.status === "acknowledged" ? (
+                    <Clock className="h-4 w-4 text-blue-500" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  )}
+                  <div>
                       <p className={`font-medium ${alert.status === "resolved" ? "text-green-900" :
-                        alert.status === "acknowledged" ? "text-blue-900" :
-                          "text-yellow-900"
-                        }`}>
-                        {alert.message}
-                      </p>
+                      alert.status === "acknowledged" ? "text-blue-900" :
+                      "text-yellow-900"
+                    }`}>
+                      {alert.message}
+                    </p>
                       <p className={`text-sm ${alert.status === "resolved" ? "text-green-600" :
-                        alert.status === "acknowledged" ? "text-blue-600" :
-                          "text-yellow-600"
-                        }`}>
+                      alert.status === "acknowledged" ? "text-blue-600" :
+                      "text-yellow-600"
+                    }`}>
                         {alert.location || "System"} • {formatDate(alert.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Badge variant={
-                      alert.severity === "high" ? "destructive" :
-                        alert.severity === "medium" ? "secondary" :
-                          "default"
-                    }>
-                      {alert.severity}
-                    </Badge>
-                    <Badge className={
-                      alert.status === "resolved" ? "bg-green-100 text-green-800" :
-                        alert.status === "acknowledged" ? "bg-blue-100 text-blue-800" :
-                          "bg-yellow-100 text-yellow-800"
-                    }>
-                      {alert.status}
-                    </Badge>
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="flex items-center space-x-2">
+                  <Badge variant={
+                    alert.severity === "high" ? "destructive" :
+                    alert.severity === "medium" ? "secondary" :
+                    "default"
+                  }>
+                    {alert.severity}
+                  </Badge>
+                  <Badge className={
+                    alert.status === "resolved" ? "bg-green-100 text-green-800" :
+                    alert.status === "acknowledged" ? "bg-blue-100 text-blue-800" :
+                    "bg-yellow-100 text-yellow-800"
+                  }>
+                    {alert.status}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
       )}
 
       {/* Quick Actions */}

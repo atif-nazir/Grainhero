@@ -191,6 +191,68 @@ router.post(
       }
 
       const payload = req.body;
+
+      // Check for duplicate buyer by email or phone (same logic as dispatch)
+      const duplicateQuery = {
+        tenant_id: tenantId,
+        admin_id: req.user._id,
+        $or: [],
+      };
+
+      if (payload.contactPerson?.email) {
+        duplicateQuery.$or.push({
+          "contact_person.email": payload.contactPerson.email,
+        });
+      }
+      if (payload.contactPerson?.phone) {
+        duplicateQuery.$or.push({
+          "contact_person.phone": payload.contactPerson.phone,
+        });
+      }
+
+      // If no email or phone provided, can't check for duplicates - proceed with create
+      if (duplicateQuery.$or.length === 0) {
+        const buyer = await Buyer.create({
+          tenant_id: tenantId,
+          admin_id: req.user._id,
+          name: payload.name,
+          company_name: payload.companyName || payload.name,
+          buyer_type: payload.buyerType,
+          contact_person: {
+            name: payload.contactPerson.name,
+            email: payload.contactPerson.email,
+            phone: payload.contactPerson.phone,
+            designation: payload.contactPerson.designation,
+          },
+          location: {
+            address: payload.location?.address,
+            city: payload.location?.city,
+            state: payload.location?.state,
+            country: payload.location?.country,
+          },
+          status: payload.status || BUYER_STATUSES.ACTIVE,
+          rating: payload.rating ?? 4,
+          notes: payload.notes,
+          tags: payload.tags,
+          preferred_grain_types: payload.preferredGrainTypes,
+          preferred_payment_terms: payload.preferredPaymentTerms,
+        });
+        return res.status(201).json({ buyer, isNew: true });
+      }
+
+      // Check if buyer exists
+      const existingBuyer = await Buyer.findOne(duplicateQuery);
+
+      if (existingBuyer) {
+        // Return existing buyer with flag indicating it's a duplicate
+        return res.status(200).json({
+          buyer: existingBuyer,
+          isNew: false,
+          message: "Buyer with this email or phone already exists",
+        });
+      }
+
+      // No duplicate found, create new buyer
       const buyer = await Buyer.create({
         tenant_id: tenantId,
         admin_id: req.user._id,
@@ -217,9 +279,14 @@ router.post(
         preferred_payment_terms: payload.preferredPaymentTerms,
       });
 
-      res.status(201).json(buyer);
+      res.status(201).json({ buyer, isNew: true });
     } catch (error) {
       console.error("Error creating buyer:", error);
+      if (error.code === 11000) {
+        return res
+          .status(409)
+          .json({ message: "Buyer already exists with this information" });
+      }
       res.status(500).json({ message: "Failed to create buyer" });
     }
   }

@@ -582,11 +582,61 @@ router.post(
           .json({ error: "Batch is already dispatched or sold" });
       }
 
+      // Buyer upsert logic: unify with manual buyer creation
+      const Buyer = require("../models/Buyer");
+      const tenantId =
+        req.user.tenant_id || req.user.owned_tenant_id || req.user._id;
+
+      // Build query for duplicate detection (email or phone)
+      const buyerQueryOr = [];
+      if (req.body.buyer_email) {
+        buyerQueryOr.push({ "contact_person.email": req.body.buyer_email });
+      }
+      if (req.body.buyer_contact) {
+        buyerQueryOr.push({ "contact_person.phone": req.body.buyer_contact });
+      }
+
+      if (buyerQueryOr.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "Buyer email or contact is required" });
+      }
+
+      // Ensure admin_id is correctly set (for admin users, it's their own _id; for managers/technicians, it's their admin_id)
+      const adminId = req.user.admin_id || req.user._id;
+
+      const buyerQuery = {
+        tenant_id: tenantId,
+        admin_id: adminId,
+        $or: buyerQueryOr,
+      };
+
+      const buyerUpdate = {
+        $set: {
+          name: req.body.buyer_name,
+          company_name: req.body.buyer_name,
+          contact_person: {
+            name: req.body.buyer_name,
+            email: req.body.buyer_email || null,
+            phone: req.body.buyer_contact,
+          },
+          status: "active",
+          tenant_id: tenantId,
+          admin_id: adminId,
+        },
+      };
+
+      const buyer = await Buyer.findOneAndUpdate(buyerQuery, buyerUpdate, {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      });
       // Update batch with dispatch information
       batch.status = "dispatched";
+      batch.buyer_id = buyer._id;
       batch.dispatch_details = {
-        buyer_name: req.body.buyer_name,
-        buyer_contact: req.body.buyer_contact,
+        buyer_name: buyer.name,
+        buyer_contact: buyer.contact_person.phone,
         quantity: parseFloat(req.body.quantity_dispatched),
         dispatch_date: req.body.dispatch_date || new Date().toISOString(),
         notes: req.body.notes || "",
