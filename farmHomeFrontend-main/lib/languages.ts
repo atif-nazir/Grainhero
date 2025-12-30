@@ -868,12 +868,11 @@ export const languages = {
       selectLanguage: "زبان منتخب کریں",
       languageUpdated: "زبان کامیابی سے اپ ڈیٹ ہو گئی",
     },
-  },
-}
-
-export type LanguageCode = keyof typeof languages
-export type TranslationKey = keyof typeof languages.en.translations | `Sidebar.${keyof typeof languages.en.translations.Sidebar}`;
-
+   },
+  ha: {
+    code: "ha",
+    name: "Hausa",
+    translations: {
       vaccinations: "Rigakafi",
       breeding: "Kiwo",
       maintenance: "Gyara",
