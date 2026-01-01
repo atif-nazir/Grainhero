@@ -104,6 +104,14 @@ const iotMonitoringNav = [
     badge: undefined
   },
   {
+    name: "actuators",
+    label: "Actuators",
+    href: "/actuators",
+    icon: Zap,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: undefined
+  },
+  {
     name: "environmental",
     label: "Environmental Data",
     href: "/environmental",

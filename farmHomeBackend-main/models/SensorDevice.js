@@ -51,6 +51,13 @@ const sensorDeviceSchema = new mongoose.Schema({
     enum: ['sensor', 'actuator'],
     required: [true, "Device type is required"]
   },
+
+  // Actuator capabilities
+  capabilities: {
+    fan: { type: Boolean, default: false },
+    servo: { type: Boolean, default: false },
+    pwm: { type: Boolean, default: false }
+  },
   
   // Device category for grouping
   category: {
