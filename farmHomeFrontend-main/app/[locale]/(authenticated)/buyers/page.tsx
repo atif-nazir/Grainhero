@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, FormEvent } from "react"
+import { useEffect, useMemo, useState, FormEvent, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Users, Truck, Search, Phone, Mail, MapPin, Plus, Package, MoreHorizontal } from 'lucide-react'
+import { Users, Truck, Search, Phone, Mail, MapPin, Plus, Package, MoreHorizontal, Edit } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -92,47 +92,47 @@ const formatRelativeDate = (value?: string | null) => {
   return date.toLocaleDateString()
 }
 
-  const buyerStatusClass = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800"
-      case "paused":
-        return "bg-yellow-100 text-yellow-800"
-      case "inactive":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+const buyerStatusClass = (status: string) => {
+  switch (status) {
+    case "active":
+      return "bg-green-100 text-green-800"
+    case "paused":
+      return "bg-yellow-100 text-yellow-800"
+    case "inactive":
+      return "bg-gray-100 text-gray-800"
+    default:
+      return "bg-gray-100 text-gray-800"
   }
+}
 
-  const contractStatusClass = (status: string) => {
-    switch (status) {
-      case "running":
+const contractStatusClass = (status: string) => {
+  switch (status) {
+    case "running":
     case "processing":
-        return "bg-blue-100 text-blue-800"
-      case "negotiating":
+      return "bg-blue-100 text-blue-800"
+    case "negotiating":
     case "on_hold":
-        return "bg-yellow-100 text-yellow-800"
-      case "completed":
+      return "bg-yellow-100 text-yellow-800"
+    case "completed":
     case "sold":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+      return "bg-gray-100 text-gray-800"
+    default:
+      return "bg-gray-100 text-gray-800"
   }
+}
 
-  const dispatchStatusClass = (status: string) => {
-    switch (status) {
-      case "confirmed":
+const dispatchStatusClass = (status: string) => {
+  switch (status) {
+    case "confirmed":
     case "dispatched":
-        return "bg-green-100 text-green-800"
-      case "scheduled":
+      return "bg-green-100 text-green-800"
+    case "scheduled":
     case "processing":
-        return "bg-yellow-100 text-yellow-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+      return "bg-yellow-100 text-yellow-800"
+    default:
+      return "bg-gray-100 text-gray-800"
   }
+}
 
 export default function BuyersPage() {
   const [buyers, setBuyers] = useState<BuyerRecord[]>([])
@@ -147,19 +147,18 @@ export default function BuyersPage() {
   const [cityFilter, setCityFilter] = useState("all")
   const [cityOptions, setCityOptions] = useState<string[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [selectedBuyer, setSelectedBuyer] = useState<BuyerRecord | null>(null)
   const [formState, setFormState] = useState(initialFormState)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSavingBuyer, setIsSavingBuyer] = useState(false)
+  const [isDeletingBuyer, setIsDeletingBuyer] = useState(false)
 
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null
 
-  useEffect(() => {
-    fetchDashboard()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, statusFilter, cityFilter])
-
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -190,11 +189,11 @@ export default function BuyersPage() {
       setUpcomingDispatches(payload.upcomingDispatches || [])
 
       const cities = new Set<string>()
-      ;(payload.buyers || []).forEach((buyer: BuyerRecord) => {
-        if (buyer.location?.city) {
-          cities.add(buyer.location.city)
-        }
-      })
+        ; (payload.buyers || []).forEach((buyer: BuyerRecord) => {
+          if (buyer.location?.city) {
+            cities.add(buyer.location.city)
+          }
+        })
       setCityOptions(Array.from(cities))
     } catch (err) {
       console.error(err)
@@ -202,7 +201,22 @@ export default function BuyersPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [searchQuery, statusFilter, cityFilter, token])
+
+  useEffect(() => {
+    fetchDashboard()
+  }, [fetchDashboard])
+
+  // Listen for refresh events from other pages (e.g., after dispatch)
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchDashboard()
+    }
+    window.addEventListener('buyers-refresh', handleRefresh)
+    return () => {
+      window.removeEventListener('buyers-refresh', handleRefresh)
+    }
+  }, [fetchDashboard])
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -240,16 +254,126 @@ export default function BuyersPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        // Check if it's a duplicate buyer response (200 with isNew: false)
+        if (res.status === 200 && data.isNew === false) {
+          setFormError(`Buyer already exists: ${data.buyer.name}. Would you like to update this buyer instead?`)
+          setSelectedBuyer(data.buyer)
+          setIsDialogOpen(false)
+          setIsEditDialogOpen(true)
+          return
+        }
         throw new Error(data.message || "Failed to create buyer")
+      }
+
+      const data = await res.json().catch(() => ({}))
+
+      // Handle duplicate detection response
+      if (data.isNew === false && data.buyer) {
+        setFormError(`Buyer already exists: ${data.buyer.name}. Would you like to update this buyer instead?`)
+        setSelectedBuyer(data.buyer)
+        setIsDialogOpen(false)
+        setIsEditDialogOpen(true)
+        return
       }
 
       setFormState(initialFormState)
       setIsDialogOpen(false)
       fetchDashboard()
-    } catch (err: any) {
-      setFormError(err.message || "Unable to save buyer")
+    } catch (err) {
+      setFormError((err as Error).message || "Unable to save buyer")
     } finally {
       setIsSavingBuyer(false)
+    }
+  }
+
+  const handleEditBuyer = (buyer: BuyerRecord) => {
+    setSelectedBuyer(buyer)
+    setFormState({
+      name: buyer.name,
+      companyName: buyer.company_name || "",
+      contactName: buyer.contact_person?.name || "",
+      contactEmail: buyer.contact_person?.email || "",
+      contactPhone: buyer.contact_person?.phone || "",
+      city: buyer.location?.city || "",
+      status: buyer.status,
+      rating: String(buyer.rating || 4),
+      notes: "",
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleUpdateBuyer = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!selectedBuyer) return
+
+    setFormError(null)
+    setIsSavingBuyer(true)
+
+    try {
+      const res = await fetch(`${config.backendUrl}/api/buyers/${selectedBuyer._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: formState.name,
+          companyName: formState.companyName || undefined,
+          contactPerson: {
+            name: formState.contactName,
+            email: formState.contactEmail || undefined,
+            phone: formState.contactPhone || undefined,
+          },
+          location: {
+            city: formState.city || undefined,
+          },
+          status: formState.status,
+          rating: Number(formState.rating) || 4,
+          notes: formState.notes || undefined,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.message || "Failed to update buyer")
+      }
+
+      setFormState(initialFormState)
+      setSelectedBuyer(null)
+      setIsEditDialogOpen(false)
+      fetchDashboard()
+    } catch (err) {
+      setFormError((err as Error).message || "Unable to update buyer")
+    } finally {
+      setIsSavingBuyer(false)
+    }
+  }
+
+  const handleDeleteBuyer = async () => {
+    if (!selectedBuyer) return
+
+    setIsDeletingBuyer(true)
+    try {
+      const res = await fetch(`${config.backendUrl}/api/buyers/${selectedBuyer._id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.message || "Failed to delete buyer")
+      }
+
+      setSelectedBuyer(null)
+      setIsDeleteDialogOpen(false)
+      fetchDashboard()
+    } catch (err) {
+      setFormError((err as Error).message || "Unable to delete buyer")
+    } finally {
+      setIsDeletingBuyer(false)
     }
   }
 
@@ -431,7 +555,7 @@ export default function BuyersPage() {
                         value={formState.rating}
                         onChange={(e) => setFormState((prev) => ({ ...prev, rating: e.target.value }))}
                       />
-        </div>
+                    </div>
                   </div>
                 </section>
 
@@ -469,46 +593,46 @@ export default function BuyersPage() {
       </div>
 
       {summary && (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Buyers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Buyers</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
               <div className="text-2xl font-bold">{summary.totalBuyers}</div>
               <p className="text-xs text-muted-foreground">Across this tenant</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Contracts</CardTitle>
-          </CardHeader>
-          <CardContent>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Contracts</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="text-2xl font-bold">{summary.activeContracts}</div>
               <p className="text-xs text-muted-foreground">Running & negotiating</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Scheduled Dispatches</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Scheduled Dispatches</CardTitle>
+              <Truck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
               <div className="text-2xl font-bold">{summary.scheduledDispatches}</div>
               <p className="text-xs text-muted-foreground">Upcoming deliveries</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Top Rating</CardTitle>
-          </CardHeader>
-          <CardContent>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Top Rating</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="text-2xl font-bold">{summary.topRating ?? "—"}</div>
               <p className="text-xs text-muted-foreground">Best partner score</p>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Card>
@@ -522,14 +646,14 @@ export default function BuyersPage() {
           <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr]">
             <form className="flex gap-2" onSubmit={handleSearchSubmit}>
               <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Search by buyer, contact, email or phone"
                   className="pl-8"
                 />
-            </div>
+              </div>
               <Button type="submit" variant="secondary">
                 Search
               </Button>
@@ -546,7 +670,7 @@ export default function BuyersPage() {
                 ))}
               </SelectContent>
             </Select>
-                <Select value={cityFilter} onValueChange={setCityFilter}>
+            <Select value={cityFilter} onValueChange={setCityFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="City" />
               </SelectTrigger>
@@ -627,9 +751,18 @@ export default function BuyersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View buyer</DropdownMenuItem>
-                          <DropdownMenuItem>Edit buyer</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">Delete buyer</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditBuyer(buyer)}>
+                            Edit buyer
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => {
+                              setSelectedBuyer(buyer)
+                              setIsDeleteDialogOpen(true)
+                            }}
+                          >
+                            Delete buyer
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -720,14 +853,181 @@ export default function BuyersPage() {
         </Card>
       </div>
 
-      {buyers.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500">No buyers found.</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Edit Buyer Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden">
+          <div className="max-h-[80vh] overflow-y-auto">
+            <div className="border-b px-6 py-4">
+              <DialogHeader className="space-y-2">
+                <DialogTitle className="text-xl flex items-center gap-2">
+                  <Edit className="h-4 w-4" />
+                  Edit Buyer
+                </DialogTitle>
+                <DialogDescription>
+                  Update buyer details and information
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+            <form className="space-y-6 p-6" onSubmit={handleUpdateBuyer}>
+              <section className="rounded-2xl border bg-white p-4 space-y-4">
+                <div>
+                  <h4 className="font-semibold text-gray-900">Basic Information</h4>
+                  <p className="text-sm text-muted-foreground">Buyer identity and brand</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-buyer-name">Buyer name *</Label>
+                    <Input
+                      id="edit-buyer-name"
+                      value={formState.name}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter buyer or company name"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-company-name">Company / Brand</Label>
+                    <Input
+                      id="edit-company-name"
+                      value={formState.companyName}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, companyName: e.target.value }))}
+                      placeholder="Enter brand name"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border bg-white p-4 space-y-4">
+                <div>
+                  <h4 className="font-semibold text-gray-900">Contact Information</h4>
+                  <p className="text-sm text-muted-foreground">Primary contact details</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Contact person *</Label>
+                    <Input
+                      value={formState.contactName}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, contactName: e.target.value }))}
+                      placeholder="Full name"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input
+                      value={formState.contactPhone}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, contactPhone: e.target.value }))}
+                      placeholder="+92 300 0000000"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={formState.contactEmail}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                      placeholder="contact@company.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    <Input
+                      value={formState.city}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, city: e.target.value }))}
+                      placeholder="Lahore, Karachi..."
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border bg-white p-4 space-y-4">
+                <div>
+                  <h4 className="font-semibold text-gray-900">Status & Rating</h4>
+                  <p className="text-sm text-muted-foreground">Operational state and quality score</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={formState.status}
+                      onValueChange={(value) => setFormState((prev) => ({ ...prev, status: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Active" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions
+                          .filter((option) => option.value !== "all")
+                          .map((option) => (
+                            <SelectItem value={option.value} key={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Rating (0-5)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      value={formState.rating}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, rating: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {formError && <p className="text-sm text-red-600">{formError}</p>}
+              <DialogFooter className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                  disabled={isSavingBuyer}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSavingBuyer}>
+                  {isSavingBuyer ? "Updating..." : "Update buyer"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Buyer</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedBuyer?.name}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeletingBuyer}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteBuyer}
+              disabled={isDeletingBuyer}
+            >
+              {isDeletingBuyer ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -7,15 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import {
-  Crown,
-  Plus,
-  Edit,
-  Trash2,
-  Eye,
-  DollarSign,
-  Users,
-  HardDrive,
+import { 
+  Crown, 
+  Plus, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  DollarSign, 
+  Users, 
+  HardDrive, 
   Smartphone,
   CheckCircle,
   XCircle,
@@ -285,7 +285,7 @@ export default function PlanManagementPage() {
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Users</span>
             <span>{row.usage.users}/{formatLimit(row.limits.users, "", "∞")}</span>
-          </div>
+        </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Devices</span>
             <span>{row.usage.devices}/{formatLimit(row.limits.devices, "", "∞")}</span>
@@ -427,7 +427,7 @@ export default function PlanManagementPage() {
                 <div className="text-center">
                   <div className="text-3xl font-bold">
                     {formatCurrency(plan.price, plan.currency)}
-                  </div>
+                </div>
                   <div className="text-sm text-muted-foreground">per {plan.billingCycle}</div>
                 </div>
 

@@ -10,8 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { api } from '@/lib/api'
-import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
-import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 
 interface SensorDevice {
   _id: string
@@ -40,17 +38,17 @@ export default function SensorsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
-  const { latest, data: envHistory } = useEnvironmentalHistory({ limit: 50 })
 
   // Load sensors from backend
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
+    const run = async () => {
       try {
-        const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=100`)
-        if (!mounted) return
-        if (res.ok && res.data) {
-          const mapped: SensorDevice[] = (res.data.sensors || []).map((s: any) => ({
+        const backendUrl = (await import('@/config')).config.backendUrl
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const res = await fetch(`${backendUrl}/api/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
             _id: s._id,
             device_id: s.device_id || s._id,
             device_name: s.device_name,
@@ -69,10 +67,19 @@ export default function SensorsPage() {
       } catch {
         setSensors([])
       } finally {
-        if (mounted) {
-          setLoading(false)
-        }
+        setLoading(false)
       }
+    }
+    run()
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=60`)
+      if (!mounted) return
+      if (res.ok && res.data) {
+        setSensors(res.data.sensors as unknown as SensorDevice[])
+      }
+      setLoading(false)
     })()
     return () => {
       mounted = false
@@ -142,47 +149,6 @@ export default function SensorsPage() {
           Add New Sensor
         </Button>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Live Environmental Snapshot</CardTitle>
-          <CardDescription>
-            {latest ? `Last reading ${new Date(latest.timestamp).toLocaleString()}` : 'Waiting for telemetry'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-4 text-sm">
-          <div>
-            <div className="text-xs uppercase text-muted-foreground">Core Temp</div>
-            <div className="text-lg font-semibold">
-              {(latest?.temperature?.value ??
-                latest?.environmental_context?.weather?.temperature ??
-                '--') + '°C'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs uppercase text-muted-foreground">Core RH</div>
-            <div className="text-lg font-semibold">
-              {(latest?.humidity?.value ??
-                latest?.environmental_context?.weather?.humidity ??
-                '--') + '%'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs uppercase text-muted-foreground">Fan Duty</div>
-            <div className="text-lg font-semibold">
-              {latest?.actuation_state?.fan_duty_cycle?.toFixed(0) ?? 0}%
-            </div>
-          </div>
-          <div>
-            <div className="text-xs uppercase text-muted-foreground">VOC Relative</div>
-            <div className="text-lg font-semibold">
-              {latest?.derived_metrics?.voc_relative?.toFixed(1) ?? '0'}%
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <ActuatorQuickActions />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
