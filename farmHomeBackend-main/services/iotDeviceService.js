@@ -134,7 +134,7 @@ class IoTDeviceService {
     };
 
     // Validate and extract sensor readings
-    const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture', 'light', 'pressure', 'ph'];
+    const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'tvoc', 'moisture', 'light', 'pressure', 'ph'];
     
     sensorTypes.forEach(type => {
       if (payload[type] !== undefined) {
@@ -151,6 +151,21 @@ class IoTDeviceService {
         }
       }
     });
+
+    // Map tvoc alias to voc for consistency
+    if (validated.readings.tvoc && !validated.readings.voc) {
+      validated.readings.voc = validated.readings.tvoc;
+      delete validated.readings.tvoc;
+    }
+
+    // Include actuator-related fields if present
+    if (typeof payload.pwm_speed === 'number') {
+      validated.readings.pwm_speed = { value: payload.pwm_speed, unit: 'percent' };
+    }
+    if (typeof payload.servo_state === 'boolean' || typeof payload.servo_state === 'number') {
+      const val = typeof payload.servo_state === 'boolean' ? (payload.servo_state ? 1 : 0) : payload.servo_state;
+      validated.readings.servo_state = { value: val, unit: 'boolean' };
+    }
 
     // Handle ambient readings
     if (payload.ambient) {

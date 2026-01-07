@@ -40,6 +40,7 @@ const userManagementRoute = require("./routes/userManagement");
 
 const Alert = require("./models/Alert");
 const environmentalDataService = require("./services/environmentalDataService");
+const firebaseRealtimeService = require("./services/firebaseRealtimeService");
 
 const cors = require("cors");
 require("dotenv").config();
@@ -107,6 +108,13 @@ db.once("open", () => {
     console.log("Environmental data service started");
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
+  }
+  
+  try {
+    firebaseRealtimeService.start(io);
+    console.log("Firebase realtime service started");
+  } catch (error) {
+    console.error("Failed to start Firebase realtime service:", error.message);
   }
   
   // Start data aggregation service (30s raw → 5min averages)
