@@ -39,6 +39,7 @@ import {
 
 // Helper function for status colors
 const getStatusColor = (status: string) => {
+  if (!status) return 'default'
   switch (status.toLowerCase()) {
     case 'active':
     case 'optimal':

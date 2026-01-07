@@ -8,6 +8,14 @@ const ROLE_PERMISSIONS = {
     "tenant.manage",
     "users.manage",
 
+    // Warehouse Management (all their warehouses)
+    "warehouse.manage",
+    "warehouse.create",
+    "warehouse.update",
+    "warehouse.delete",
+    "warehouse.view",
+    "warehouse.read",
+
     // Full Grain Management
     "batch.manage",
     "batch.create",
@@ -57,13 +65,22 @@ const ROLE_PERMISSIONS = {
   ],
 
   [USER_ROLES.MANAGER]: [
-    // Grain Operations Management
+    // Warehouse Management (their assigned warehouse only)
+    "warehouse.view",
+    "warehouse.read",
+    
+    // Grain Operations Management (within their warehouse)
     "batch.view",
     "batch.manage",
     "batch.create",
     "batch.dispatch",
     "silo.view",
     "silo.monitor",
+
+    // Team Management (technicians in their warehouse)
+    "technician.view",
+    "technician.assign",
+    "technician.read",
 
     // Quality & Traceability
     "traceability.manage",
@@ -73,11 +90,21 @@ const ROLE_PERMISSIONS = {
     "sensor.view",
     "sensor.bulk_ingest",
 
+    // Actuator Control (within policy)
+    "actuator.control",
+    "actuator.read",
+
     // Alerts & Advisory
     "alerts.view",
     "alerts.acknowledge",
     "advisories.view",
     "advisories.create",
+
+    // Maintenance & Incidents
+    "maintenance.view",
+    "maintenance.create",
+    "incidents.view",
+    "incidents.create",
 
     // Business Operations
     "buyers.view",
@@ -91,13 +118,20 @@ const ROLE_PERMISSIONS = {
     "reports.generate",
     "pdf.generate",
 
-    // Dashboard
+    // Dashboard & Analytics (warehouse-specific)
     "dashboard.view",
     "analytics.view",
+    
+    // Threshold Configuration (limited, if permitted by admin)
+    "thresholds.view",
   ],
 
   [USER_ROLES.TECHNICIAN]: [
-    // IoT & Sensor Management
+    // Warehouse Access (their assigned warehouse only)
+    "warehouse.view",
+    "warehouse.read",
+    
+    // IoT & Sensor Management (silos in their warehouse)
     "sensor.view",
     "sensor.calibrate",
     "sensor.maintain",
@@ -108,8 +142,9 @@ const ROLE_PERMISSIONS = {
     "actuator.maintain",
     "silo.inspect",
     "silo.maintain",
+    "silo.view",
 
-    // Monitoring & Alerts
+    // Monitoring & Alerts (their warehouse silos)
     "alerts.view",
     "alerts.acknowledge",
     "environmental.monitor",

@@ -41,6 +41,7 @@ export function hasRouteAccess(userRole: string, route: string): boolean {
     '/users': ['super_admin', 'admin'],
     '/settings': ['super_admin', 'admin'],
     '/insurance': ['super_admin', 'admin'],
+    '/warehouses': ['super_admin', 'admin'], // Warehouse management
     
     // Manager, Admin, and Super Admin routes
     '/grain-batches': ['super_admin', 'admin', 'manager'],
@@ -51,6 +52,7 @@ export function hasRouteAccess(userRole: string, route: string): boolean {
     '/spoilage-analysis': ['super_admin', 'admin', 'manager'],
     '/reports': ['super_admin', 'admin', 'manager'],
     '/payments': ['super_admin', 'admin', 'manager'],
+    '/team-management': ['super_admin', 'admin', 'manager'], // Manager can manage technicians
     
     // All authenticated users
     '/dashboard': ['super_admin', 'admin', 'manager', 'technician'],
@@ -58,6 +60,9 @@ export function hasRouteAccess(userRole: string, route: string): boolean {
     '/environmental': ['super_admin', 'admin', 'manager', 'technician'],
     '/grain-alerts': ['super_admin', 'admin', 'manager', 'technician'],
     '/silos': ['super_admin', 'admin', 'manager', 'technician'],
+    '/actuators': ['super_admin', 'admin', 'manager', 'technician'],
+    '/maintenance': ['super_admin', 'admin', 'manager', 'technician'],
+    '/incidents': ['super_admin', 'admin', 'manager', 'technician'],
     '/profile': ['super_admin', 'admin', 'manager', 'technician'],
     '/notifications': ['super_admin', 'admin', 'manager', 'technician']
   }
@@ -165,15 +170,30 @@ export function hasPermission(userRole: string, permission: string): boolean {
     'tenant.update': ['super_admin', 'admin'],
     'system.manage': ['super_admin'],
     'system.monitor': ['super_admin'],
+    'warehouse.manage': ['super_admin', 'admin'],
+    'warehouse.create': ['super_admin', 'admin'],
+    'warehouse.update': ['super_admin', 'admin'],
+    'warehouse.delete': ['super_admin', 'admin'],
+    'warehouse.view': ['super_admin', 'admin', 'manager', 'technician'],
+    'warehouse.read': ['super_admin', 'admin', 'manager', 'technician'],
     'grain.manage': ['super_admin', 'admin'],
     'grain.read': ['super_admin', 'admin', 'manager', 'technician'],
     'grain.update': ['super_admin', 'admin', 'manager'],
-    'batch.manage': ['super_admin', 'admin'],
+    'batch.manage': ['super_admin', 'admin', 'manager'],
     'batch.read': ['super_admin', 'admin', 'manager', 'technician'],
     'batch.update': ['super_admin', 'admin', 'manager'],
     'sensor.manage': ['super_admin', 'admin'],
     'sensor.read': ['super_admin', 'admin', 'technician'],
     'sensor.update': ['super_admin', 'admin'],
+    'technician.view': ['super_admin', 'admin', 'manager'],
+    'technician.assign': ['super_admin', 'admin', 'manager'],
+    'technician.read': ['super_admin', 'admin', 'manager'],
+    'actuator.control': ['super_admin', 'admin', 'manager', 'technician'],
+    'actuator.read': ['super_admin', 'admin', 'manager', 'technician'],
+    'maintenance.create': ['super_admin', 'admin', 'manager', 'technician'],
+    'maintenance.view': ['super_admin', 'admin', 'manager', 'technician'],
+    'incidents.create': ['super_admin', 'admin', 'manager', 'technician'],
+    'incidents.view': ['super_admin', 'admin', 'manager', 'technician'],
     'reports.create': ['super_admin', 'admin', 'manager'],
     'reports.read': ['super_admin', 'admin', 'manager', 'technician'],
     'analytics.global': ['super_admin'],
@@ -216,9 +236,17 @@ export function getUserTenantInfo(_user: User): { name: string; type: 'owned' | 
 export function getSidebarNavigation(userRole: string): Array<{ name: string; label: string; href: string; icon: string; roles: string[] }> {
   const allNavItems = [
     { name: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', roles: ['super_admin', 'admin', 'manager', 'technician'] },
+    { name: 'warehouses', label: 'Warehouses', href: '/warehouses', icon: 'Warehouse', roles: ['super_admin', 'admin', 'manager', 'technician'] },
+    { name: 'silos', label: 'Silos', href: '/silos', icon: 'Container', roles: ['super_admin', 'admin', 'manager', 'technician'] },
     { name: 'grain-batches', label: 'Grain Batches', href: '/grain-batches', icon: 'Package', roles: ['super_admin', 'admin', 'manager'] },
     { name: 'sensors', label: 'Sensors', href: '/sensors', icon: 'Smartphone', roles: ['super_admin', 'admin', 'technician'] },
-    { name: 'users', label: 'Users', href: '/users', icon: 'Users', roles: ['super_admin', 'admin'] },
+    { name: 'actuators', label: 'Actuators', href: '/actuators', icon: 'Zap', roles: ['super_admin', 'admin', 'manager', 'technician'] },
+    { name: 'grain-alerts', label: 'Alerts', href: '/grain-alerts', icon: 'Bell', roles: ['super_admin', 'admin', 'manager', 'technician'] },
+    { name: 'maintenance', label: 'Maintenance', href: '/maintenance', icon: 'Wrench', roles: ['super_admin', 'admin', 'manager', 'technician'] },
+    { name: 'incidents', label: 'Incidents', href: '/incidents', icon: 'AlertTriangle', roles: ['super_admin', 'admin', 'manager', 'technician'] },
+    { name: 'team-management', label: 'Team Management', href: '/team-management', icon: 'Users', roles: ['super_admin', 'admin', 'manager'] },
+    { name: 'users', label: 'Users', href: '/users', icon: 'UserCog', roles: ['super_admin', 'admin'] },
+    { name: 'reports', label: 'Reports', href: '/reports', icon: 'FileText', roles: ['super_admin', 'admin', 'manager'] },
     { name: 'tenant-management', label: 'Tenant Management', href: '/tenant-management', icon: 'Building2', roles: ['super_admin'] },
     { name: 'settings', label: 'Settings', href: '/settings', icon: 'Settings', roles: ['super_admin', 'admin'] }
   ]

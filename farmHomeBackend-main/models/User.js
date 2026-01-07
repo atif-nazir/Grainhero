@@ -93,6 +93,18 @@ const userSchema = new mongoose.Schema(
         );
       },
     },
+    
+    // Warehouse assignment (Managers assigned to exactly one warehouse, Technicians assigned to a warehouse)
+    warehouse_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      required: function () {
+        return (
+          this.role === USER_ROLES.MANAGER ||
+          this.role === USER_ROLES.TECHNICIAN
+        );
+      },
+    },
 
     // Location information
     location: {

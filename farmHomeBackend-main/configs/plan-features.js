@@ -18,6 +18,7 @@ const PLAN_FEATURES = {
       grain_batches: 50,
       sensors: 10,
       silos: 3,
+      warehouses: 1,
       storage_gb: 1,
       api_calls_per_month: 10000,
       reports_per_month: 5
@@ -69,6 +70,7 @@ const PLAN_FEATURES = {
       grain_batches: 200,
       sensors: 25,
       silos: 10,
+      warehouses: 3,
       storage_gb: 5,
       api_calls_per_month: 50000,
       reports_per_month: 25
@@ -126,6 +128,7 @@ const PLAN_FEATURES = {
       grain_batches: 1000,
       sensors: 100,
       silos: 25,
+      warehouses: 5,
       storage_gb: 20,
       api_calls_per_month: 200000,
       reports_per_month: 100
@@ -202,6 +205,7 @@ const PLAN_FEATURES = {
       grain_batches: -1, // Unlimited
       sensors: 500,
       silos: 100,
+      warehouses: -1,
       storage_gb: 100,
       api_calls_per_month: -1, // Unlimited
       reports_per_month: -1 // Unlimited

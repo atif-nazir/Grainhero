@@ -60,6 +60,7 @@ interface Silo {
 export default function GrainBatchesPage() {
   const [batches, setBatches] = useState<GrainBatch[]>([])
   const [silos, setSilos] = useState<Silo[]>([])
+  const [availableSilos, setAvailableSilos] = useState<Silo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -150,6 +151,31 @@ export default function GrainBatchesPage() {
       mounted = false
     }
   }, [])
+
+  // Generate batch ID when grain type is selected
+  const generateBatchId = async (grainType: string) => {
+    try {
+      type BatchIdResponse = { batch_id: string; sequence: number; grain_type: string; year: number }
+      const res = await api.get<BatchIdResponse>(`/api/grain-batches/generate-id/${grainType}`)
+      if (res.ok && res.data?.batch_id) {
+        setFormData(prev => ({ ...prev, batch_id: res.data!.batch_id }))
+      } else {
+        toast.error('Failed to generate batch ID')
+      }
+      
+      // Fetch available silos for this grain type
+      const silosRes = await api.get<{ silos: Silo[] }>(`/api/grain-batches/available-silos/${grainType}`)
+      if (silosRes.ok && silosRes.data?.silos) {
+        setAvailableSilos(silosRes.data.silos as unknown as Silo[])
+      } else {
+        // Fallback to all silos if endpoint fails
+        setAvailableSilos(silos)
+      }
+    } catch (error) {
+      console.error('Error generating batch ID:', error)
+      toast.error('Failed to generate batch ID')
+    }
+  }
 
   // CRUD Operations
   const handleAddBatch = async () => {
@@ -341,6 +367,7 @@ export default function GrainBatchesPage() {
       harvest_date: '',
       notes: ''
     })
+    setAvailableSilos([])
   }
 
   const getStatusBadge = (status: string) => {
@@ -421,14 +448,18 @@ export default function GrainBatchesPage() {
                       <Input
                         id="batch_id"
                         value={formData.batch_id}
-                        onChange={(e) => setFormData({ ...formData, batch_id: e.target.value })}
-                        placeholder="e.g., GH-2024-001"
-                        className="mt-1"
+                        readOnly
+                        disabled
+                        placeholder="Select grain type to generate"
+                        className="mt-1 bg-gray-100 cursor-not-allowed"
                       />
                     </div>
                     <div>
                       <Label htmlFor="grain_type" className="text-sm font-medium">Grain Type</Label>
-                      <Select value={formData.grain_type} onValueChange={(value) => setFormData({ ...formData, grain_type: value })}>
+                      <Select value={formData.grain_type} onValueChange={(value) => {
+                        setFormData({ ...formData, grain_type: value })
+                        generateBatchId(value)
+                      }}>
                         <SelectTrigger className="mt-1">
                           <SelectValue placeholder="Select grain type" />
                         </SelectTrigger>
@@ -467,10 +498,10 @@ export default function GrainBatchesPage() {
                       <Label htmlFor="silo_id" className="text-sm font-medium">Silo Assignment</Label>
                       <Select value={formData.silo_id} onValueChange={(value) => setFormData({ ...formData, silo_id: value })}>
                         <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Select silo" />
+                          <SelectValue placeholder={formData.grain_type ? "Select compatible silo" : "Select grain type first"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {silos.map((silo) => (
+                          {availableSilos.map((silo) => (
                             <SelectItem key={silo._id} value={silo._id}>
                               {silo.name} (Available: {(silo.capacity_kg - (silo.current_occupancy_kg || 0)).toLocaleString()} kg)
                             </SelectItem>

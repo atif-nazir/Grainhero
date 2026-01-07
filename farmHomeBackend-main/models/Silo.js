@@ -7,12 +7,14 @@ const siloSchema = new mongoose.Schema({
     type: String,
     required: [true, "Silo ID is required"],
     unique: true,
-    trim: true
+    trim: true,
+    immutable: true
   },
   name: {
     type: String,
     required: [true, "Silo name is required"],
-    trim: true
+    trim: true,
+    immutable: true
   },
   
   // Admin and location
@@ -20,6 +22,11 @@ const siloSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: [true, "Admin ID is required"]
+  },
+  warehouse_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Warehouse',
+    required: [true, "Warehouse ID is required"]
   },
   farmhouse_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -327,10 +334,14 @@ const siloSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 siloSchema.index({ admin_id: 1, status: 1 });
+siloSchema.index({ warehouse_id: 1, status: 1 });
 siloSchema.index({ silo_id: 1 });
 siloSchema.index({ farmhouse_id: 1 });
 siloSchema.index({ current_batch_id: 1 });
 siloSchema.index({ status: 1 });
+
+// Ensure silo names are unique within a warehouse for an admin (prevents duplicate names)
+siloSchema.index({ admin_id: 1, warehouse_id: 1, name: 1 }, { unique: true });
 
 // Exclude deleted silos by default
 siloSchema.pre(/^find/, function() {
@@ -392,6 +403,53 @@ siloSchema.methods.addBatch = function(batchId, quantityKg) {
   
   return this.save();
 };
+
+// Auto-generate `silo_id` and `name` (if missing) before validation. Names are unique per admin+warehouse.
+siloSchema.pre('validate', async function() {
+  // Only generate for new documents
+  if (this.isNew) {
+    const Silo = mongoose.model('Silo');
+
+    // Generate a unique global silo_id if not provided using sequential S001 numbering
+    if (!this.silo_id) {
+      const regex = /^S(\d{3})$/;
+      // get all silo ids (could be optimized with aggregation but ok for now)
+      const silos = await Silo.find().select('silo_id');
+      let max = 0;
+      for (const s of silos) {
+        const m = regex.exec(s.silo_id || '');
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > max) max = n;
+        }
+      }
+      const next = (max + 1).toString().padStart(3, '0');
+      this.silo_id = `S${next}`;
+    }
+
+    // Generate a name if not provided using warehouse sequential count
+    if (!this.name) {
+      let base = 'Silo';
+      try {
+        if (this.warehouse_id) {
+          const count = await Silo.countDocuments({ warehouse_id: this.warehouse_id });
+          base = `Silo ${count + 1}`;
+        }
+      } catch (e) {
+        // ignore and fallback to base
+      }
+
+      // Ensure uniqueness in case of race conditions
+      let nameCandidate = base;
+      let suffix = 0;
+      while (await Silo.exists({ admin_id: this.admin_id, warehouse_id: this.warehouse_id, name: nameCandidate })) {
+        suffix += 1;
+        nameCandidate = `${base}-${suffix}`;
+      }
+      this.name = nameCandidate;
+    }
+  }
+});
 
 // Method to remove batch
 siloSchema.methods.removeBatch = function(quantityKg) {

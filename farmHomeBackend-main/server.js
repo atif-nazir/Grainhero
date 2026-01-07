@@ -166,6 +166,10 @@ app.use("/api/subscription-analytics", subscriptionAnalyticsRoute);
 // User Management routes
 app.use("/api/user-management", userManagementRoute);
 
+// Warehouse Management routes
+const warehousesRoute = require("./routes/warehouses");
+app.use("/api/warehouses", warehousesRoute);
+
 // Contact routes
 app.use("/api/contact", contactRoute);
 

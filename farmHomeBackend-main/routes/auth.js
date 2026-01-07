@@ -129,8 +129,11 @@ router.post("/signup", async (req, res) => {
             .json({ error: "Invalid or expired invitation token" });
         }
       } else {
-        // Regular signup without invitation - default to technician
-        userRole = "technician";
+        // Regular signup without invitation - only admin can be created this way, 
+        // managers and technicians must be invited
+        return res
+          .status(400)
+          .json({ error: "Managers and technicians must be invited by an admin" });
       }
     }
 
@@ -324,13 +327,86 @@ router.post("/signup", async (req, res) => {
       invitationData.invitationExpires = undefined;
       invitationData.emailVerified = true;
 
-      // Ensure tenant_id is set for invited users
+      // Ensure tenant_id and warehouse_id are set for invited users
       if (userRole === "manager" || userRole === "technician") {
         const Tenant = require("../models/Tenant");
         const existingTenant = await Tenant.findOne().sort({ created_at: -1 });
         if (existingTenant) {
           invitationData.tenant_id = existingTenant._id;
           console.log("Set tenant_id for invited user:", existingTenant._id);
+        }
+        
+        // Assign warehouse for managers and technicians
+        if (userRole === "manager") {
+          const Warehouse = require("../models/Warehouse");
+          
+          // For basic plan, there's only one warehouse per admin
+          // Find the admin's warehouse (create one if it doesn't exist)
+          let warehouse = await Warehouse.findOne({ 
+            admin_id: invitationData.admin_id
+          });
+          
+          if (!warehouse) {
+            // Create the first (and only) warehouse for this admin
+            const admin = await User.findById(invitationData.admin_id);
+            const warehouseId = `WH-${admin.email.split('@')[0].toUpperCase()}-${Date.now()}`;
+            
+            warehouse = new Warehouse({
+              warehouse_id: warehouseId,
+              name: `Warehouse for ${admin.name || admin.email}`,
+              admin_id: invitationData.admin_id,
+              manager_id: invitationData._id,
+              created_by: invitationData.admin_id
+            });
+            
+            await warehouse.save();
+            console.log(`Created and assigned warehouse ${warehouseId} to manager ${invitationData.email}`);
+          } else {
+            // Assign this manager to the existing warehouse
+            warehouse.manager_id = invitationData._id;
+            await warehouse.save();
+            console.log(`Assigned manager ${invitationData.email} to existing warehouse ${warehouse.warehouse_id}`);
+          }
+          
+          invitationData.warehouse_id = warehouse._id;
+          console.log("Set warehouse_id for manager:", warehouse._id);
+        } else if (userRole === "technician") {
+          const Warehouse = require("../models/Warehouse");
+          
+          // For technicians, find the admin's warehouse
+          let warehouse = await Warehouse.findOne({ 
+            admin_id: invitationData.admin_id
+          });
+          
+          if (warehouse) {
+            // Assign technician to the warehouse and add to technician_ids array
+            invitationData.warehouse_id = warehouse._id;
+            
+            // Add technician to warehouse's technician_ids array if not already there
+            if (!warehouse.technician_ids.includes(invitationData._id)) {
+              warehouse.technician_ids.push(invitationData._id);
+              await warehouse.save();
+            }
+            
+            console.log(`Assigned technician ${invitationData.email} to warehouse ${warehouse.warehouse_id}`);
+          } else {
+            // If no warehouse exists, create one for this admin
+            const admin = await User.findById(invitationData.admin_id);
+            const warehouseId = `WH-${admin.email.split('@')[0].toUpperCase()}-${Date.now()}`;
+            
+            warehouse = new Warehouse({
+              warehouse_id: warehouseId,
+              name: `Warehouse for ${admin.name || admin.email}`,
+              admin_id: invitationData.admin_id,
+              technician_ids: [invitationData._id],
+              created_by: invitationData.admin_id
+            });
+            
+            await warehouse.save();
+            invitationData.warehouse_id = warehouse._id;
+            
+            console.log(`Created and assigned warehouse ${warehouseId} to technician ${invitationData.email}`);
+          }
         }
       }
 
@@ -356,6 +432,7 @@ router.post("/signup", async (req, res) => {
     } else {
       // Create new user
       let user = new User(userData);
+      
       await user.save();
 
       // Update tenant's created_by if this is an admin
@@ -914,13 +991,83 @@ router.get("/user/:userId", async (req, res) => {
  *         description: Server error
  */
 // delete in production
-router.get("/users", async (req, res) => {
+/**
+ * @swagger
+ * /auth/users:
+ *   get:
+ *     summary: Get team members (filtered by role)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of team members
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/users", auth, async (req, res) => {
   try {
-    const users = await User.find().select(
-      "-password -resetPasswordToken -resetPasswordExpires -__v"
-    );
+    const user = req.user;
+    const { USER_ROLES } = require("../configs/enum");
+    let query = {};
+
+    // Super Admin: See ALL users globally (all admins who purchased plans + their managers and technicians)
+    if (user.role === USER_ROLES.SUPER_ADMIN) {
+      query = {}; // No filter - see everything
+    }
+    // Admin: See only managers and technicians added by him (under him), NOT other admins
+    else if (user.role === USER_ROLES.ADMIN) {
+      query = {
+        $or: [
+          { admin_id: user._id }, // Their team members (managers and technicians)
+          { _id: user._id }        // Include themselves
+        ]
+      };
+    }
+    // Manager: Can see admin, other managers, but CRUD only on technicians
+    else if (user.role === USER_ROLES.MANAGER) {
+      // Manager can see:
+      // 1. Their admin
+      // 2. Other managers under the same admin
+      // 3. Technicians in their warehouse
+      const admin = await User.findById(user.admin_id);
+      query = {
+        $or: [
+          { _id: user.admin_id },                    // Their admin
+          { admin_id: user.admin_id, role: USER_ROLES.MANAGER }, // Other managers under same admin
+          { warehouse_id: user.warehouse_id, role: USER_ROLES.TECHNICIAN } // Technicians in their warehouse
+        ]
+      };
+    }
+    // Technician: Just see (read-only, no CRUD)
+    else if (user.role === USER_ROLES.TECHNICIAN) {
+      // Technician can see:
+      // 1. Their admin
+      // 2. Their manager
+      // 3. Other technicians in their warehouse
+      const Warehouse = require("../models/Warehouse");
+      const warehouse = await Warehouse.findById(user.warehouse_id);
+      query = {
+        $or: [
+          { _id: user.admin_id },                    // Their admin
+          { _id: warehouse?.manager_id },            // Their manager
+          { warehouse_id: user.warehouse_id, role: USER_ROLES.TECHNICIAN } // Other technicians in warehouse
+        ]
+      };
+    }
+    else {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+
+    const users = await User.find(query)
+      .select("-password -resetPasswordToken -resetPasswordExpires -__v")
+      .populate("admin_id", "name email")
+      .populate("warehouse_id", "name warehouse_id")
+      .sort({ created_at: -1 });
+
     res.status(200).json(users);
   } catch (err) {
+    console.error("Error fetching team members:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1239,12 +1386,16 @@ router.post("/invite-team-member", auth, async (req, res) => {
 
     const { email, role, name } = req.body;
 
-    // Only admin can invite team members
-    if (req.user.role !== "admin") {
+    const { USER_ROLES } = require("../configs/enum");
+    
+    // Super Admin, Admin, and Manager can invite team members
+    if (req.user.role !== USER_ROLES.SUPER_ADMIN && 
+        req.user.role !== USER_ROLES.ADMIN && 
+        req.user.role !== USER_ROLES.MANAGER) {
       console.log("Access denied: User role is", req.user.role);
       return res
         .status(403)
-        .json({ error: "Only admins can invite team members" });
+        .json({ error: "Insufficient permissions to invite team members" });
     }
 
     if (!email || !role) {
@@ -1252,11 +1403,22 @@ router.post("/invite-team-member", auth, async (req, res) => {
       return res.status(400).json({ error: "Email and role are required" });
     }
 
-    if (!["manager", "technician"].includes(role)) {
-      console.log("Validation failed: Invalid role");
+    // Manager can only invite technicians
+    if (req.user.role === USER_ROLES.MANAGER && role !== USER_ROLES.TECHNICIAN) {
+      return res.status(403).json({ error: "Managers can only invite technicians" });
+    }
+
+    // Super Admin can invite any role
+    // Admin can invite managers and technicians
+    const allowedRoles = req.user.role === USER_ROLES.SUPER_ADMIN 
+      ? [USER_ROLES.ADMIN, USER_ROLES.MANAGER, USER_ROLES.TECHNICIAN]
+      : [USER_ROLES.MANAGER, USER_ROLES.TECHNICIAN];
+
+    if (!allowedRoles.includes(role)) {
+      console.log("Validation failed: Invalid role for user", req.user.role);
       return res
         .status(400)
-        .json({ error: "Role must be manager or technician" });
+        .json({ error: `Role must be one of: ${allowedRoles.join(", ")}` });
     }
 
     // Check if user already exists
@@ -1274,6 +1436,13 @@ router.post("/invite-team-member", auth, async (req, res) => {
 
     console.log("Creating invitation with token:", invitationToken);
 
+    // Set admin_id for team members (managers and technicians)
+    let admin_id = req.user._id;
+    if (req.user.role === USER_ROLES.MANAGER) {
+      // Manager's invitations belong to their admin
+      admin_id = req.user.admin_id;
+    }
+
     // Create invitation record
     const invitation = new User({
       email,
@@ -1285,6 +1454,8 @@ router.post("/invite-team-member", auth, async (req, res) => {
       invitedBy: req.user.id,
       tenant_id: req.user.tenant_id || req.user.owned_tenant_id,
       emailVerified: false,
+      // Set admin_id for managers and technicians
+      admin_id: role === USER_ROLES.MANAGER || role === USER_ROLES.TECHNICIAN ? admin_id : undefined,
     });
 
     console.log("Saving invitation to database...");
