@@ -62,19 +62,6 @@ const getStatusColor = (status: string) => {
   }
 }
 
-// Helper function for risk colors
-const getRiskColor = (risk: string) => {
-  switch (risk.toLowerCase()) {
-    case 'low':
-      return 'text-green-600'
-    case 'medium':
-      return 'text-yellow-600'
-    case 'high':
-      return 'text-red-600'
-    default:
-      return 'text-gray-600'
-  }
-}
 
 interface DashboardStat {
   title: string
@@ -300,12 +287,12 @@ export default function DashboardPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+          <TabsList className={`w-full grid ${(userRole === "super_admin" || userRole === "admin") ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <TabsTrigger value="overview" className="w-full">Overview</TabsTrigger>
+            <TabsTrigger value="analytics" className="w-full">Analytics</TabsTrigger>
+            <TabsTrigger value="monitoring" className="w-full">Monitoring</TabsTrigger>
             {(userRole === "super_admin" || userRole === "admin") && (
-              <TabsTrigger value="business">Business</TabsTrigger>
+              <TabsTrigger value="business" className="w-full">Business</TabsTrigger>
             )}
           </TabsList>
 
@@ -313,35 +300,80 @@ export default function DashboardPage() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
               <Card className="col-span-4">
                 <CardHeader>
-                  <CardTitle>Recent Grain Batches</CardTitle>
-                  <CardDescription>Latest batch activities and status updates</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    <Warehouse className="h-5 w-5" />
+                    Storage Overview
+                  </CardTitle>
+                  <CardDescription>Current storage capacity and utilization</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {dashboard?.recentBatches?.length ? (
-                      dashboard.recentBatches.map((batch) => (
-                        <div key={batch.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                            <div>
-                              <div className="font-medium">{batch.id} - {batch.grain}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {batch.quantity} kg • {batch.silo} • {formatDate(batch.date)}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Badge variant={getStatusColor(batch.status)}>{batch.status}</Badge>
-                            <span className={`text-xs font-medium ${getRiskColor(batch.risk)}`}>
-                              {batch.risk} Risk
-                            </span>
+                  {dashboard?.capacityStats ? (
+                    <div className="space-y-6">
+                      {/* Main Stats Grid */}
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Total Capacity</p>
+                          <p className="text-2xl font-bold">{dashboard.capacityStats.totalCapacity.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">kg</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Current Usage</p>
+                          <p className="text-2xl font-bold">{dashboard.capacityStats.totalCurrentQuantity.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">kg</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Available</p>
+                          <p className="text-2xl font-bold">{(dashboard.capacityStats.totalCapacity - dashboard.capacityStats.totalCurrentQuantity).toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">kg</p>
+                        </div>
+                      </div>
+
+                      {/* Utilization Progress */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">Utilization</span>
+                          <span className="text-sm font-bold">{dashboard.capacityStats.utilizationPercentage.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
+                          {/* Dynamic width requires inline style for percentage values - browser extension warning can be ignored */}
+                          <div
+                            className={`h-4 rounded-full transition-all duration-500 ${dashboard.capacityStats.utilizationPercentage > 80 ? 'bg-red-500' :
+                              dashboard.capacityStats.utilizationPercentage > 60 ? 'bg-yellow-500' :
+                                'bg-green-500'
+                              }`}
+                            style={{ width: `${Math.min(dashboard.capacityStats.utilizationPercentage, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>0%</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+
+                      {/* Quick Stats */}
+                      <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-green-600" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Avg. Utilization</p>
+                            <p className="text-sm font-semibold">{dashboard.capacityStats.utilizationPercentage.toFixed(1)}%</p>
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No recent batches yet.</p>
-                    )}
-                  </div>
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-blue-600" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Storage Health</p>
+                            <p className="text-sm font-semibold">
+                              {dashboard.capacityStats.utilizationPercentage > 80 ? 'High' :
+                                dashboard.capacityStats.utilizationPercentage > 60 ? 'Medium' : 'Optimal'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No storage data available.</p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -353,10 +385,27 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   {dashboard?.storageDistribution?.length ? (
-                    <AnimatedPieChart
-                      data={dashboard.storageDistribution.map(d => ({ name: d.status, value: d.count }))}
-                      title="Silo Storage Status"
-                    />
+                    <div className="space-y-4">
+                      <AnimatedPieChart
+                        data={dashboard.storageDistribution.map(d => ({ name: d.status, value: d.count }))}
+                        title="Silo Storage Status"
+                      />
+                      {/* Legend with better spacing to avoid overlap */}
+                      <div className="space-y-2 pt-4 border-t">
+                        {dashboard.storageDistribution.map((item, index) => (
+                          <div key={index} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-500' : index === 1 ? 'bg-amber-500' : 'bg-green-500'
+                                  }`}
+                              />
+                              <span className="font-medium">{item.status}</span>
+                            </div>
+                            <span className="text-muted-foreground">{item.count} silos</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : <div>No silo data</div>}
                 </CardContent>
               </Card>

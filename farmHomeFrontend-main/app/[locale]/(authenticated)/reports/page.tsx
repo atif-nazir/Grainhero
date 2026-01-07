@@ -5,17 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  BarChart3, 
-  Download, 
-  Calendar,
-  TrendingUp,
+import {
+  BarChart3,
+  Download,
   Package,
   Users,
   DollarSign,
   AlertTriangle,
-  FileText,
-  PieChart
 } from 'lucide-react'
 
 export default function ReportsPage() {

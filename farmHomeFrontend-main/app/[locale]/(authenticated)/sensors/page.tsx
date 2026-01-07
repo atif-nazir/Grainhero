@@ -12,6 +12,8 @@ import { api } from '@/lib/api'
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 import { useLanguage } from '@/app/[locale]/providers'
+=======
+>>>>>>> c46b52b3c7a8b0c33d8e4de5302d37352c012c11
 
 interface SensorDevice {
   _id: string
@@ -39,7 +41,7 @@ export default function SensorsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
-  const { latest, data: envHistory } = useEnvironmentalHistory({ limit: 50 })
+  const { latest } = useEnvironmentalHistory({ limit: 50 })
   const { t } = useLanguage()
   const [telemetry, setTelemetry] = useState<null | {
     temperature: number
@@ -53,17 +55,21 @@ export default function SensorsPage() {
     timestamp: number
   }>(null)
   const [siloId, setSiloId] = useState<string>('')
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  const backendUrl = (typeof window !== 'undefined' ? (window as any).__BACKEND_URL : undefined) || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+=======
+>>>>>>> c46b52b3c7a8b0c33d8e4de5302d37352c012c11
 
   // Load sensors from backend
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        const res = await api.get<{ sensors: SensorDevice[] }>(`/sensors?limit=100`)
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const res = await fetch(`${backendUrl}/api/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
         if (!mounted) return
-        if (res.ok && res.data) {
-          const mapped: SensorDevice[] = (res.data.sensors || []).map((s: any) => ({
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
             _id: s._id,
             device_id: s.device_id || s._id,
             device_name: s.device_name,
@@ -83,16 +89,14 @@ export default function SensorsPage() {
           setSensors([])
         }
       } catch {
+        if (!mounted) return
         setSensors([])
       } finally {
-        if (mounted) {
-          setLoading(false)
-        }
+        if (!mounted) return
+        setLoading(false)
       }
     })()
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [])
 
   useEffect(() => {
@@ -112,6 +116,7 @@ export default function SensorsPage() {
           setTelemetry(null)
         }
       } catch {
+        if (!mounted) return
         setTelemetry(null)
       }
     }
@@ -187,6 +192,7 @@ export default function SensorsPage() {
         </Button>
       </div>
 
+<<<<<<< HEAD
       <Card>
         <CardHeader>
           <CardTitle>Live Environmental Snapshot</CardTitle>
@@ -291,6 +297,8 @@ export default function SensorsPage() {
 
       <ActuatorQuickActions />
 
+=======
+>>>>>>> c46b52b3c7a8b0c33d8e4de5302d37352c012c11
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>

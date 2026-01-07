@@ -5,20 +5,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
-  Package, 
-  TrendingUp, 
-  AlertTriangle, 
+import {
+  Package,
+  TrendingUp,
+  AlertTriangle,
   Activity,
   BarChart3,
-  Users,
   Truck,
   QrCode,
   Eye,
   FileText,
-  Clock,
-  CheckCircle,
-  XCircle,
   Zap,
   AlertCircle,
   Loader2
@@ -26,7 +22,6 @@ import {
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { useAuth } from "@/app/[locale]/providers"
-import { useRouter } from "next/navigation"
 
 interface ManagerStats {
   totalBatches: number
@@ -45,23 +40,40 @@ interface Batch {
   status: string
   risk_score: number
   intake_date: string
+  created_at?: string
   quality_score?: number
-  silo_id?: string
+  silo_id?: string | { name?: string }
+  purchase_price_per_kg?: number
 }
 
-interface Alert {
+type AlertSeverity = "high" | "medium" | "low"
+
+interface DashboardAlert {
   id: string
-  type: "high" | "medium" | "low"
+  type: AlertSeverity
   message: string
   time: string
   location: string
   batch: string
 }
 
+interface RawAlert {
+  _id?: string
+  id?: string
+  message?: string
+  description?: string
+  severity?: string
+  created_at?: string
+  timestamp?: string
+  location?: string
+  silo_id?: { name?: string }
+  batch_id?: string
+  batch?: string
+}
+
 export function ManagerDashboard() {
-  const router = useRouter()
   const { user } = useAuth()
-  
+
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [managerStats, setManagerStats] = useState<ManagerStats>({
@@ -73,55 +85,85 @@ export function ManagerDashboard() {
     qualityScore: 0
   })
   const [recentBatches, setRecentBatches] = useState<Batch[]>([])
-  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [alerts, setAlerts] = useState<DashboardAlert[]>([])
 
   useEffect(() => {
     const fetchManagerData = async () => {
       try {
         setIsLoading(true)
-        
-        // Fetch grain batches
-        const batchesRes = await api.get<{ batches: Batch[] }>("/grain-batches?limit=10")
-        
+        setError(null)
+
+        // Fetch grain batches - get more for accurate stats
+        const batchesRes = await api.get<{ batches: Batch[] }>("/grain-batches?limit=50")
+
         if (batchesRes.ok && batchesRes.data) {
-          const batches = batchesRes.data.batches
-          setRecentBatches(batches)
-          
+          const batches = batchesRes.data.batches || []
+          setRecentBatches(batches.slice(0, 10)) // Show only recent 10
+
           // Calculate stats from batches
-          const activeBatches = batches.filter(b => b.status !== "dispatched").length
-          const dispatchedToday = batches.filter(
-            b => b.status === "dispatched" && 
-            new Date(b.intake_date).toDateString() === new Date().toDateString()
+          const activeBatches = batches.filter(b =>
+            b.status !== "dispatched" && b.status !== "completed"
           ).length
-          const avgQuality = batches.length > 0 
+
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const dispatchedToday = batches.filter(b => {
+            if (b.status !== "dispatched") return false
+            const dateStr = b.intake_date || b.created_at
+            if (!dateStr) return false
+            const batchDate = new Date(dateStr)
+            return batchDate >= today
+          }).length
+
+          // Calculate revenue from dispatched batches
+          const dispatchedBatches = batches.filter(b => b.status === "dispatched")
+          const totalRevenue = dispatchedBatches.reduce((sum, b) => {
+            const pricePerKg = b.purchase_price_per_kg || 0
+            return sum + (pricePerKg * b.quantity_kg)
+          }, 0)
+
+          const avgQuality = batches.length > 0
             ? Math.round(batches.reduce((sum, b) => sum + (b.quality_score || 90), 0) / batches.length)
             : 0
-          
+
           setManagerStats(prev => ({
             ...prev,
             totalBatches: batches.length,
             activeBatches,
             dispatchedToday,
+            totalRevenue,
             qualityScore: avgQuality,
             riskAlerts: batches.filter(b => b.risk_score > 70).length
           }))
-          
-          // Generate alerts from batches with high risk
-          const generatedAlerts = batches
-            .filter(b => b.risk_score > 50)
-            .slice(0, 3)
-            .map((batch, idx) => ({
-              id: `alert-${idx}`,
-              type: batch.risk_score > 80 ? "high" as const : batch.risk_score > 60 ? "medium" as const : "low" as const,
-              message: `Quality alert for ${batch.grain_type} batch`,
-              time: `${Math.floor(Math.random() * 120)} min ago`,
-              location: batch.silo_id || "Storage",
-              batch: `${batch.grain_type} - ${batch.batch_id}`
-            }))
-          
-          setAlerts(generatedAlerts)
         } else {
           setError(batchesRes.error || "Failed to load batches")
+        }
+
+        // Fetch real alerts
+        try {
+          const alertsRes = await api.get<{ alerts: RawAlert[] }>("/api/alerts?limit=10&status=active")
+          if (alertsRes.ok && alertsRes.data) {
+            const alertsData = alertsRes.data.alerts || []
+            const formattedAlerts: DashboardAlert[] = alertsData.slice(0, 5).map((alert) => {
+              const severity = (alert.severity || "low").toLowerCase() as AlertSeverity
+              return {
+                id: alert._id || alert.id || "",
+                type: severity,
+                message: alert.message || alert.description || "Alert",
+                time: formatRelativeTime(alert.created_at || alert.timestamp || ""),
+                location: alert.location || alert.silo_id?.name || "System",
+                batch: alert.batch_id || alert.batch || "N/A"
+              }
+            })
+            setAlerts(formattedAlerts)
+            setManagerStats(prev => ({
+              ...prev,
+              riskAlerts: alertsData.filter(a => a.severity === "high").length
+            }))
+          }
+        } catch (err) {
+          console.error("Error fetching alerts:", err)
+          // Don't fail the whole dashboard if alerts fail
         }
       } catch (err) {
         console.error('Error fetching manager data:', err)
@@ -135,6 +177,20 @@ export function ManagerDashboard() {
       fetchManagerData()
     }
   }, [user])
+
+  const formatRelativeTime = (date: string) => {
+    if (!date) return "N/A"
+    const d = new Date(date)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const minutes = Math.floor(diffMs / (1000 * 60))
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days}d ago`
+    return d.toLocaleDateString()
+  }
 
   if (isLoading) {
     return (
@@ -161,7 +217,7 @@ export function ManagerDashboard() {
   return (
     <div className="space-y-6">
       {/* Manager Overview Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Batches</CardTitle>
@@ -190,13 +246,13 @@ export function ManagerDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Risk Alerts</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{managerStats.riskAlerts}</div>
+            <div className="text-2xl font-bold">PKR {managerStats.totalRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              High risk batches
+              From dispatched batches
             </p>
           </CardContent>
         </Card>
@@ -225,17 +281,15 @@ export function ManagerDashboard() {
           <CardContent>
             <div className="space-y-2">
               {alerts.map((alert) => (
-                <div key={alert.id} className={`flex items-center justify-between p-3 bg-white rounded-lg border ${
-                  alert.type === "high" ? "border-red-200" :
+                <div key={alert.id} className={`flex items-center justify-between p-3 bg-white rounded-lg border ${alert.type === "high" ? "border-red-200" :
                   alert.type === "medium" ? "border-orange-200" :
-                  "border-yellow-200"
-                }`}>
+                    "border-yellow-200"
+                  }`}>
                   <div>
-                    <p className={`font-medium ${
-                      alert.type === "high" ? "text-red-900" :
+                    <p className={`font-medium ${alert.type === "high" ? "text-red-900" :
                       alert.type === "medium" ? "text-orange-900" :
-                      "text-yellow-900"
-                    }`}>
+                        "text-yellow-900"
+                      }`}>
                       {alert.message}
                     </p>
                     <p className="text-sm text-gray-600">
@@ -246,8 +300,8 @@ export function ManagerDashboard() {
                     <Button size="sm" variant="outline">View</Button>
                     <Button size="sm" variant={
                       alert.type === "high" ? "destructive" :
-                      alert.type === "medium" ? "secondary" :
-                      "default"
+                        alert.type === "medium" ? "secondary" :
+                          "default"
                     }>
                       Resolve
                     </Button>
@@ -281,7 +335,7 @@ export function ManagerDashboard() {
                   if (score < 70) return "secondary"
                   return "destructive"
                 }
-                
+
                 const getRiskLabel = (score: number) => {
                   if (score < 30) return "Low"
                   if (score < 70) return "Medium"
@@ -302,7 +356,7 @@ export function ManagerDashboard() {
                       </div>
                       <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
                         <span>{batch.quantity_kg.toLocaleString()} kg</span>
-                        <span>{batch.silo_id || "Storage"}</span>
+                        <span>{typeof batch.silo_id === 'string' ? batch.silo_id : batch.silo_id?.name || "Storage"}</span>
                         <span>Quality: {batch.quality_score || 90}%</span>
                       </div>
                       <div className="flex items-center space-x-2 mt-1">
