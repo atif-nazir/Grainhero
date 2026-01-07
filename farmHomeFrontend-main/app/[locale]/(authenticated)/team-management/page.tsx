@@ -7,12 +7,11 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Users, Mail, Plus, UserCheck, Clock, AlertCircle, Search, MoreHorizontal, Edit, Trash2, Shield, ShieldOff } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Users, Mail, Plus, UserCheck, Clock, AlertCircle, Edit, Trash2 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
+import { useAuth } from "@/app/[locale]/providers"
 
 interface TeamMember {
     _id: string
@@ -24,16 +23,16 @@ interface TeamMember {
     blocked?: boolean
     created_at: string
     emailVerified: boolean
-}
-
-interface PlanLimit {
-    canInvite: boolean
-    currentCount: number
-    limit: number | string
-    message?: string
+    warehouse_id?: {
+        _id: string
+        name: string
+        warehouse_id: string
+    }
 }
 
 export default function TeamManagementPage() {
+    const { user } = useAuth()
+    const currentUserRole = user?.role || ''
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
@@ -55,8 +54,53 @@ export default function TeamManagementPage() {
         role: ''
     })
     const [isInviting, setIsInviting] = useState(false)
-    const [isUpdating, setIsUpdating] = useState(false)
-    const [isDeleting, setIsDeleting] = useState(false)
+    const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
+    const [isDeleting, setIsDeleting] = useState<string | null>(null)
+
+    // Check if current user can invite
+    const canInvite = currentUserRole === 'super_admin' || currentUserRole === 'admin' || currentUserRole === 'manager'
+    
+    // Check if current user can edit a specific member
+    const canEdit = (member: TeamMember) => {
+        if (currentUserRole === 'super_admin') return true
+        if (currentUserRole === 'admin') {
+            // Admin can edit managers and technicians under them
+            return member.role === 'manager' || member.role === 'technician'
+        }
+        if (currentUserRole === 'manager') {
+            // Manager can only edit technicians in their warehouse
+            return member.role === 'technician'
+        }
+        return false // Technician can't edit anyone
+    }
+
+    // Check if current user can delete a specific member
+    const canDelete = (member: TeamMember) => {
+        if (currentUserRole === 'super_admin') return true
+        if (currentUserRole === 'admin') {
+            // Admin can delete managers and technicians under them
+            return member.role === 'manager' || member.role === 'technician'
+        }
+        if (currentUserRole === 'manager') {
+            // Manager can only delete technicians in their warehouse
+            return member.role === 'technician'
+        }
+        return false // Technician can't delete anyone
+    }
+
+    // Get available roles for invitation based on current user role
+    const getAvailableRoles = () => {
+        if (currentUserRole === 'super_admin') {
+            return ['admin', 'manager', 'technician']
+        }
+        if (currentUserRole === 'admin') {
+            return ['manager', 'technician']
+        }
+        if (currentUserRole === 'manager') {
+            return ['technician'] // Manager can only invite technicians
+        }
+        return []
+    }
 
     const fetchTeamMembers = async () => {
         try {
@@ -115,8 +159,9 @@ export default function TeamManagementPage() {
             return
         }
 
-        if (planLimit && !planLimit.canInvite) {
-            toast.error(planLimit.message || 'Cannot invite more users. Plan limit reached.')
+        // Manager can only invite technicians
+        if (currentUserRole === 'manager' && inviteForm.role !== 'technician') {
+            toast.error('Managers can only invite technicians')
             return
         }
 
@@ -144,115 +189,31 @@ export default function TeamManagementPage() {
         }
     }
 
-    const handleEdit = (member: TeamMember) => {
-        setSelectedMember(member)
-        setEditForm({
-            name: member.name,
-            phone: member.phone || '',
-            role: member.role
-        })
-        setIsEditDialogOpen(true)
-    }
+    const handleDelete = async (memberId: string) => {
+        if (!confirm('Are you sure you want to remove this team member?')) {
+            return
+        }
 
-    const handleUpdate = async () => {
-        if (!selectedMember) return
-
-        setIsUpdating(true)
+        setIsDeleting(memberId)
         try {
-            const res = await api.put(`/api/user-management/users/${selectedMember._id}`, {
-                name: editForm.name,
-                phone: editForm.phone || undefined,
-                role: editForm.role
-            })
-
+            const res = await api.delete(`/api/user-management/users/${memberId}`)
             if (res.ok) {
-                toast.success('Team member updated successfully!')
-                setIsEditDialogOpen(false)
-                setSelectedMember(null)
-                fetchTeamMembers()
+                toast.success('Team member removed successfully')
+                fetchTeamMembers() // Refresh the list
             } else {
-                toast.error(res.error || 'Failed to update team member')
+                toast.error(res.error || 'Failed to remove team member')
             }
-        } catch (err) {
-            toast.error((err as Error).message || 'Failed to update team member')
+        } catch {
+            toast.error('Failed to remove team member')
         } finally {
-            setIsUpdating(false)
+            setIsDeleting(null)
         }
     }
-
-    const handleDelete = async () => {
-        if (!selectedMember) return
-
-        setIsDeleting(true)
-        try {
-            const res = await api.delete(`/api/user-management/users/${selectedMember._id}`)
-
-            if (res.ok) {
-                toast.success('Team member deleted successfully!')
-                setIsDeleteDialogOpen(false)
-                setSelectedMember(null)
-                fetchTeamMembers()
-                checkPlanLimits()
-            } else {
-                toast.error(res.error || 'Failed to delete team member')
-            }
-        } catch (err) {
-            toast.error((err as Error).message || 'Failed to delete team member')
-        } finally {
-            setIsDeleting(false)
-        }
-    }
-
-    const handleBlock = async (member: TeamMember, block: boolean) => {
-        try {
-            const res = await api.patch(`/api/user-management/users/${member._id}/block`, {
-                blocked: block
-            })
-
-            if (res.ok) {
-                toast.success(`Team member ${block ? 'blocked' : 'unblocked'} successfully!`)
-                fetchTeamMembers()
-            } else {
-                toast.error(res.error || `Failed to ${block ? 'block' : 'unblock'} team member`)
-            }
-        } catch (err) {
-            toast.error((err as Error).message || `Failed to ${block ? 'block' : 'unblock'} team member`)
-        }
-    }
-
-    const filteredMembers = useMemo(() => {
-        let filtered = teamMembers
-
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase()
-            filtered = filtered.filter(m =>
-                m.name.toLowerCase().includes(query) ||
-                m.email.toLowerCase().includes(query) ||
-                (m.phone && m.phone.includes(query))
-            )
-        }
-
-        if (roleFilter !== 'all') {
-            filtered = filtered.filter(m => m.role === roleFilter)
-        }
-
-        if (statusFilter !== 'all') {
-            if (statusFilter === 'active') {
-                filtered = filtered.filter(m => m.emailVerified && m.role !== 'pending' && !m.blocked)
-            } else if (statusFilter === 'pending') {
-                filtered = filtered.filter(m => m.role === 'pending')
-            } else if (statusFilter === 'blocked') {
-                filtered = filtered.filter(m => m.blocked)
-            } else if (statusFilter === 'unverified') {
-                filtered = filtered.filter(m => !m.emailVerified && m.role !== 'pending')
-            }
-        }
-
-        return filtered
-    }, [teamMembers, searchQuery, roleFilter, statusFilter])
 
     const getRoleBadge = (role: string) => {
         switch (role) {
+            case 'super_admin':
+                return 'bg-red-100 text-red-800 border-red-200'
             case 'admin':
                 return 'bg-purple-100 text-purple-800 border-purple-200'
             case 'manager':
@@ -292,113 +253,100 @@ export default function TeamManagementPage() {
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Team Management</h1>
-                    <p className="text-gray-600 mt-2">Manage your team members and send invitations</p>
+                    <p className="text-gray-600 mt-2">
+                        {currentUserRole === 'super_admin' && 'Manage all users globally'}
+                        {currentUserRole === 'admin' && 'Manage your team members (managers and technicians)'}
+                        {currentUserRole === 'manager' && 'Manage technicians in your warehouse'}
+                        {currentUserRole === 'technician' && 'View team members (read-only)'}
+                    </p>
                 </div>
 
-                <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button
-                            className="bg-black hover:bg-gray-800 text-white"
-                            disabled={planLimit ? !planLimit.canInvite : false}
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Invite Team Member
-                            {planLimit && !planLimit.canInvite && (
-                                <span className="ml-2 text-xs">(Limit Reached)</span>
-                            )}
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>Invite Team Member</DialogTitle>
-                            <DialogDescription>
-                                Send an invitation to join your GrainHero team
-                                {planLimit && (
-                                    <span className="block mt-2 text-sm">
-                                        {planLimit.currentCount} / {planLimit.limit === 'unlimited' ? '∞' : planLimit.limit} users
-                                    </span>
-                                )}
-                            </DialogDescription>
-                        </DialogHeader>
+                {canInvite && (
+                    <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button className="bg-black hover:bg-gray-800 text-white">
+                                <Plus className="h-4 w-4 mr-2" />
+                                Invite Team Member
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Invite Team Member</DialogTitle>
+                                <DialogDescription>
+                                    Send an invitation to join your GrainHero team
+                                </DialogDescription>
+                            </DialogHeader>
 
-                        {planLimit && !planLimit.canInvite && (
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-                                {planLimit.message}
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="invite-email">Email Address *</Label>
+                                    <Input
+                                        id="invite-email"
+                                        type="email"
+                                        placeholder="colleague@example.com"
+                                        value={inviteForm.email}
+                                        onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="invite-name">Name (Optional)</Label>
+                                    <Input
+                                        id="invite-name"
+                                        type="text"
+                                        placeholder="John Doe"
+                                        value={inviteForm.name}
+                                        onChange={(e) => setInviteForm(prev => ({ ...prev, name: e.target.value }))}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="invite-role">Role *</Label>
+                                    <Select value={inviteForm.role} onValueChange={(value) => setInviteForm(prev => ({ ...prev, role: value }))}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a role" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {getAvailableRoles().map(role => (
+                                                <SelectItem key={role} value={role}>
+                                                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="flex justify-end space-x-2 pt-4">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setIsInviteDialogOpen(false)}
+                                        disabled={isInviting}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleInvite}
+                                        disabled={isInviting || !inviteForm.email || !inviteForm.role}
+                                        className="bg-black hover:bg-gray-800 text-white"
+                                    >
+                                        {isInviting ? (
+                                            <>
+                                                <Mail className="h-4 w-4 mr-2 animate-pulse" />
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Mail className="h-4 w-4 mr-2" />
+                                                Send Invitation
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
-                        )}
-
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="invite-email">Email Address *</Label>
-                                <Input
-                                    id="invite-email"
-                                    type="email"
-                                    placeholder="colleague@example.com"
-                                    value={inviteForm.email}
-                                    onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-                                    required
-                                    disabled={planLimit ? !planLimit.canInvite : false}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="invite-name">Name (Optional)</Label>
-                                <Input
-                                    id="invite-name"
-                                    type="text"
-                                    placeholder="John Doe"
-                                    value={inviteForm.name}
-                                    onChange={(e) => setInviteForm(prev => ({ ...prev, name: e.target.value }))}
-                                    disabled={planLimit ? !planLimit.canInvite : false}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="invite-role">Role *</Label>
-                                <Select
-                                    value={inviteForm.role}
-                                    onValueChange={(value) => setInviteForm(prev => ({ ...prev, role: value }))}
-                                    disabled={planLimit ? !planLimit.canInvite : false}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select a role" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="manager">Manager</SelectItem>
-                                        <SelectItem value="technician">Technician</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <DialogFooter>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setIsInviteDialogOpen(false)}
-                                    disabled={isInviting}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    onClick={handleInvite}
-                                    disabled={isInviting || !inviteForm.email || !inviteForm.role || (planLimit ? !planLimit.canInvite : false)}
-                                    className="bg-black hover:bg-gray-800 text-white"
-                                >
-                                    {isInviting ? (
-                                        <>
-                                            <Mail className="h-4 w-4 mr-2 animate-pulse" />
-                                            Sending...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Mail className="h-4 w-4 mr-2" />
-                                            Send Invitation
-                                        </>
-                                    )}
-                                </Button>
-                            </DialogFooter>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                        </DialogContent>
+                    </Dialog>
+                )}
             </div>
 
             {/* Team Stats */}
@@ -502,7 +450,9 @@ export default function TeamManagementPage() {
                 <CardHeader>
                     <CardTitle>Team Members</CardTitle>
                     <CardDescription>
-                        Manage your team members and their roles
+                        {currentUserRole === 'technician' 
+                            ? 'View your team members (read-only)'
+                            : 'Manage your team members and their roles'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -514,86 +464,71 @@ export default function TeamManagementPage() {
                     ) : filteredMembers.length === 0 ? (
                         <div className="text-center py-8">
                             <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">
-                                {teamMembers.length === 0
-                                    ? "No team members found. Invite your first team member to get started."
-                                    : "No team members match your search or filters."}
-                            </p>
+                            <p className="text-gray-600">No team members found</p>
+                            {canInvite && (
+                                <p className="text-sm text-gray-500">Invite your first team member to get started</p>
+                            )}
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Email</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <TableHead>Role</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Joined</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredMembers.map((member) => {
-                                        const statusBadge = getStatusBadge(member)
-                                        return (
-                                            <TableRow key={member._id}>
-                                                <TableCell className="font-medium">{member.name}</TableCell>
-                                                <TableCell>{member.email}</TableCell>
-                                                <TableCell>{member.phone || '—'}</TableCell>
-                                                <TableCell>
-                                                    <Badge className={getRoleBadge(member.role)}>
-                                                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                        <div className="space-y-4">
+                            {teamMembers.map((member) => (
+                                <div key={member._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                                    <div className="flex items-center space-x-4 flex-1">
+                                        <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                                            <Users className="h-5 w-5 text-gray-600" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="font-medium text-gray-900">{member.name}</h3>
+                                            <p className="text-sm text-gray-600">{member.email}</p>
+                                            <div className="flex items-center space-x-2 mt-1">
+                                                <Badge className={getRoleBadge(member.role)}>
+                                                    {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                                                </Badge>
+                                                <Badge className={getStatusBadge(member.status, member.emailVerified)}>
+                                                    {getStatusText(member.status, member.emailVerified)}
+                                                </Badge>
+                                                {member.warehouse_id && (
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {member.warehouse_id.name}
                                                     </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge className={statusBadge.class}>
-                                                        {statusBadge.text}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
-                                                <TableCell className="text-right">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button size="icon" variant="ghost" className="h-8 w-8">
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleEdit(member)}>
-                                                                <Edit className="h-4 w-4 mr-2" />
-                                                                Edit
-                                                            </DropdownMenuItem>
-                                                            {member.blocked ? (
-                                                                <DropdownMenuItem onClick={() => handleBlock(member, false)}>
-                                                                    <Shield className="h-4 w-4 mr-2" />
-                                                                    Unblock
-                                                                </DropdownMenuItem>
-                                                            ) : (
-                                                                <DropdownMenuItem onClick={() => handleBlock(member, true)}>
-                                                                    <ShieldOff className="h-4 w-4 mr-2" />
-                                                                    Block
-                                                                </DropdownMenuItem>
-                                                            )}
-                                                            <DropdownMenuItem
-                                                                onClick={() => {
-                                                                    setSelectedMember(member)
-                                                                    setIsDeleteDialogOpen(true)
-                                                                }}
-                                                                className="text-red-600"
-                                                            >
-                                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                                Delete
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                            </Table>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <div className="text-sm text-gray-500 mr-4">
+                                            Joined {new Date(member.created_at).toLocaleDateString()}
+                                        </div>
+                                        {canEdit(member) && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    // TODO: Implement edit functionality
+                                                    toast.info('Edit functionality coming soon')
+                                                }}
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                        {canDelete(member) && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleDelete(member._id)}
+                                                disabled={isDeleting === member._id}
+                                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            >
+                                                {isDeleting === member._id ? (
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                                                ) : (
+                                                    <Trash2 className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </CardContent>

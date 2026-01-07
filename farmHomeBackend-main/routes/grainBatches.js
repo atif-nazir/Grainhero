@@ -7,6 +7,7 @@ const {
   requirePermission,
   requireTenantAccess,
 } = require("../middleware/permission");
+const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const { body, validationResult, param, query } = require("express-validator");
 const QRCode = require("qrcode");
 const PDFKit = require("pdfkit");
@@ -63,6 +64,159 @@ router.get("/test", (req, res) => {
     message: "Grain Batches API is working!",
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * @swagger
+ * /grain-batches/generate-id/{grain_type}:
+ *   get:
+ *     summary: Generate next batch ID for a grain type
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: grain_type
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Generated batch ID
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, res) => {
+  try {
+    const { grain_type } = req.params;
+    const currentYear = new Date().getFullYear();
+    
+    // Map grain types to abbreviations
+    const grainAbbreviations = {
+      'Wheat': 'WB',
+      'Rice': 'RB',
+      'Maize': 'MB',
+      'Corn': 'CB',
+      'Barley': 'BB',
+      'Sorghum': 'SB'
+    };
+    
+    const abbreviation = grainAbbreviations[grain_type];
+    if (!abbreviation) {
+      return res.status(400).json({ error: "Invalid grain type" });
+    }
+    
+    // Find all batches for this tenant in the current year with this grain type
+    const existingBatches = await GrainBatch.find({
+      tenant_id: req.user.tenant_id,
+      grain_type: grain_type,
+      intake_date: {
+        $gte: new Date(`${currentYear}-01-01`),
+        $lt: new Date(`${currentYear + 1}-01-01`)
+      }
+    }).sort({ createdAt: -1 });
+    
+    // Calculate next sequence number
+    const nextSequence = existingBatches.length + 1;
+    const sequenceStr = String(nextSequence).padStart(3, '0');
+    
+    const batch_id = `${abbreviation}-${sequenceStr}-${currentYear}`;
+    
+    res.json({
+      batch_id,
+      sequence: nextSequence,
+      grain_type,
+      year: currentYear
+    });
+  } catch (error) {
+    console.error("Generate ID error:", error);
+    res.status(500).json({ error: "Failed to generate batch ID" });
+  }
+});
+
+/**
+ * @swagger
+ * /grain-batches/available-silos/{grain_type}:
+ *   get:
+ *     summary: Get available silos for a grain type (empty or containing same grain type)
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: grain_type
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of available silos
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/available-silos/:grain_type", [auth, requireTenantAccess], async (req, res) => {
+  try {
+    const { grain_type } = req.params;
+    
+    // Determine the tenant/admin filter
+    const filterQuery = {};
+    
+    // Try tenant_id first, then admin_id
+    if (req.user.tenant_id) {
+      filterQuery.tenant_id = req.user.tenant_id;
+    } else if (req.user.admin_id) {
+      filterQuery.admin_id = req.user.admin_id;
+    } else {
+      // Fallback: use user's own id if they are an admin
+      filterQuery.admin_id = req.user._id;
+    }
+    
+    console.log("Available silos filter query:", filterQuery);
+    
+    // Get all silos for this tenant/admin
+    const silos = await Silo.find(filterQuery).sort({ name: 1 });
+    
+    console.log(`Found ${silos.length} silos for user ${req.user._id}`);
+    
+    // For each silo, check what grain types it currently contains
+    const availableSilos = [];
+    
+    for (const silo of silos) {
+      // Find all active batches in this silo
+      const batchesInSilo = await GrainBatch.find({
+        silo_id: silo._id,
+        status: { $in: ['stored', 'processing', 'on_hold'] } // Active statuses
+      }).select('grain_type').lean();
+      
+      // Check what grain types are in this silo
+      const grainTypesInSilo = [...new Set(batchesInSilo.map(b => b.grain_type))];
+      
+      // Include silo if:
+      // 1. It's empty (no active batches), OR
+      // 2. It only contains the same grain type we're looking for
+      if (grainTypesInSilo.length === 0 || grainTypesInSilo.every(gt => gt === grain_type)) {
+        availableSilos.push({
+          _id: silo._id,
+          name: silo.name,
+          silo_id: silo.silo_id,
+          capacity_kg: silo.capacity_kg,
+          current_occupancy_kg: silo.current_occupancy_kg,
+          grain_types_stored: grainTypesInSilo,
+          is_empty: grainTypesInSilo.length === 0
+        });
+      }
+    }
+    
+    res.json({
+      silos: availableSilos,
+      total: availableSilos.length,
+      grain_type,
+      filtered_by: availableSilos.length < silos.length ? `Showing only silos compatible with ${grain_type}` : 'All silos available'
+    });
+  } catch (error) {
+    console.error("Get available silos error:", error);
+    res.status(500).json({ error: "Failed to get available silos" });
+  }
 });
 
 /**
@@ -264,20 +418,53 @@ router.post(
  */
 router.get(
   "/",
-  [auth, requirePermission("batch.view"), requireTenantAccess],
+  [auth, requirePermission("batch.view"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const skip = (page - 1) * limit;
 
-      // Build filter - ensure admin_id is set by requireTenantAccess middleware
-      const adminId = req.user.admin_id || req.user._id;
-      const filter = { admin_id: adminId };
-
-      if (req.query.status) filter.status = req.query.status;
-      if (req.query.grain_type) filter.grain_type = req.query.grain_type;
-      if (req.query.silo_id) filter.silo_id = req.query.silo_id;
+        // Build filter
+      let filter = {};
+      
+      // Super Admin: See all batches
+      if (req.user.role === "super_admin") {
+        filter = {};
+      }
+      // Admin: See batches in their warehouses
+      else if (req.user.role === "admin") {
+        const Warehouse = require("../models/Warehouse");
+        const warehouses = await Warehouse.find({ admin_id: req.user._id }).select("_id");
+        const warehouseIds = warehouses.map(w => w._id);
+        const silos = await Silo.find({ warehouse_id: { $in: warehouseIds } }).select("_id");
+        filter = { silo_id: { $in: silos.map(s => s._id) } };
+      }
+      // Manager and Technician: See batches in their assigned warehouse
+      else if (req.user.role === "manager" || req.user.role === "technician") {
+        if (!req.user.warehouse_id) {
+          return res.status(403).json({ error: "User not assigned to any warehouse" });
+        }
+        const silos = await Silo.find({ warehouse_id: req.user.warehouse_id }).select("_id");
+        filter = { silo_id: { $in: silos.map(s => s._id) } };
+      }
+        
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.grain_type) filter.grain_type = req.query.grain_type;
+        if (req.query.silo_id) {
+          // Validate silo_id belongs to user's accessible warehouses
+          const silo = await Silo.findById(req.query.silo_id);
+          if (!silo) {
+            return res.status(404).json({ error: "Silo not found" });
+          }
+          // Check access (already handled by filter above, but double-check)
+          if (req.user.role === "manager" || req.user.role === "technician") {
+            if (silo.warehouse_id.toString() !== req.user.warehouse_id.toString()) {
+              return res.status(403).json({ error: "Access denied to this silo" });
+            }
+          }
+          filter.silo_id = req.query.silo_id;
+        }
 
       // Get batches with pagination
       const [batches, total] = await Promise.all([

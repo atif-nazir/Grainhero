@@ -124,7 +124,12 @@ router.get("/dashboard/test", (req, res) => {
   });
 });
 
-router.get("/dashboard", auth, async (req, res) => {
+// Import cache middleware
+const { createCacheMiddleware } = require('../middleware/cache');
+const { requireWarehouseAccess } = require('../middleware/warehouseAccess');
+
+// Cache dashboard for 30 seconds (frequently accessed, but needs to be relatively fresh)
+router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(30 * 1000), async (req, res) => {
   try {
     const scopeConditions = [];
     if (req.user?.tenant_id) {
@@ -136,6 +141,11 @@ router.get("/dashboard", auth, async (req, res) => {
     if (req.user?._id) {
       scopeConditions.push({ admin_id: req.user._id });
       scopeConditions.push({ created_by: req.user._id });
+    }
+    
+    // Add warehouse filter for managers and technicians
+    if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
+      scopeConditions.push(req.warehouseFilter);
     }
 
     const applyScope = (extra = {}) => {
@@ -460,13 +470,13 @@ router.get("/dashboard", auth, async (req, res) => {
  */
 router.get(
   "/dashboard/live-sensors",
-  [auth, requirePermission("sensor.view"), requireTenantAccess],
+  [auth, requirePermission("sensor.view"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { language = "en" } = req.query;
 
       // Get all silos with their latest sensor readings
-      const silos = await Silo.find({ tenant_id: req.user.tenant_id }).populate(
+      const silos = await Silo.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }).populate(
         {
           path: "sensor_devices",
           model: "SensorDevice",
@@ -581,7 +591,7 @@ router.get(
  */
 router.get(
   "/dashboard/silo-comparison",
-  [auth, requirePermission("silo.view"), requireTenantAccess],
+  [auth, requirePermission("silo.view"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { silo_ids, days = 7 } = req.query;
@@ -601,6 +611,7 @@ router.get(
       for (const siloId of siloIds) {
         const silo = await Silo.findOne({
           _id: siloId,
+          ...req.warehouseFilter,
           tenant_id: req.user.tenant_id,
         });
         if (!silo) continue;
@@ -609,10 +620,14 @@ router.get(
         const sensorReadings = await SensorReading.find({
           silo_id: siloId,
           timestamp: { $gte: startDate },
+          ...req.warehouseFilter,
         }).sort({ timestamp: 1 });
 
         // Get batches in this silo
-        const batches = await GrainBatch.find({ silo_id: siloId });
+        const batches = await GrainBatch.find({ 
+          silo_id: siloId, 
+          ...req.warehouseFilter 
+        });
         const avgRiskScore =
           batches.reduce((sum, b) => sum + (b.risk_score || 0), 0) /
           (batches.length || 1);
@@ -707,17 +722,17 @@ router.get(
  */
 router.get(
   "/dashboard/export-report",
-  [auth, requirePermission("reports.generate"), requireTenantAccess],
+  [auth, requirePermission("reports.generate"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { format = "pdf", type = "summary", language = "en" } = req.query;
 
       // Get comprehensive dashboard data
       const [batches, silos, alerts, devices] = await Promise.all([
-        GrainBatch.find({ tenant_id: req.user.tenant_id }).populate("silo_id"),
-        Silo.find({ tenant_id: req.user.tenant_id }),
-        Alert.find({ tenant_id: req.user.tenant_id, status: "active" }),
-        SensorDevice.find({ tenant_id: req.user.tenant_id }),
+        GrainBatch.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }).populate("silo_id"),
+        Silo.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }),
+        Alert.find(req.warehouseFilter || { tenant_id: req.user.tenant_id, status: "active" }),
+        SensorDevice.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }),
       ]);
 
       const reportData = {
@@ -864,13 +879,13 @@ router.get(
  */
 router.get(
   "/dashboard/admin/threshold-config",
-  [auth, requirePermission("thresholds.configure"), requireTenantAccess],
+  [auth, requirePermission("thresholds.configure"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       // Get all sensor devices with their thresholds
-      const devices = await SensorDevice.find({
-        tenant_id: req.user.tenant_id,
-      }).populate("silo_id", "name");
+      const devices = await SensorDevice.find(
+        req.warehouseFilter || { tenant_id: req.user.tenant_id }
+      ).populate("silo_id", "name");
 
       // Get global threshold settings (could be stored in a separate collection)
       const globalThresholds = {
@@ -1074,10 +1089,10 @@ router.get(
  */
 router.get(
   "/dashboard/admin/device-management",
-  [auth, requirePermission("sensor.manage"), requireTenantAccess],
+  [auth, requirePermission("sensor.manage"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
-      const devices = await SensorDevice.find({ tenant_id: req.user.tenant_id })
+      const devices = await SensorDevice.find(req.warehouseFilter || { tenant_id: req.user.tenant_id })
         .populate("silo_id", "name location")
         .sort({ created_at: -1 });
 
@@ -1157,6 +1172,7 @@ router.post(
     auth,
     requirePermission("system.override"),
     requireTenantAccess,
+    requireWarehouseAccess(),
     [
       body("override_type")
         .isIn(["risk_score", "device_status", "alert_silence", "batch_status"])
@@ -1197,6 +1213,7 @@ router.post(
         case "risk_score":
           const batch = await GrainBatch.findOne({
             _id: target_id,
+            ...req.warehouseFilter,
             tenant_id: req.user.tenant_id,
           });
           if (!batch) return res.status(404).json({ error: "Batch not found" });
@@ -1213,6 +1230,7 @@ router.post(
         case "device_status":
           const device = await SensorDevice.findOne({
             _id: target_id,
+            ...req.warehouseFilter,
             tenant_id: req.user.tenant_id,
           });
           if (!device)
@@ -1233,6 +1251,7 @@ router.post(
           await Alert.updateMany(
             {
               _id: { $in: target_id.split(",") },
+              ...req.warehouseFilter,
               tenant_id: req.user.tenant_id,
             },
             {
@@ -1250,6 +1269,7 @@ router.post(
         case "batch_status":
           const targetBatch = await GrainBatch.findOne({
             _id: target_id,
+            ...req.warehouseFilter,
             tenant_id: req.user.tenant_id,
           });
           if (!targetBatch)
@@ -1295,7 +1315,7 @@ router.post(
  */
 router.get(
   "/dashboard/admin/batch-history",
-  [auth, requirePermission("batch.view"), requireTenantAccess],
+  [auth, requirePermission("batch.view"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { days = 30, include_deleted = false } = req.query;
@@ -1304,7 +1324,7 @@ router.get(
 
       // Build aggregation pipeline
       const matchStage = {
-        tenant_id: req.user.tenant_id,
+        ...(req.warehouseFilter || { tenant_id: req.user.tenant_id }),
         created_at: { $gte: startDate },
       };
 
