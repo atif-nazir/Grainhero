@@ -8,7 +8,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
     required: [true, "Warehouse ID is required"],
     unique: true
   },
-  
+
   // Revenue and income
   revenue: {
     total_revenue: {
@@ -31,7 +31,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
       amount: { type: Number, default: 0 }
     }]
   },
-  
+
   // Costs and expenses
   expenses: {
     total_expenses: {
@@ -65,7 +65,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
       min: 0
     }
   },
-  
+
   // Profit and margins
   profit: {
     total_profit: {
@@ -81,7 +81,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
       default: 0
     }
   },
-  
+
   // Throughput metrics
   throughput: {
     total_kg_processed: {
@@ -100,7 +100,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
       min: 0
     }
   },
-  
+
   // Spoilage and loss
   spoilage: {
     total_spoilage_kg: {
@@ -120,7 +120,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
       max: 100
     }
   },
-  
+
   // Projections
   projections: {
     projected_revenue_next_month: {
@@ -151,7 +151,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
     },
     last_projection_date: Date
   },
-  
+
   // Performance trends
   trends: {
     revenue_trend: {
@@ -175,7 +175,7 @@ const warehouseFinancialsSchema = new mongoose.Schema({
       default: 'stable'
     }
   },
-  
+
   // Historical data (monthly snapshots)
   monthly_snapshots: [{
     month: String, // Format: "YYYY-MM"
@@ -186,14 +186,14 @@ const warehouseFinancialsSchema = new mongoose.Schema({
     spoilage_kg: { type: Number, default: 0 },
     spoilage_value_loss: { type: Number, default: 0 }
   }],
-  
+
   // Currency
   currency: {
     type: String,
     default: 'USD',
     enum: ['USD', 'PKR', 'EUR', 'GBP', 'INR']
   },
-  
+
   // Audit trail
   created_at: {
     type: Date,
@@ -204,51 +204,51 @@ const warehouseFinancialsSchema = new mongoose.Schema({
     default: Date.now
   },
   last_calculated_at: Date
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes
 warehouseFinancialsSchema.index({ 'projections.last_projection_date': -1 });
 
 // Method to calculate profit
-warehouseFinancialsSchema.methods.calculateProfit = function() {
+warehouseFinancialsSchema.methods.calculateProfit = function () {
   this.profit.total_profit = this.revenue.total_revenue - this.expenses.total_expenses;
   this.profit.monthly_profit = this.revenue.monthly_revenue - this.expenses.monthly_expenses;
-  
+
   if (this.revenue.total_revenue > 0) {
     this.profit.profit_margin_percentage = Math.round(
       (this.profit.total_profit / this.revenue.total_revenue) * 100
     );
   }
-  
+
   return this.save();
 };
 
 // Method to update trends
-warehouseFinancialsSchema.methods.updateTrends = function() {
+warehouseFinancialsSchema.methods.updateTrends = function () {
   if (this.monthly_snapshots.length >= 2) {
     const recent = this.monthly_snapshots.slice(-2);
     const older = this.monthly_snapshots.slice(-3, -1);
-    
+
     // Revenue trend
     if (recent.length === 2 && older.length >= 1) {
       const recentAvg = (recent[0].revenue + recent[1].revenue) / 2;
       const olderAvg = older[0].revenue;
-      this.trends.revenue_trend = recentAvg > olderAvg ? 'increasing' : 
-                                   recentAvg < olderAvg ? 'decreasing' : 'stable';
+      this.trends.revenue_trend = recentAvg > olderAvg ? 'increasing' :
+        recentAvg < olderAvg ? 'decreasing' : 'stable';
     }
-    
+
     // Profit trend
     if (recent.length === 2 && older.length >= 1) {
       const recentAvg = (recent[0].profit + recent[1].profit) / 2;
       const olderAvg = older[0].profit;
-      this.trends.profit_trend = recentAvg > olderAvg ? 'increasing' : 
-                                 recentAvg < olderAvg ? 'decreasing' : 'stable';
+      this.trends.profit_trend = recentAvg > olderAvg ? 'increasing' :
+        recentAvg < olderAvg ? 'decreasing' : 'stable';
     }
   }
-  
+
   return this.save();
 };
 

@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Fan, 
-  Droplets, 
-  Volume2, 
-  Thermometer, 
-  Gauge, 
-  Power, 
+import {
+  Fan,
+  Droplets,
+  Volume2,
+  Thermometer,
+  Gauge,
+  Power,
   Settings,
   Activity,
   AlertTriangle,
@@ -36,6 +36,9 @@ interface IoTDevice {
   power_consumption?: number
   last_reading?: string
   last_activity?: string
+  human_requested_fan?: boolean
+  ml_requested_fan?: boolean
+  target_fan_speed?: number
 }
 
 export default function ActuatorsPage() {
@@ -60,7 +63,7 @@ export default function ActuatorsPage() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       })
-      
+
       if (response.ok) {
         const data = await response.json()
         setDevices(data.devices || [])
@@ -83,7 +86,7 @@ export default function ActuatorsPage() {
         },
         body: JSON.stringify({ action, value })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         console.log('Device control result:', result)
@@ -96,7 +99,7 @@ export default function ActuatorsPage() {
 
   const bulkControl = async (action: string, value?: number) => {
     if (selectedDevices.length === 0) return
-    
+
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(`${backendUrl}/iot/bulk-control`, {
@@ -105,13 +108,13 @@ export default function ActuatorsPage() {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ 
-          devices: selectedDevices, 
-          action, 
-          value 
+        body: JSON.stringify({
+          devices: selectedDevices,
+          action,
+          value
         })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         console.log('Bulk control result:', result)
@@ -133,7 +136,7 @@ export default function ActuatorsPage() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         console.log('Emergency shutdown result:', result)
@@ -182,14 +185,14 @@ export default function ActuatorsPage() {
           <p className="text-gray-600">Monitor and control sensors and actuators</p>
         </div>
         <div className="flex space-x-2">
-          <Button 
+          <Button
             onClick={() => loadDevices()}
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Activity className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button 
+          <Button
             onClick={emergencyShutdown}
             className="bg-red-600 hover:bg-red-700"
           >
@@ -265,21 +268,21 @@ export default function ActuatorsPage() {
           </CardHeader>
           <CardContent>
             <div className="flex space-x-2">
-              <Button 
+              <Button
                 onClick={() => bulkControl('turn_on')}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <Power className="h-4 w-4 mr-2" />
                 Turn All ON
               </Button>
-              <Button 
+              <Button
                 onClick={() => bulkControl('turn_off')}
                 className="bg-red-600 hover:bg-red-700"
               >
                 <XCircle className="h-4 w-4 mr-2" />
                 Turn All OFF
               </Button>
-              <Button 
+              <Button
                 onClick={() => setSelectedDevices([])}
                 variant="outline"
               >
@@ -321,7 +324,7 @@ export default function ActuatorsPage() {
                       {device.device_id} • {device.location}
                     </CardDescription>
                   </CardHeader>
-                  
+
                   <CardContent>
                     <div className="space-y-4">
                       {/* Current Value */}
@@ -340,13 +343,13 @@ export default function ActuatorsPage() {
                             <span>Max: {device.threshold_max}{device.unit}</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full" 
-                              style={{ 
-                                width: `${Math.min(100, Math.max(0, 
-                                  ((device.current_value - device.threshold_min) / 
-                                   (device.threshold_max - device.threshold_min)) * 100
-                                ))}%` 
+                            <div
+                              className="bg-blue-600 h-2 rounded-full"
+                              style={{
+                                width: `${Math.min(100, Math.max(0,
+                                  ((device.current_value - device.threshold_min) /
+                                    (device.threshold_max - device.threshold_min)) * 100
+                                ))}%`
                               }}
                             />
                           </div>
@@ -354,10 +357,24 @@ export default function ActuatorsPage() {
                       )}
 
                       {/* Power consumption for actuators */}
-                      {device.type === 'actuator' && device.power_consumption && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Power:</span>
-                          <span className="text-sm">{device.power_consumption}W</span>
+                      {device.type === 'actuator' && (
+                        <div className="space-y-2 py-2 border-t border-b border-gray-100">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-gray-500">Target Speed:</span>
+                            <span className="font-bold text-blue-600">{device.target_fan_speed || 0}%</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-gray-500">Mode:</span>
+                            <Badge variant="outline" className="text-[10px] uppercase">
+                              {device.human_requested_fan ? 'Manual Override' : (device.ml_requested_fan ? 'AI Controlled' : 'Idle')}
+                            </Badge>
+                          </div>
+                          {device.power_consumption && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium text-gray-500">Actual Power:</span>
+                              <span>{device.power_consumption}W</span>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -367,20 +384,20 @@ export default function ActuatorsPage() {
                           <Button
                             size="sm"
                             onClick={() => controlDevice(device._id, 'turn_on')}
-                            className="bg-green-600 hover:bg-green-700"
-                            disabled={device.status === 'online'}
+                            className="bg-green-600 hover:bg-green-700 flex-1"
+                            disabled={device.human_requested_fan}
                           >
                             <Power className="h-4 w-4 mr-1" />
-                            ON
+                            Request ON
                           </Button>
                           <Button
                             size="sm"
                             onClick={() => controlDevice(device._id, 'turn_off')}
-                            className="bg-red-600 hover:bg-red-700"
-                            disabled={device.status === 'offline'}
+                            className="bg-red-600 hover:bg-red-700 flex-1"
+                            disabled={!device.human_requested_fan && !device.ml_requested_fan}
                           >
                             <XCircle className="h-4 w-4 mr-1" />
-                            OFF
+                            Request OFF
                           </Button>
                         </div>
                       )}
@@ -407,9 +424,9 @@ export default function ActuatorsPage() {
                       {/* Last activity */}
                       <div className="text-xs text-gray-500">
                         Last {device.type === 'sensor' ? 'reading' : 'activity'}: {
-                          device.last_reading || device.last_activity ? 
-                          new Date(device.last_reading || device.last_activity).toLocaleString() : 
-                          'Never'
+                          device.last_reading || device.last_activity ?
+                            new Date(device.last_reading || device.last_activity).toLocaleString() :
+                            'Never'
                         }
                       </div>
                     </div>

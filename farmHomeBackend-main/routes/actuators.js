@@ -8,6 +8,8 @@ const { auth } = require('../middleware/auth');
 const { requirePermission, requireTenantAccess } = require('../middleware/permission');
 const { body, validationResult, param, query } = require('express-validator');
 const { ACTUATOR_TYPES, ACTUATOR_ACTIONS, ACTUATOR_TRIGGERED_BY, ACTUATOR_TRIGGER_TYPES } = require('../configs/enum');
+const firebaseRealtimeService = require('../services/firebaseRealtimeService');
+const admin = require('firebase-admin');
 
 /**
  * @swagger
@@ -134,7 +136,7 @@ router.get('/', [
         const skip = (page - 1) * limit;
 
         const filter = { tenant_id: req.user.tenant_id };
-        
+
         if (req.query.status) filter.status = req.query.status;
         if (req.query.silo_id) filter.silo_id = req.query.silo_id;
         if (req.query.actuator_type) filter.actuator_type = req.query.actuator_type;
@@ -351,6 +353,11 @@ router.post('/:id/control', [
         // Log the operation
         await logActuatorOperation(actuator._id, action, triggered_by, req.user._id);
 
+        // Sync with Firebase for hardware polling
+        if (actuator.actuator_id) {
+            await firebaseRealtimeService.writeControlState(actuator.actuator_id, actuator);
+        }
+
         res.json({
             message: `Actuator ${action} successful`,
             actuator: result,
@@ -441,6 +448,11 @@ router.post('/:id/ai-trigger', [
             prediction_confidence,
             recommended_action
         });
+
+        // Sync with Firebase
+        if (actuator.actuator_id) {
+            await firebaseRealtimeService.writeControlState(actuator.actuator_id, actuator);
+        }
 
         res.json({
             message: 'Actuator triggered by AI',
@@ -652,6 +664,12 @@ router.post('/bulk-control', [
                 }
 
                 await logActuatorOperation(actuatorId, action, triggered_by, req.user._id);
+
+                // Sync with Firebase
+                if (actuator.actuator_id) {
+                    await firebaseRealtimeService.writeControlState(actuator.actuator_id, actuator);
+                }
+
                 results.push({ actuator_id: actuatorId, success: true, actuator: result });
 
             } catch (error) {
@@ -688,29 +706,29 @@ function getOperationStatus(actuator) {
 function getHealthStatus(actuator) {
     const now = new Date();
     const lastHeartbeat = actuator.health_metrics?.last_heartbeat;
-    
+
     if (!lastHeartbeat) return 'unknown';
-    
+
     const minutesSinceHeartbeat = (now - lastHeartbeat) / (1000 * 60);
     const expectedInterval = 5; // 5 minutes expected heartbeat
-    
+
     if (minutesSinceHeartbeat > expectedInterval * 3) return 'offline';
     if (actuator.health_metrics.error_count > 10) return 'error';
     if (actuator.health_metrics.uptime_percentage < 90) return 'poor';
-    
+
     return 'healthy';
 }
 
 function getMaintenanceStatus(actuator) {
     if (!actuator.performance_metrics.last_maintenance) return 'unknown';
-    
+
     const now = new Date();
     const daysSinceMaintenance = (now - actuator.performance_metrics.last_maintenance) / (1000 * 60 * 60 * 24);
     const intervalDays = actuator.performance_metrics.maintenance_interval_days;
-    
+
     if (daysSinceMaintenance > intervalDays) return 'overdue';
     if (daysSinceMaintenance > intervalDays * 0.8) return 'due_soon';
-    
+
     return 'current';
 }
 

@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const http = require("http");
@@ -43,7 +44,6 @@ const environmentalDataService = require("./services/environmentalDataService");
 const firebaseRealtimeService = require("./services/firebaseRealtimeService");
 
 const cors = require("cors");
-require("dotenv").config();
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsdoc = require("swagger-jsdoc");
@@ -81,22 +81,24 @@ db.once("open", () => {
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
   }
-  
-  try {
-    firebaseRealtimeService.start(io);
-    console.log("Firebase realtime service started");
-  } catch (error) {
-    console.error("Failed to start Firebase realtime service:", error.message);
-  }
-  
-  // Start data aggregation service (30s raw → 5min averages)
+
+  // Start limit warning scheduler
   try {
     const {
       startLimitWarningScheduler,
     } = require("./services/limitWarningService");
     startLimitWarningScheduler();
+    console.log("Limit warning scheduler started");
   } catch (error) {
     console.error("Failed to start limit warning scheduler:", error);
+  }
+
+  // Start Firebase realtime service
+  try {
+    firebaseRealtimeService.start(io);
+    console.log("Firebase realtime service started");
+  } catch (error) {
+    console.error("Failed to start Firebase realtime service:", error.message);
   }
 });
 
