@@ -140,7 +140,6 @@ const warehouseSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 warehouseSchema.index({ admin_id: 1, status: 1 });
-warehouseSchema.index({ warehouse_id: 1 });
 warehouseSchema.index({ manager_id: 1 });
 warehouseSchema.index({ tenant_id: 1 });
 warehouseSchema.index({ status: 1 });

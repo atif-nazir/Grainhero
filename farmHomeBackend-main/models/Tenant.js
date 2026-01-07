@@ -121,7 +121,6 @@ const tenantSchema = new mongoose.Schema({
 });
 
 // Indexes
-tenantSchema.index({ email: 1 });
 tenantSchema.index({ is_active: 1 });
 tenantSchema.index({ location: '2dsphere' });
 tenantSchema.index({ created_at: -1 });

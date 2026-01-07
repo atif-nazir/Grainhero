@@ -48,14 +48,17 @@ const { body, validationResult, param, query } = require('express-validator');
 router.get('/policies', [
   auth,
   requirePermission('insurance.view'),
-  requireTenantAccess
+  // super admin can view all; others are tenant-scoped
 ], async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const filter = { tenant_id: req.user.tenant_id };
+    // Super admin can optionally scope via ?tenant_id
+    const filter = req.user.role === 'super_admin'
+      ? (req.query.tenant_id ? { tenant_id: req.query.tenant_id } : {})
+      : { tenant_id: req.user.tenant_id };
     
     if (req.query.status) filter.status = req.query.status;
     if (req.query.provider) filter.provider_name = { $regex: req.query.provider, $options: 'i' };
@@ -149,14 +152,14 @@ router.post('/policies', [
 router.get('/policies/:id', [
   auth,
   requirePermission('insurance.view'),
-  requireTenantAccess,
   param('id').isMongoId().withMessage('Valid policy ID is required')
 ], async (req, res) => {
   try {
-    const policy = await InsurancePolicy.findOne({
-      _id: req.params.id,
-      tenant_id: req.user.tenant_id
-    })
+    const filter = req.user.role === 'super_admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, tenant_id: req.user.tenant_id };
+
+    const policy = await InsurancePolicy.findOne(filter)
     .populate('covered_batches.batch_id')
     .populate('created_by', 'name email');
 
@@ -350,7 +353,6 @@ router.get('/claims', [
 router.post('/claims', [
   auth,
   requirePermission('insurance.manage'),
-  requireTenantAccess,
   [
     body('policy_id').isMongoId().withMessage('Valid policy ID is required'),
     body('claim_type').isIn(['Fire', 'Theft', 'Spoilage', 'Weather Damage', 'Equipment Failure', 'Other']).withMessage('Invalid claim type'),
@@ -416,12 +418,15 @@ router.post('/claims', [
  */
 router.get('/statistics', [
   auth,
-  requirePermission('insurance.view'),
-  requireTenantAccess
+  requirePermission('insurance.view')
 ], async (req, res) => {
   try {
-    const policies = await InsurancePolicy.find({ tenant_id: req.user.tenant_id });
-    const claims = await InsuranceClaim.find({ tenant_id: req.user.tenant_id });
+    const filter = req.user.role === 'super_admin'
+      ? (req.query.tenant_id ? { tenant_id: req.query.tenant_id } : {})
+      : { tenant_id: req.user.tenant_id };
+
+    const policies = await InsurancePolicy.find(filter);
+    const claims = await InsuranceClaim.find(filter);
 
     const stats = {
       total_policies: policies.length,

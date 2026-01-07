@@ -206,7 +206,6 @@ const insurancePolicySchema = new mongoose.Schema({
 
 // Indexes for better query performance
 insurancePolicySchema.index({ tenant_id: 1, status: 1 });
-insurancePolicySchema.index({ policy_number: 1 });
 insurancePolicySchema.index({ provider_name: 1 });
 insurancePolicySchema.index({ end_date: 1 });
 insurancePolicySchema.index({ renewal_date: 1 });

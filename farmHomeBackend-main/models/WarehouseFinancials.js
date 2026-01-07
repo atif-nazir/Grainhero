@@ -210,7 +210,6 @@ const warehouseFinancialsSchema = new mongoose.Schema({
 });
 
 // Indexes
-warehouseFinancialsSchema.index({ warehouse_id: 1 });
 warehouseFinancialsSchema.index({ 'projections.last_projection_date': -1 });
 
 // Method to calculate profit

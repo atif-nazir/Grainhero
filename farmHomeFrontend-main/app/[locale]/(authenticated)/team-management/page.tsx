@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Users, Mail, Plus, UserCheck, Clock, AlertCircle, Edit, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Users, Mail, Plus, UserCheck, Clock, AlertCircle, Edit, Trash2, Search } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/app/[locale]/providers"
@@ -28,6 +28,13 @@ interface TeamMember {
         name: string
         warehouse_id: string
     }
+}
+
+interface PlanLimit {
+    canInvite: boolean
+    currentCount: number
+    limit: number | string
+    message?: string
 }
 
 export default function TeamManagementPage() {
@@ -54,11 +61,72 @@ export default function TeamManagementPage() {
         role: ''
     })
     const [isInviting, setIsInviting] = useState(false)
+    const [isUpdating, setIsUpdating] = useState(false)
     const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
+    
+    // Update edit form when editingMember changes
+    useEffect(() => {
+        if (editingMember) {
+            setEditForm({
+                name: editingMember.name,
+                phone: editingMember.phone || '',
+                role: editingMember.role
+            })
+        }
+    }, [editingMember])
     const [isDeleting, setIsDeleting] = useState<string | null>(null)
+    
+    const handleUpdate = async () => {
+        if (!editingMember || !editForm.name) {
+            toast.error('Please fill in all required fields')
+            return
+        }
+        
+        setIsUpdating(true)
+        try {
+            const res = await api.put(`/api/user-management/users/${editingMember._id}`, {
+                name: editForm.name,
+                phone: editForm.phone,
+                role: editForm.role
+            })
+            
+            if (res.ok) {
+                toast.success('Team member updated successfully')
+                setIsEditDialogOpen(false)
+                setEditingMember(null)
+                setEditForm({ name: '', phone: '', role: '' })
+                fetchTeamMembers()
+            } else {
+                toast.error(res.error || 'Failed to update team member')
+            }
+        } catch (err) {
+            toast.error((err as Error).message || 'Failed to update team member')
+        } finally {
+            setIsUpdating(false)
+        }
+    }
 
     // Check if current user can invite
     const canInvite = currentUserRole === 'super_admin' || currentUserRole === 'admin' || currentUserRole === 'manager'
+    
+    // Filter members based on search and filters
+    const filteredMembers = useMemo(() => {
+        return teamMembers.filter(member => {
+            const matchesSearch = 
+                member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                member.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (member.phone && member.phone.toLowerCase().includes(searchQuery.toLowerCase()))
+            
+            const matchesRole = roleFilter === 'all' || member.role === roleFilter
+            const matchesStatus = statusFilter === 'all' || 
+                (statusFilter === 'active' && member.emailVerified && member.role !== 'pending' && !member.blocked) ||
+                (statusFilter === 'pending' && member.role === 'pending') ||
+                (statusFilter === 'blocked' && member.blocked) ||
+                (statusFilter === 'unverified' && !member.emailVerified && member.role !== 'pending')
+            
+            return matchesSearch && matchesRole && matchesStatus
+        })
+    }, [teamMembers, searchQuery, roleFilter, statusFilter])
     
     // Check if current user can edit a specific member
     const canEdit = (member: TeamMember) => {
@@ -227,17 +295,30 @@ export default function TeamManagementPage() {
         }
     }
 
-    const getStatusBadge = (member: TeamMember) => {
-        if (member.blocked) {
+    const getStatusBadge = (status: string, emailVerified: boolean) => {
+        if (status === 'blocked') {
             return { text: 'Blocked', class: 'bg-red-100 text-red-800 border-red-200' }
         }
-        if (member.role === 'pending') {
+        if (status === 'pending') {
             return { text: 'Pending Invitation', class: 'bg-yellow-100 text-yellow-800 border-yellow-200' }
         }
-        if (!member.emailVerified) {
+        if (!emailVerified) {
             return { text: 'Email Not Verified', class: 'bg-orange-100 text-orange-800 border-orange-200' }
         }
         return { text: 'Active', class: 'bg-green-100 text-green-800 border-green-200' }
+    }
+
+    const getStatusText = (status: string, emailVerified: boolean) => {
+        if (status === 'blocked') {
+            return 'Blocked';
+        }
+        if (status === 'pending') {
+            return 'Pending Invitation';
+        }
+        if (!emailVerified) {
+            return 'Email Not Verified';
+        }
+        return 'Active';
     }
 
     const stats = useMemo(() => {
@@ -484,7 +565,7 @@ export default function TeamManagementPage() {
                                                 <Badge className={getRoleBadge(member.role)}>
                                                     {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                                                 </Badge>
-                                                <Badge className={getStatusBadge(member.status, member.emailVerified)}>
+                                                <Badge className={getStatusBadge(member.status, member.emailVerified).class}>
                                                     {getStatusText(member.status, member.emailVerified)}
                                                 </Badge>
                                                 {member.warehouse_id && (
@@ -590,10 +671,10 @@ export default function TeamManagementPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
+                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={!!isDeleting}>
                             Cancel
                         </Button>
-                        <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                        <Button variant="destructive" onClick={() => selectedMember && handleDelete(selectedMember._id)} disabled={!!isDeleting}>
                             {isDeleting ? 'Deleting...' : 'Delete'}
                         </Button>
                     </DialogFooter>

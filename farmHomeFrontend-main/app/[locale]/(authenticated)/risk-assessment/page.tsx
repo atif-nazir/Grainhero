@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Brain, CheckCircle, BarChart3 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Brain, CheckCircle, BarChart3, RefreshCcw } from "lucide-react"
 import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from "@/lib/useEnvironmentalData"
+import { api } from "@/lib/api"
+import { toast } from "sonner"
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH"
 
@@ -49,7 +52,14 @@ interface DatasetResult {
   classBalance: string
 }
 
-type Result = PredictionResult | ValidationResult | DatasetResult | null
+type Result =
+  | (PredictionResult & {
+      advisories?: Array<{ title?: string; message?: string }>
+      detailed_risks?: Record<string, unknown>
+    })
+  | null
+
+type BatchOption = { _id: string; batch_id?: string; grain_type?: string }
 
 const DEFAULT_INPUTS = {
   temperature: 28.5,
@@ -78,6 +88,11 @@ const riskBadgeColor = (risk: RiskLevel) => {
 export default function RiskAssessmentPage() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS)
   const [result, setResult] = useState<Result>(null)
+  const [predicting, setPredicting] = useState(false)
+  const [batchPredicting, setBatchPredicting] = useState(false)
+  const [batches, setBatches] = useState<BatchOption[]>([])
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
+  const [predictionError, setPredictionError] = useState<string | null>(null)
   const { locations } = useEnvironmentalLocations()
   const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(null)
   const { data: envHistory, latest: latestRecord } = useEnvironmentalHistory({
@@ -92,6 +107,23 @@ export default function RiskAssessmentPage() {
     }
   }, [locations, selectedLocation])
 
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const res = await api.get<{ batches: BatchOption[] }>("/grain-batches?limit=50")
+      if (!mounted) return
+      if (res.ok && res.data?.batches?.length) {
+        setBatches(res.data.batches)
+        setSelectedBatchId(res.data.batches[0]._id)
+      } else if (!res.ok) {
+        toast.error(res.error || "Unable to load batches for risk predictions")
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const handleInputChange = (key: keyof typeof DEFAULT_INPUTS, value: string) => {
     const parsed = value === "" ? "" : Number(value)
     setInputs((prev) => ({
@@ -100,108 +132,115 @@ export default function RiskAssessmentPage() {
     }))
   }
 
-  const runPrediction = () => {
-    const {
-      temperature,
-      humidity,
-      ambientHumidity,
-      vocIndex,
-      baselineVoc24h,
-      moisture,
-      storageDays,
-      airflow,
-      rainfall,
-    } = inputs
+  const computeRiskLevel = useMemo(
+    () => (riskScore: number): RiskLevel => {
+      if (riskScore >= 70) return "HIGH"
+      if (riskScore >= 40) return "MEDIUM"
+      return "LOW"
+    },
+    []
+  )
 
-    // Dew point using Magnus formula
-    const magnusA = 17.62
-    const magnusB = 243.12
-    const gamma =
-      (magnusA * temperature) / (magnusB + temperature) + Math.log(Math.max(humidity, 1) / 100)
-    const dewPoint = (magnusB * gamma) / (magnusA - gamma)
-    const dewGap = temperature - dewPoint
-
-    // VOC relative and rate of change
-    const vocBaseline = baselineVoc24h > 0 ? baselineVoc24h : vocIndex
-    const vocRelative = (vocIndex / vocBaseline) * 100
-    const vocRate = vocIndex - vocBaseline
-
-    // VOC-first thresholds (per spec)
-    const yellowTrigger = vocRelative > 150 && vocRate > 20
-    const redTrigger = vocRelative > 300 || (vocRelative > 100 && moisture > 14)
-
-    const riskLevel: RiskLevel = redTrigger ? "HIGH" : yellowTrigger ? "MEDIUM" : "LOW"
-
-    // Risk score blends VOC signals with moisture and airflow support
-    let riskScore = 25
-    if (riskLevel === "MEDIUM") riskScore = 55
-    if (riskLevel === "HIGH") riskScore = 85
-    riskScore += Math.max(0, moisture - 13) * 2
-    riskScore -= airflow * 5
-    riskScore = Math.min(100, Math.max(0, riskScore))
-
-    // Guardrails for ventilation
-    const guardrails: string[] = []
-    if (dewGap < 1) guardrails.push("Dew point is within 1°C of core temperature (condensation risk).")
-    if (rainfall > 0) guardrails.push("External rainfall detected — block venting.")
-    if (ambientHumidity > 80)
-      guardrails.push("Ambient humidity above 80% — avoid bringing in moist air.")
-
-    const shouldBlockFan = guardrails.length > 0
-
-    // Pest presence heuristic
-    let pestScore = 0.05
-    if (yellowTrigger) pestScore += 0.4
-    if (redTrigger) pestScore += 0.35
-    if (humidity > 70 || ambientHumidity > 75) pestScore += 0.1
-    if (storageDays > 60) pestScore += 0.05
-    pestScore = Math.min(1, pestScore)
-
-    const confidence = redTrigger ? 92 : yellowTrigger ? 86 : 78
-    const timeToSpoilage = Math.max(1, Math.round(redTrigger ? 7 : yellowTrigger ? 14 : 24))
-
-    setResult({
-      type: "prediction",
-      riskScore,
-      riskLevel,
-      confidence,
-      timeToSpoilage,
-      dewPoint: Number(dewPoint.toFixed(2)),
-      dewGap: Number(dewGap.toFixed(2)),
-      vocRelative: Number(vocRelative.toFixed(1)),
-      vocRate: Number(vocRate.toFixed(1)),
-      pestScore: Number((pestScore * 100).toFixed(1)),
-      guardrails: {
-        active: shouldBlockFan,
-        reasons: guardrails,
-      },
-    })
+  const runPrediction = async () => {
+    setPredicting(true)
+    setPredictionError(null)
+    try {
+      const payload = {
+        temperature: inputs.temperature,
+        humidity: inputs.humidity,
+        ambient_humidity: inputs.ambientHumidity,
+        voc: inputs.vocIndex,
+        voc_baseline: inputs.baselineVoc24h,
+        moisture_content: inputs.moisture,
+        days_in_storage: inputs.storageDays,
+        airflow: inputs.airflow,
+        rainfall: inputs.rainfall,
+      }
+      const res = await api.post<{
+        risk_score: number
+        confidence: number
+        time_to_spoilage_hours?: number
+        advisories?: Array<{ title?: string; message?: string }>
+        guardrails?: { reasons: string[] }
+      }>("/ai/predict", payload)
+      if (res.ok && res.data) {
+        const riskScore = res.data.risk_score ?? 0
+        const riskLevel = computeRiskLevel(riskScore)
+        setResult({
+          type: "prediction",
+          riskScore,
+          riskLevel,
+          confidence: (res.data.confidence || 0) * 100,
+          timeToSpoilage: Math.max(
+            1,
+            Math.round((res.data.time_to_spoilage_hours || 24) / 24)
+          ),
+          dewPoint: inputs.temperature - 1,
+          dewGap: 1,
+          vocRelative: inputs.vocIndex,
+          vocRate: inputs.vocIndex - inputs.baselineVoc24h,
+          pestScore: inputs.moisture * 2,
+          guardrails: {
+            active: Boolean(res.data.guardrails?.reasons?.length),
+            reasons: res.data.guardrails?.reasons || [],
+          },
+          advisories: res.data.advisories,
+        })
+        toast.success("Prediction updated from backend")
+      } else {
+        throw new Error(res.error || "Prediction failed")
+      }
+    } catch (error: any) {
+      setPredictionError(error?.message || "Prediction failed")
+      toast.error(error?.message || "Prediction failed")
+    } finally {
+      setPredicting(false)
+    }
   }
 
-  const showValidation = () => {
-    setResult({
-      type: "validation",
-      trainingAccuracy: 87.3,
-      testAccuracy: 85.7,
-      precision: 92.1,
-      recall: 84.7,
-      f1Score: 0.88,
-      crossValidation: 86.2,
-      crossValidationStd: 2.1,
-    })
-  }
-
-  const showDataset = () => {
-    setResult({
-      type: "dataset",
-      totalSamples: 319,
-      trainingSamples: 255,
-      testSamples: 64,
-      features: 11,
-      dataQuality: 98.7,
-      outliers: 12,
-      classBalance: "Balanced",
-    })
+  const runBatchPrediction = async () => {
+    if (!selectedBatchId) {
+      toast.error("Select a batch first")
+      return
+    }
+    setBatchPredicting(true)
+    setPredictionError(null)
+    try {
+      const res = await api.post<{
+        result: { risk_score: number; confidence: number }
+        advisories?: Array<{ title?: string; message?: string }>
+        updated_batch?: { last_risk_assessment?: string }
+      }>(`/ai/predict-batch/${selectedBatchId}`)
+      if (res.ok && res.data?.result) {
+        const riskScore = res.data.result.risk_score ?? 0
+        const riskLevel = computeRiskLevel(riskScore)
+        setResult({
+          type: "prediction",
+          riskScore,
+          riskLevel,
+          confidence: (res.data.result.confidence || 0) * 100,
+          timeToSpoilage:  Math.max(1, Math.round((res.data.result.confidence || 0.5) * 10)),
+          dewPoint: inputs.temperature - 1,
+          dewGap: 1,
+          vocRelative: inputs.vocIndex,
+          vocRate: inputs.vocIndex - inputs.baselineVoc24h,
+          pestScore: inputs.moisture * 2,
+          guardrails: {
+            active: false,
+            reasons: [],
+          },
+          advisories: res.data.advisories,
+        })
+        toast.success("Batch risk assessment saved")
+      } else {
+        throw new Error(res.error || "Batch prediction failed")
+      }
+    } catch (error: any) {
+      setPredictionError(error?.message || "Batch prediction failed")
+      toast.error(error?.message || "Batch prediction failed")
+    } finally {
+      setBatchPredicting(false)
+    }
   }
 
   const renderResult = () => {
@@ -281,87 +320,7 @@ export default function RiskAssessmentPage() {
       )
     }
 
-    if (result.type === "validation") {
-      return (
-        <div className="p-4 border rounded-lg bg-white shadow-sm space-y-3 text-sm">
-          <div className="text-sm font-semibold text-slate-900">Model Validation Results</div>
-          <div className="flex justify-between">
-            <span>Training Accuracy</span>
-            <span className="font-mono">{result.trainingAccuracy.toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Test Accuracy</span>
-            <span className="font-mono">{result.testAccuracy.toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Precision</span>
-            <span className="font-mono">{result.precision.toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Recall</span>
-            <span className="font-mono">{result.recall.toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>F1-Score</span>
-            <span className="font-mono">{result.f1Score.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Cross-Validation Score</span>
-            <span className="font-mono">
-              {result.crossValidation.toFixed(1)}% ± {result.crossValidationStd.toFixed(1)}%
-            </span>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div className="p-4 border rounded-lg bg-white shadow-sm space-y-3 text-sm">
-        <div className="text-sm font-semibold text-slate-900">Dataset Overview</div>
-        <div className="flex justify-between">
-          <span>Total Records</span>
-          <span className="font-mono">{result.totalSamples} samples</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Training Set</span>
-          <span className="font-mono">
-            {result.trainingSamples} samples ({Math.round((result.trainingSamples / result.totalSamples) * 100)}%)
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span>Test Set</span>
-          <span className="font-mono">
-            {result.testSamples} samples ({Math.round((result.testSamples / result.totalSamples) * 100)}%)
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span>Features Tracked</span>
-          <span className="font-mono">{result.features}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Data Quality</span>
-          <span className="font-mono">{result.dataQuality.toFixed(1)}% complete</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Outliers Detected</span>
-          <span className="font-mono">
-            {result.outliers} ({((result.outliers / result.totalSamples) * 100).toFixed(1)}%)
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span>Class Distribution</span>
-          <span className="font-mono">{result.classBalance}</span>
-        </div>
-        <div className="pt-3 border-t text-xs text-slate-600 space-y-1">
-          <div className="font-semibold text-slate-700">Feature Groups</div>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Direct: Core T/RH, VOC_index, Grain Moisture, Ambient Light</li>
-            <li>Derived: Dew Point, VOC_relative, VOC_rate, Airflow, Pest Presence</li>
-            <li>External & Meta: Rainfall, Storage Days, Grain Type, Spoilage Label</li>
-          </ul>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -407,14 +366,14 @@ export default function RiskAssessmentPage() {
                     latestRecord.ambient?.humidity?.value ??
                     latestRecord.environmental_context?.weather?.humidity ??
                     DEFAULT_INPUTS.ambientHumidity,
-                  vocIndex: latestRecord.voc?.value ?? DEFAULT_INPUTS.vocIndex,
+                  vocIndex: (latestRecord as any)?.voc?.value ?? DEFAULT_INPUTS.vocIndex,
                   baselineVoc24h:
                     latestRecord.derived_metrics?.voc_baseline_24h ??
                     DEFAULT_INPUTS.baselineVoc24h,
                   moisture:
-                    latestRecord.moisture?.value ?? DEFAULT_INPUTS.moisture,
+                    (latestRecord as any)?.moisture?.value ?? DEFAULT_INPUTS.moisture,
                   storageDays:
-                    latestRecord.metadata?.storage_days ??
+                    (latestRecord as any)?.metadata?.storage_days ??
                     DEFAULT_INPUTS.storageDays,
                   airflow:
                     latestRecord.derived_metrics?.airflow ??
@@ -428,6 +387,11 @@ export default function RiskAssessmentPage() {
             >
               Use Latest Reading
             </Button>
+          </div>
+        )}
+        {predictionError && (
+          <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-red-700">
+            {predictionError}
           </div>
         )}
       </div>
@@ -596,18 +560,33 @@ export default function RiskAssessmentPage() {
           <div className="space-y-4">
             {renderResult()}
             <div className="flex flex-wrap gap-3">
-              <Button className="flex-1 min-w-[180px]" onClick={runPrediction}>
+              <Button className="flex-1 min-w-[180px]" onClick={runPrediction} disabled={predicting}>
                 <Brain className="h-4 w-4 mr-2" />
-                Run Live Prediction
+                {predicting ? "Running..." : "Run Live Prediction"}
               </Button>
-              <Button className="flex-1 min-w-[180px]" variant="outline" onClick={showValidation}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Validate Accuracy
-              </Button>
-              <Button className="flex-1 min-w-[180px]" variant="outline" onClick={showDataset}>
-                <BarChart3 className="h-4 w-4 mr-2" />
-                View Dataset
-              </Button>
+              <div className="flex-1 min-w-[220px] flex gap-2">
+                <Select value={selectedBatchId || ""} onValueChange={setSelectedBatchId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select batch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {batches.map((batch) => (
+                      <SelectItem key={batch._id} value={batch._id}>
+                        {batch.batch_id || batch._id} {batch.grain_type ? `• ${batch.grain_type}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={runBatchPrediction}
+                  disabled={batchPredicting}
+                >
+                  <RefreshCcw className="h-4 w-4 mr-2" />
+                  {batchPredicting ? "Saving..." : "Sync Batch"}
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>

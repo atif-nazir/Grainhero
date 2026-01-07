@@ -247,3 +247,11 @@ wss.on("connection", async function connection(ws, req) {
     alertChangeStream.close();
   });
 });
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`API Documentation: http://localhost:${PORT}/api/docs`);
+  console.log(`WebSocket Server: ws://localhost:${PORT}`);
+});

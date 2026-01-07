@@ -196,11 +196,29 @@ export default function AnalyticsPage() {
               <SelectItem value="365">Last year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setLoading(true)
+              const res = await api.get<DashboardApi>("/dashboard")
+              if (res.ok && res.data) {
+                setDashboard(res.data)
+              }
+              setLoading(false)
+            }}
+          >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button size="sm">
+          <Button
+            size="sm"
+            onClick={() => {
+              const { config } = require("@/config")
+              const url = `${config.backendUrl}/dashboard/export-report?type=summary&format=pdf`
+              window.open(url, "_blank", "noopener,noreferrer")
+            }}
+          >
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>

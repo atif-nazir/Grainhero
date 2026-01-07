@@ -89,19 +89,171 @@ router.post("/signup", async (req, res) => {
   console.log("MongoDB connection state:", mongoose.connection.readyState); // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
 
   try {
+    console.log("Validation check - field values:", {
+      name: name ? "PRESENT" : "MISSING",
+      email: email ? "PRESENT" : "MISSING",
+      password: password ? "PRESENT" : "MISSING",
+      confirm_password: confirm_password ? "PRESENT" : "MISSING"
+    });
+    
     if (!name || !email || !password || !confirm_password) {
       console.log("Validation failed: Missing required fields");
       return res
         .status(400)
-        .json({ error: "Name, email, and password are required" });
+        .json({ error: "Name, email, password, and confirm_password are required" });
         }
         if (password !== confirm_password) {
+      console.log("Password validation failed:", {
+        passwordLength: password ? password.length : 0,
+        confirmPasswordLength: confirm_password ? confirm_password.length : 0,
+        passwordsMatch: password === confirm_password
+      });
       return res.status(400).json({ error: "Passwords do not match" });
         }
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!email.match(emailRegex)) {
       return res.status(400).json({ error: "Invalid email format" });
         }
+        // Check for existing users first (especially for pending paying users)
+        // This check happens before role determination to handle paid users who need to complete signup
+        
+        // Debug: Check specifically for the email we're looking for
+        console.log("Looking for user with email:", email);
+        const emailUser = await User.findOne({ email });
+        console.log("User found with exact email:", emailUser ? {
+          id: emailUser._id.toString(),
+          email: emailUser.email,
+          role: emailUser.role,
+          customerId: emailUser.customerId,
+          hasAccess: emailUser.hasAccess
+        } : "NOT_FOUND");
+        
+        // Check for phone if provided
+        let phoneUser = null;
+        if (phone) {
+          phoneUser = await User.findOne({ phone });
+          console.log("User found with phone:", phoneUser ? {
+            id: phoneUser._id.toString(),
+            email: phoneUser.email,
+            role: phoneUser.role,
+            customerId: phoneUser.customerId,
+            hasAccess: phoneUser.hasAccess
+          } : "NOT_FOUND");
+        }
+        
+        // Query for existing user considering email and phone (if provided)
+        let existingUser = null;
+        if (phone) {
+          existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+        } else {
+          // If phone is not provided, only check for email
+          existingUser = await User.findOne({ email });
+        }
+        
+        if (existingUser) {
+          console.log("Existing user found with details:", {
+            id: existingUser._id,
+            role: existingUser.role,
+            customerId: existingUser.customerId,
+            hasAccess: existingUser.hasAccess,
+            email: existingUser.email
+          });
+          
+          // Check if this is a pending user who has already paid (from webhook)
+          if (
+            existingUser.role === "pending" &&
+            existingUser.customerId &&
+            existingUser.hasAccess
+          ) {
+            console.log(
+              "Found pending user with payment, updating to admin:",
+              email
+            );
+
+            // Import plan mapping to set subscription_plan correctly
+            const {
+              checkoutPlanIdToPlanKey,
+            } = require("../configs/plan-mapping");
+
+            // Update the existing user with password and role
+            existingUser.name = name;
+            existingUser.phone = phone || existingUser.phone;
+            existingUser.password = password;
+            existingUser.role = "admin"; // Set as admin since they paid
+            existingUser.emailVerified = true;
+
+            // Ensure subscription_plan is set from hasAccess
+            if (
+              existingUser.hasAccess &&
+              existingUser.hasAccess !== "none" &&
+              !existingUser.subscription_plan
+            ) {
+              existingUser.subscription_plan = checkoutPlanIdToPlanKey(
+                existingUser.hasAccess
+              );
+            }
+
+            try {
+              await existingUser.save();
+              console.log("Successfully updated pending user to admin");
+
+              // Generate JWT token
+              const token = jwt.sign(
+                {
+                  userId: existingUser._id,
+                  email: existingUser.email,
+                  role: existingUser.role,
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: "7d" }
+              );
+
+              return res.status(201).json({
+                message: "Account activated successfully! You can now login.",
+                user: {
+                  id: existingUser._id,
+                  name: existingUser.name,
+                  email: existingUser.email,
+                  role: existingUser.role,
+                  hasAccess: existingUser.hasAccess,
+                },
+                token,
+                hasAccess: existingUser.hasAccess,
+              });
+            } catch (error) {
+              console.error("Error updating pending user:", error);
+              return res
+                .status(500)
+                .json({ error: "Failed to activate account. Please try again." });
+            }
+          } else {
+            console.log("User already exists with email/phone:", {
+              email,
+              phone,
+            });
+            // Check which field is causing the conflict
+            const emailExists = await User.findOne({ email });
+            const phoneExists = await User.findOne({ phone: { $exists: true, $ne: null, $ne: "" } });
+
+            if (emailExists && phoneExists) {
+              return res.status(400).json({
+                error:
+                  "Both email and phone number are already in use. Please use different credentials or try logging in.",
+              });
+            } else if (emailExists) {
+              return res.status(400).json({
+                error:
+                  "An account with this email already exists. Please use a different email or try logging in.",
+              });
+            } else {
+              return res.status(400).json({
+                error:
+                  "An account with this phone number already exists. Please use a different phone number.",
+              });
+            }
+          }
+        }
+        
         // Determine role based on signup context
         const userCount = await User.countDocuments();
         const isFirstUser = userCount === 0;

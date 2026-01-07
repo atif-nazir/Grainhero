@@ -30,7 +30,10 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: function () {
-        return this.role !== "pending";
+        // Password is required unless role is pending OR it's a paid admin created by webhook (has customerId but no password yet)
+        if (this.role === "pending") return false;
+        if (this.role === "admin" && this.customerId && !this.password) return false;
+        return true;
       },
       select: false,
     },

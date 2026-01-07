@@ -217,7 +217,6 @@ const insuranceClaimSchema = new mongoose.Schema({
 // Indexes for better query performance
 insuranceClaimSchema.index({ tenant_id: 1, status: 1 });
 insuranceClaimSchema.index({ policy_id: 1 });
-insuranceClaimSchema.index({ claim_number: 1 });
 insuranceClaimSchema.index({ incident_date: 1 });
 insuranceClaimSchema.index({ filed_date: 1 });
 

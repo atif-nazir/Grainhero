@@ -335,7 +335,6 @@ const siloSchema = new mongoose.Schema({
 // Indexes for better query performance
 siloSchema.index({ admin_id: 1, status: 1 });
 siloSchema.index({ warehouse_id: 1, status: 1 });
-siloSchema.index({ silo_id: 1 });
 siloSchema.index({ farmhouse_id: 1 });
 siloSchema.index({ current_batch_id: 1 });
 siloSchema.index({ status: 1 });
