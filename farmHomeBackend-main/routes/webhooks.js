@@ -286,7 +286,7 @@ router.post("/", (request, response) => {
                 const userData = {
                   email: customer.email,
                   name: customer.name || "Admin User",
-                  role: "pending", // Set as pending until password is set
+                  role: "admin", // Set as admin immediately for paid users
                   hasAccess: plan.id, // Keep checkout plan ID for hasAccess
                   subscription_plan: planKey, // Use plan key for subscription_plan (basic, standard, professional, enterprise)
                   customerId: customerId,

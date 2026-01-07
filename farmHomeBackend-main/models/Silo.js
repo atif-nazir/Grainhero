@@ -16,7 +16,7 @@ const siloSchema = new mongoose.Schema({
     trim: true,
     immutable: true
   },
-  
+
   // Admin and location
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -32,7 +32,7 @@ const siloSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Farmhouse'
   },
-  
+
   // Physical specifications
   capacity_kg: {
     type: Number,
@@ -44,7 +44,7 @@ const siloSchema = new mongoose.Schema({
     diameter: Number, // meters
     volume: Number // cubic meters
   },
-  
+
   // Location and installation
   location: {
     description: String,
@@ -57,7 +57,7 @@ const siloSchema = new mongoose.Schema({
     country: String,
     postal_code: String
   },
-  
+
   // Current status and occupancy
   status: {
     type: String,
@@ -67,19 +67,19 @@ const siloSchema = new mongoose.Schema({
     },
     default: DEVICE_STATUSES.ACTIVE
   },
-  
+
   current_occupancy_kg: {
     type: Number,
     default: 0,
     min: [0, "Occupancy cannot be negative"]
   },
-  
+
   // Current batch information
   current_batch_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'GrainBatch'
   },
-  
+
   // Environmental control systems
   ventilation_system: {
     has_fans: {
@@ -103,7 +103,7 @@ const siloSchema = new mongoose.Schema({
       default: false
     }
   },
-  
+
   temperature_control: {
     has_cooling: {
       type: Boolean,
@@ -122,7 +122,7 @@ const siloSchema = new mongoose.Schema({
       default: 2
     }
   },
-  
+
   // Sensor configuration
   sensors: [{
     device_id: {
@@ -145,7 +145,7 @@ const siloSchema = new mongoose.Schema({
       default: false
     }
   }],
-  
+
   // Current environmental conditions (latest readings)
   current_conditions: {
     temperature: {
@@ -190,7 +190,7 @@ const siloSchema = new mongoose.Schema({
     },
     last_updated: Date
   },
-  
+
   // Operational thresholds
   thresholds: {
     temperature: {
@@ -218,7 +218,7 @@ const siloSchema = new mongoose.Schema({
       critical_max: { type: Number, default: 18 }
     }
   },
-  
+
   // Maintenance and inspection
   last_inspection_date: Date,
   next_inspection_date: Date,
@@ -226,14 +226,14 @@ const siloSchema = new mongoose.Schema({
     type: Number,
     default: 30
   },
-  
+
   last_cleaning_date: Date,
   cleaning_schedule: {
     type: String,
     enum: ['weekly', 'monthly', 'quarterly', 'as_needed'],
     default: 'monthly'
   },
-  
+
   // Construction and materials
   construction_details: {
     material: {
@@ -246,7 +246,7 @@ const siloSchema = new mongoose.Schema({
     model: String,
     warranty_expiry: Date
   },
-  
+
   // Safety and compliance
   safety_features: {
     fire_suppression: {
@@ -266,7 +266,7 @@ const siloSchema = new mongoose.Schema({
       default: false
     }
   },
-  
+
   compliance_certificates: [{
     certificate_type: String,
     certificate_number: String,
@@ -275,7 +275,7 @@ const siloSchema = new mongoose.Schema({
     issuing_authority: String,
     document_url: String
   }],
-  
+
   // Operational statistics
   statistics: {
     total_batches_stored: {
@@ -295,7 +295,7 @@ const siloSchema = new mongoose.Schema({
       max: 100
     }
   },
-  
+
   // Configuration
   is_active: {
     type: Boolean,
@@ -305,11 +305,11 @@ const siloSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  
+
   // Metadata
   notes: String,
   tags: [String],
-  
+
   // Audit trail
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -320,22 +320,21 @@ const siloSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Soft delete
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes for better query performance
 siloSchema.index({ admin_id: 1, status: 1 });
 siloSchema.index({ warehouse_id: 1, status: 1 });
-siloSchema.index({ silo_id: 1 });
 siloSchema.index({ farmhouse_id: 1 });
 siloSchema.index({ current_batch_id: 1 });
 siloSchema.index({ status: 1 });
@@ -344,68 +343,68 @@ siloSchema.index({ status: 1 });
 siloSchema.index({ admin_id: 1, warehouse_id: 1, name: 1 }, { unique: true });
 
 // Exclude deleted silos by default
-siloSchema.pre(/^find/, function() {
+siloSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Virtual for occupancy percentage
-siloSchema.virtual('occupancy_percentage').get(function() {
+siloSchema.virtual('occupancy_percentage').get(function () {
   if (this.capacity_kg <= 0) return 0;
   return Math.round((this.current_occupancy_kg / this.capacity_kg) * 100);
 });
 
 // Virtual for available capacity
-siloSchema.virtual('available_capacity_kg').get(function() {
+siloSchema.virtual('available_capacity_kg').get(function () {
   return Math.max(0, this.capacity_kg - this.current_occupancy_kg);
 });
 
 // Virtual for inspection status
-siloSchema.virtual('inspection_status').get(function() {
+siloSchema.virtual('inspection_status').get(function () {
   if (!this.next_inspection_date) return 'unknown';
-  
+
   const now = new Date();
   const daysUntilInspection = (this.next_inspection_date - now) / (1000 * 60 * 60 * 24);
-  
+
   if (daysUntilInspection < 0) return 'overdue';
   if (daysUntilInspection < 7) return 'due_soon';
-  
+
   return 'current';
 });
 
 // Method to update current conditions
-siloSchema.methods.updateCurrentConditions = function(sensorType, value, sensorId) {
+siloSchema.methods.updateCurrentConditions = function (sensorType, value, sensorId) {
   if (!this.current_conditions) {
     this.current_conditions = {};
   }
-  
+
   this.current_conditions[sensorType] = {
     value: value,
     timestamp: new Date(),
     sensor_id: sensorId
   };
   this.current_conditions.last_updated = new Date();
-  
+
   return this.save({ validateBeforeSave: false });
 };
 
 // Method to add batch
-siloSchema.methods.addBatch = function(batchId, quantityKg) {
+siloSchema.methods.addBatch = function (batchId, quantityKg) {
   if (this.current_occupancy_kg + quantityKg > this.capacity_kg) {
     throw new Error('Insufficient capacity');
   }
-  
+
   this.current_batch_id = batchId;
   this.current_occupancy_kg += quantityKg;
   this.statistics.total_batches_stored += 1;
   this.statistics.total_kg_processed += quantityKg;
   this.statistics.last_batch_date = new Date();
   this.statistics.utilization_percentage = Math.round((this.current_occupancy_kg / this.capacity_kg) * 100);
-  
+
   return this.save();
 };
 
 // Auto-generate `silo_id` and `name` (if missing) before validation. Names are unique per admin+warehouse.
-siloSchema.pre('validate', async function() {
+siloSchema.pre('validate', async function () {
   // Only generate for new documents
   if (this.isNew) {
     const Silo = mongoose.model('Silo');
@@ -452,31 +451,31 @@ siloSchema.pre('validate', async function() {
 });
 
 // Method to remove batch
-siloSchema.methods.removeBatch = function(quantityKg) {
+siloSchema.methods.removeBatch = function (quantityKg) {
   this.current_occupancy_kg = Math.max(0, this.current_occupancy_kg - quantityKg);
   this.statistics.utilization_percentage = Math.round((this.current_occupancy_kg / this.capacity_kg) * 100);
-  
+
   if (this.current_occupancy_kg === 0) {
     this.current_batch_id = null;
   }
-  
+
   return this.save();
 };
 
 // Method to check if conditions are within thresholds
-siloSchema.methods.checkThresholds = function() {
+siloSchema.methods.checkThresholds = function () {
   const alerts = [];
   const conditions = this.current_conditions;
   const thresholds = this.thresholds;
-  
+
   if (!conditions || !thresholds) return alerts;
-  
+
   const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
-  
+
   sensorTypes.forEach(type => {
     const condition = conditions[type];
     const threshold = thresholds[type];
-    
+
     if (condition?.value !== undefined && threshold) {
       if (threshold.critical_min !== undefined && condition.value < threshold.critical_min) {
         alerts.push({
@@ -517,7 +516,7 @@ siloSchema.methods.checkThresholds = function() {
       }
     }
   });
-  
+
   return alerts;
 };
 

@@ -9,6 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { 
   Plus, 
   Search, 
@@ -80,35 +88,198 @@ export default function InsurancePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
+  const [saving, setSaving] = useState(false)
+  const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null)
+  const [showClaimModal, setShowClaimModal] = useState(false)
+  const [batches, setBatches] = useState<Array<{ _id: string; batch_id: string; grain_type: string; quantity_kg: number }>>([])
+  const [claimSaving, setClaimSaving] = useState(false)
+  const [policyForm, setPolicyForm] = useState({
+    policy_number: '',
+    provider_name: '',
+    coverage_type: 'Comprehensive',
+    coverage_amount: 0,
+    premium_amount: 0,
+    deductible: 0,
+    start_date: '',
+    end_date: '',
+    renewal_date: '',
+    status: 'active',
+  })
+  const [claimForm, setClaimForm] = useState({
+    policy_id: '',
+    claim_type: 'Spoilage',
+    description: '',
+    amount_claimed: 0,
+    incident_date: '',
+    batch_id: '',
+    quantity_affected: 0,
+  })
 
   useEffect(() => {
     let mounted = true
-    ;(async () => {
+    const load = async () => {
       try {
         const [policiesRes, claimsRes] = await Promise.all([
-          api.get<{ policies: InsurancePolicy[] }>('/insurance/policies?limit=50'),
-          api.get<{ claims: InsuranceClaim[] }>('/insurance/claims?limit=50')
+          api.get<{ policies: InsurancePolicy[] }>('/api/insurance/policies?limit=50'),
+          api.get<{ claims: InsuranceClaim[] }>('/api/insurance/claims?limit=50')
         ])
         
         if (!mounted) return
         
         if (policiesRes.ok && policiesRes.data) {
           setPolicies(policiesRes.data.policies as unknown as InsurancePolicy[])
+        } else if (!policiesRes.ok) {
+          toast.error(policiesRes.error || 'Failed to load policies')
         }
         
         if (claimsRes.ok && claimsRes.data) {
           setClaims(claimsRes.data.claims as unknown as InsuranceClaim[])
+        } else if (!claimsRes.ok) {
+          toast.error(claimsRes.error || 'Failed to load claims')
         }
       } catch (error) {
         console.error('Failed to load insurance data:', error)
+        toast.error('Failed to load insurance data')
       } finally {
         setLoading(false)
+      }
+    }
+    void load()
+    ;(async () => {
+      try {
+        const res = await api.get<{ batches: Array<{ _id: string; batch_id: string; grain_type: string; quantity_kg: number }> }>('/api/grain-batches?limit=50')
+        if (res.ok && res.data) {
+          setBatches(res.data.batches || [])
+        }
+      } catch (e) {
+        // ignore
       }
     })()
     return () => {
       mounted = false
     }
   }, [])
+
+  const resetForm = () => {
+    setEditingPolicyId(null)
+    setPolicyForm({
+      policy_number: '',
+      provider_name: '',
+      coverage_type: 'Comprehensive',
+      coverage_amount: 0,
+      premium_amount: 0,
+      deductible: 0,
+      start_date: '',
+      end_date: '',
+      renewal_date: '',
+      status: 'active',
+    })
+  }
+
+  const handleSubmitPolicy = async () => {
+    setSaving(true)
+    try {
+      const payload = {
+        ...policyForm,
+        coverage_amount: Number(policyForm.coverage_amount),
+        premium_amount: Number(policyForm.premium_amount),
+        deductible: Number(policyForm.deductible),
+      }
+      const res = editingPolicyId
+        ? await api.put(`/api/insurance/policies/${editingPolicyId}`, payload)
+        : await api.post('/api/insurance/policies', payload)
+
+      if (res.ok) {
+        toast.success(editingPolicyId ? 'Policy updated' : 'Policy created')
+        resetForm()
+        setLoading(true)
+        const updated = await api.get<{ policies: InsurancePolicy[] }>('/api/insurance/policies?limit=50')
+        if (updated.ok && updated.data) setPolicies(updated.data.policies as unknown as InsurancePolicy[])
+      } else {
+        throw new Error(res.error || 'Unable to save policy')
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Unable to save policy')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const startEditPolicy = (policy: InsurancePolicy) => {
+    setEditingPolicyId(policy._id)
+    setPolicyForm({
+      policy_number: policy.policy_number,
+      provider_name: policy.provider_name,
+      coverage_type: policy.coverage_type,
+      coverage_amount: policy.coverage_amount,
+      premium_amount: policy.premium_amount,
+      deductible: policy.deductible,
+      start_date: policy.start_date?.slice(0, 10),
+      end_date: policy.end_date?.slice(0, 10),
+      renewal_date: policy.renewal_date?.slice(0, 10) || '',
+      status: policy.status,
+    })
+    setActiveTab('policies')
+  }
+
+  const cancelPolicy = async (policyId: string) => {
+    try {
+      const res = await api.put(`/api/insurance/policies/${policyId}`, { status: 'cancelled' })
+      if (res.ok) {
+        toast.success('Policy cancelled')
+        const updated = await api.get<{ policies: InsurancePolicy[] }>('/api/insurance/policies?limit=50')
+        if (updated.ok && updated.data) setPolicies(updated.data.policies as unknown as InsurancePolicy[])
+      } else {
+        toast.error(res.error || 'Failed to cancel policy')
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to cancel policy')
+    }
+  }
+
+  const openClaimModalForPolicy = (policy: InsurancePolicy) => {
+    setClaimForm((prev) => ({
+      ...prev,
+      policy_id: policy._id,
+      claim_type: 'Spoilage',
+      description: '',
+      amount_claimed: 0,
+      incident_date: new Date().toISOString().slice(0, 10),
+      batch_id: batches[0]?._id || '',
+      quantity_affected: 0,
+    }))
+    setShowClaimModal(true)
+  }
+
+  const submitClaim = async () => {
+    setClaimSaving(true)
+    try {
+      const body = {
+        policy_id: claimForm.policy_id,
+        claim_type: claimForm.claim_type,
+        description: claimForm.description,
+        amount_claimed: Number(claimForm.amount_claimed),
+        incident_date: claimForm.incident_date,
+        batch_affected: {
+          batch_id: claimForm.batch_id,
+          quantity_affected: Number(claimForm.quantity_affected),
+        },
+      }
+      const res = await api.post('/api/insurance/claims', body)
+      if (res.ok) {
+        toast.success('Claim filed')
+        setShowClaimModal(false)
+        const refreshed = await api.get<{ claims: InsuranceClaim[] }>('/api/insurance/claims?limit=50')
+        if (refreshed.ok && refreshed.data) setClaims(refreshed.data.claims as unknown as InsuranceClaim[])
+      } else {
+        toast.error(res.error || 'Failed to file claim')
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to file claim')
+    } finally {
+      setClaimSaving(false)
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     const statusColors = {
@@ -171,7 +342,7 @@ export default function InsurancePage() {
             Manage grain insurance policies, claims, and risk assessment
           </p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={resetForm}>
           <Plus className="h-4 w-4" />
           New Policy
         </Button>
@@ -288,7 +459,7 @@ export default function InsurancePage() {
                     <Button variant="outline" size="sm" className="flex-1">
                       View Details
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => openClaimModalForPolicy(policy)}>
                       File Claim
                     </Button>
                   </div>
@@ -299,6 +470,124 @@ export default function InsurancePage() {
         </TabsContent>
 
         <TabsContent value="policies" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{editingPolicyId ? 'Edit Policy' : 'Add Policy'}</CardTitle>
+              <CardDescription>Save policies directly to the backend</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Policy Number</label>
+                <Input
+                  value={policyForm.policy_number}
+                  onChange={(e) => setPolicyForm({ ...policyForm, policy_number: e.target.value })}
+                  placeholder="POL-1234"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Provider</label>
+                <Input
+                  value={policyForm.provider_name}
+                  onChange={(e) => setPolicyForm({ ...policyForm, provider_name: e.target.value })}
+                  placeholder="Insurance Co."
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Coverage Type</label>
+                <Select
+                  value={policyForm.coverage_type}
+                  onValueChange={(value) => setPolicyForm({ ...policyForm, coverage_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Comprehensive">Comprehensive</SelectItem>
+                    <SelectItem value="Fire & Theft">Fire & Theft</SelectItem>
+                    <SelectItem value="Spoilage Only">Spoilage Only</SelectItem>
+                    <SelectItem value="Weather Damage">Weather Damage</SelectItem>
+                    <SelectItem value="Custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Status</label>
+                <Select
+                  value={policyForm.status}
+                  onValueChange={(value) => setPolicyForm({ ...policyForm, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Coverage Amount</label>
+                <Input
+                  type="number"
+                  value={policyForm.coverage_amount}
+                  onChange={(e) => setPolicyForm({ ...policyForm, coverage_amount: Number(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Premium Amount</label>
+                <Input
+                  type="number"
+                  value={policyForm.premium_amount}
+                  onChange={(e) => setPolicyForm({ ...policyForm, premium_amount: Number(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Deductible</label>
+                <Input
+                  type="number"
+                  value={policyForm.deductible}
+                  onChange={(e) => setPolicyForm({ ...policyForm, deductible: Number(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Start Date</label>
+                <Input
+                  type="date"
+                  value={policyForm.start_date}
+                  onChange={(e) => setPolicyForm({ ...policyForm, start_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">End Date</label>
+                <Input
+                  type="date"
+                  value={policyForm.end_date}
+                  onChange={(e) => setPolicyForm({ ...policyForm, end_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Renewal Date</label>
+                <Input
+                  type="date"
+                  value={policyForm.renewal_date}
+                  onChange={(e) => setPolicyForm({ ...policyForm, renewal_date: e.target.value })}
+                />
+              </div>
+            </CardContent>
+            <div className="flex items-center justify-end gap-2 px-6 pb-4">
+              {editingPolicyId && (
+                <Button variant="ghost" onClick={resetForm}>
+                  Cancel
+                </Button>
+              )}
+              <Button onClick={handleSubmitPolicy} disabled={saving}>
+                {saving ? "Saving..." : editingPolicyId ? "Update Policy" : "Create Policy"}
+              </Button>
+            </div>
+          </Card>
+
           {/* Filters */}
           <Card>
             <CardHeader>
@@ -379,12 +668,14 @@ export default function InsurancePage() {
                       <TableCell>{new Date(policy.end_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm">
-                            View
-                          </Button>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" onClick={() => startEditPolicy(policy)}>
                             Edit
                           </Button>
+                          {policy.status !== 'cancelled' && (
+                            <Button variant="outline" size="sm" onClick={() => cancelPolicy(policy._id)}>
+                              Cancel
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -519,6 +810,106 @@ export default function InsurancePage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={showClaimModal} onOpenChange={setShowClaimModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>File Insurance Claim</DialogTitle>
+            <DialogDescription>Submit a claim to the insurer</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Policy</label>
+              <Select
+                value={claimForm.policy_id}
+                onValueChange={(v) => setClaimForm({ ...claimForm, policy_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {policies.map(p => (
+                    <SelectItem key={p._id} value={p._id}>{p.policy_number} • {p.provider_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Claim Type</label>
+              <Select
+                value={claimForm.claim_type}
+                onValueChange={(v) => setClaimForm({ ...claimForm, claim_type: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Fire">Fire</SelectItem>
+                  <SelectItem value="Theft">Theft</SelectItem>
+                  <SelectItem value="Spoilage">Spoilage</SelectItem>
+                  <SelectItem value="Weather Damage">Weather Damage</SelectItem>
+                  <SelectItem value="Equipment Failure">Equipment Failure</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm text-muted-foreground">Description</label>
+              <Input
+                value={claimForm.description}
+                onChange={(e) => setClaimForm({ ...claimForm, description: e.target.value })}
+                placeholder="Describe the incident..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Amount Claimed</label>
+              <Input
+                type="number"
+                value={claimForm.amount_claimed}
+                onChange={(e) => setClaimForm({ ...claimForm, amount_claimed: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Incident Date</label>
+              <Input
+                type="date"
+                value={claimForm.incident_date}
+                onChange={(e) => setClaimForm({ ...claimForm, incident_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Affected Batch</label>
+              <Select
+                value={claimForm.batch_id}
+                onValueChange={(v) => setClaimForm({ ...claimForm, batch_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {batches.map(b => (
+                    <SelectItem key={b._id} value={b._id}>{b.batch_id} • {b.grain_type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Quantity Affected (kg)</label>
+              <Input
+                type="number"
+                value={claimForm.quantity_affected}
+                onChange={(e) => setClaimForm({ ...claimForm, quantity_affected: Number(e.target.value) })}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-4">
+            <Button variant="ghost" onClick={() => setShowClaimModal(false)}>Close</Button>
+            <Button onClick={submitClaim} disabled={claimSaving}>
+              {claimSaving ? "Submitting..." : "Submit Claim"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

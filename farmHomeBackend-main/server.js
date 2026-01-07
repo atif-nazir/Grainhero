@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const http = require("http");
@@ -43,7 +44,6 @@ const environmentalDataService = require("./services/environmentalDataService");
 const firebaseRealtimeService = require("./services/firebaseRealtimeService");
 
 const cors = require("cors");
-require("dotenv").config();
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsdoc = require("swagger-jsdoc");
@@ -81,22 +81,24 @@ db.once("open", () => {
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
   }
-  
-  try {
-    firebaseRealtimeService.start(io);
-    console.log("Firebase realtime service started");
-  } catch (error) {
-    console.error("Failed to start Firebase realtime service:", error.message);
-  }
-  
-  // Start data aggregation service (30s raw → 5min averages)
+
+  // Start limit warning scheduler
   try {
     const {
       startLimitWarningScheduler,
     } = require("./services/limitWarningService");
     startLimitWarningScheduler();
+    console.log("Limit warning scheduler started");
   } catch (error) {
     console.error("Failed to start limit warning scheduler:", error);
+  }
+
+  // Start Firebase realtime service
+  try {
+    firebaseRealtimeService.start(io);
+    console.log("Firebase realtime service started");
+  } catch (error) {
+    console.error("Failed to start Firebase realtime service:", error.message);
   }
 });
 
@@ -119,79 +121,100 @@ app.use(
 app.use((req, res, next) => {
   const startTime = Date.now();
   const timestamp = new Date().toISOString();
-  
+
   // Log request details
-  console.log('\n' + '='.repeat(80));
+  console.log("\n" + "=".repeat(80));
   console.log(`📱 [${timestamp}] ${req.method} ${req.originalUrl || req.url}`);
-  console.log(`📍 From: ${req.ip || req.connection.remoteAddress || 'unknown'}`);
-  console.log(`🌐 User-Agent: ${req.get('user-agent') || 'unknown'}`);
-  
+  console.log(
+    `📍 From: ${req.ip || req.connection.remoteAddress || "unknown"}`
+  );
+  console.log(`🌐 User-Agent: ${req.get("user-agent") || "unknown"}`);
+
   // Log headers (especially Authorization)
   if (req.headers.authorization) {
     const authHeader = req.headers.authorization;
-    const tokenPreview = authHeader.length > 30 
-      ? authHeader.substring(0, 30) + '...' 
-      : authHeader;
+    const tokenPreview =
+      authHeader.length > 30 ? authHeader.substring(0, 30) + "..." : authHeader;
     console.log(`🔑 Authorization: ${tokenPreview}`);
   } else {
     console.log(`🔑 Authorization: ❌ No token provided`);
   }
-  
+
   // Log request body for POST/PUT/PATCH (but not for large payloads)
-  if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+  if (["POST", "PUT", "PATCH"].includes(req.method) && req.body) {
     const bodyStr = JSON.stringify(req.body);
     if (bodyStr.length < 500) {
       console.log(`📦 Body: ${bodyStr}`);
     } else {
-      console.log(`📦 Body: ${bodyStr.substring(0, 200)}... (truncated, ${bodyStr.length} chars)`);
+      console.log(
+        `📦 Body: ${bodyStr.substring(0, 200)}... (truncated, ${
+          bodyStr.length
+        } chars)`
+      );
     }
   }
-  
+
   // Log query parameters
   if (Object.keys(req.query).length > 0) {
     console.log(`🔍 Query: ${JSON.stringify(req.query)}`);
   }
-  
+
   // Capture response
   const originalSend = res.send;
-  res.send = function(data) {
+  res.send = function (data) {
     const duration = Date.now() - startTime;
     const statusCode = res.statusCode;
-    const statusEmoji = statusCode >= 200 && statusCode < 300 ? '✅' : 
-                       statusCode >= 400 && statusCode < 500 ? '⚠️' : 
-                       statusCode >= 500 ? '❌' : 'ℹ️';
-    
-    console.log(`${statusEmoji} Response: ${statusCode} ${res.statusMessage || ''} (${duration}ms)`);
-    
+    const statusEmoji =
+      statusCode >= 200 && statusCode < 300
+        ? "✅"
+        : statusCode >= 400 && statusCode < 500
+        ? "⚠️"
+        : statusCode >= 500
+        ? "❌"
+        : "ℹ️";
+
+    console.log(
+      `${statusEmoji} Response: ${statusCode} ${
+        res.statusMessage || ""
+      } (${duration}ms)`
+    );
+
     // Log response body for errors (helpful for debugging)
     if (statusCode >= 400) {
       try {
-        const responseData = typeof data === 'string' ? JSON.parse(data) : data;
-        if (responseData && typeof responseData === 'object') {
-          const errorMsg = responseData.message || responseData.error || responseData.msg || JSON.stringify(responseData);
+        const responseData = typeof data === "string" ? JSON.parse(data) : data;
+        if (responseData && typeof responseData === "object") {
+          const errorMsg =
+            responseData.message ||
+            responseData.error ||
+            responseData.msg ||
+            JSON.stringify(responseData);
           console.log(`💬 Error Message: ${errorMsg}`);
         }
       } catch (e) {
         // If parsing fails, just log a preview
-        const preview = typeof data === 'string' ? data.substring(0, 200) : String(data).substring(0, 200);
+        const preview =
+          typeof data === "string"
+            ? data.substring(0, 200)
+            : String(data).substring(0, 200);
         console.log(`💬 Response Preview: ${preview}...`);
       }
     }
-    
-    console.log('='.repeat(80) + '\n');
-    
+
+    console.log("=".repeat(80) + "\n");
+
     originalSend.call(this, data);
   };
-  
+
   // Handle errors
-  res.on('finish', () => {
+  res.on("finish", () => {
     if (!res.headersSent) {
       const duration = Date.now() - startTime;
       console.log(`⚠️  Request finished without response (${duration}ms)`);
-      console.log('='.repeat(80) + '\n');
+      console.log("=".repeat(80) + "\n");
     }
   });
-  
+
   next();
 });
 
@@ -331,21 +354,4 @@ wss.on("connection", async function connection(ws, req) {
   ws.on("close", () => {
     alertChangeStream.close();
   });
-});
-
-// ============================================
-// START SERVER
-// ============================================
-const PORT = process.env.PORT || 5000;
-
-server.listen(PORT, () => {
-  console.log('\n' + '='.repeat(80));
-  console.log(`🚀 GrainHero Backend Server is running on port ${PORT}`);
-  console.log(`📡 Server URL: http://localhost:${PORT}`);
-  console.log(`🔐 Auth endpoints: http://localhost:${PORT}/auth/*`);
-  console.log(`🌐 API endpoints: http://localhost:${PORT}/api/*`);
-  console.log(`📚 API Docs: http://localhost:${PORT}/api/docs`);
-  console.log(`💚 Health check: http://localhost:${PORT}/status`);
-  console.log('='.repeat(80) + '\n');
-  console.log('📱 Ready to receive requests from Flutter app...\n');
 });

@@ -8,7 +8,7 @@ const siloFinancialsSchema = new mongoose.Schema({
     required: [true, "Silo ID is required"],
     unique: true
   },
-  
+
   // Revenue contribution
   revenue: {
     total_revenue_contribution: {
@@ -22,7 +22,7 @@ const siloFinancialsSchema = new mongoose.Schema({
       min: 0
     }
   },
-  
+
   // Throughput contribution
   throughput: {
     total_kg_processed: {
@@ -41,7 +41,7 @@ const siloFinancialsSchema = new mongoose.Schema({
       min: 0
     }
   },
-  
+
   // Spoilage risk impact
   spoilage_risk: {
     current_risk_score: {
@@ -77,7 +77,7 @@ const siloFinancialsSchema = new mongoose.Schema({
       max: 100
     }
   },
-  
+
   // Operational efficiency
   efficiency: {
     utilization_percentage: {
@@ -97,7 +97,7 @@ const siloFinancialsSchema = new mongoose.Schema({
       min: 0
     }
   },
-  
+
   // Cost per batch
   cost_metrics: {
     average_cost_per_batch: {
@@ -116,14 +116,14 @@ const siloFinancialsSchema = new mongoose.Schema({
       min: 0
     }
   },
-  
+
   // Currency
   currency: {
     type: String,
     default: 'USD',
     enum: ['USD', 'PKR', 'EUR', 'GBP', 'INR']
   },
-  
+
   // Audit trail
   created_at: {
     type: Date,
@@ -134,17 +134,16 @@ const siloFinancialsSchema = new mongoose.Schema({
     default: Date.now
   },
   last_calculated_at: Date
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes
-siloFinancialsSchema.index({ silo_id: 1 });
 siloFinancialsSchema.index({ 'spoilage_risk.current_risk_score': -1 });
 
 // Method to calculate spoilage percentage
-siloFinancialsSchema.methods.calculateSpoilagePercentage = function(totalKg) {
+siloFinancialsSchema.methods.calculateSpoilagePercentage = function (totalKg) {
   if (totalKg > 0) {
     this.spoilage_risk.spoilage_percentage = Math.round(
       (this.spoilage_risk.actual_spoilage_kg / totalKg) * 100
@@ -154,20 +153,20 @@ siloFinancialsSchema.methods.calculateSpoilagePercentage = function(totalKg) {
 };
 
 // Method to update efficiency metrics
-siloFinancialsSchema.methods.updateEfficiency = async function() {
+siloFinancialsSchema.methods.updateEfficiency = async function () {
   const Silo = mongoose.model('Silo');
   const GrainBatch = mongoose.model('GrainBatch');
-  
+
   const silo = await Silo.findById(this.silo_id);
   if (!silo) return this;
-  
+
   // Calculate utilization
   if (silo.capacity_kg > 0) {
     this.efficiency.utilization_percentage = Math.round(
       (silo.current_occupancy_kg / silo.capacity_kg) * 100
     );
   }
-  
+
   // Calculate average storage duration
   const batches = await GrainBatch.find({ silo_id: this.silo_id });
   if (batches.length > 0) {
@@ -176,7 +175,7 @@ siloFinancialsSchema.methods.updateEfficiency = async function() {
     }, 0);
     this.efficiency.average_storage_duration_days = Math.round(totalDays / batches.length);
   }
-  
+
   return this.save();
 };
 

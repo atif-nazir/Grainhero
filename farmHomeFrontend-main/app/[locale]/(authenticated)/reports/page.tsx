@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -13,20 +13,81 @@ import {
   DollarSign,
   AlertTriangle,
 } from 'lucide-react'
+import { api } from '@/lib/api'
+import { config } from '@/config'
+
+type ReportsOverview = {
+  insurance: {
+    total_policies: number
+    active_policies: number
+    total_coverage: number
+    total_premium: number
+    total_claims: number
+    approved_claims: number
+    total_claims_amount: number
+  }
+  payments: {
+    total_subscriptions: number
+    total_revenue: number
+    active: number
+    cancelled: number
+    past_due: number
+  }
+  ops: {
+    total_batches: number
+    total_silos: number
+    active_silos: number
+  }
+}
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState('month')
   const [selectedReport, setSelectedReport] = useState('overview')
+  const [overview, setOverview] = useState<ReportsOverview | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Mock loading
-    setTimeout(() => setLoading(false), 1000)
-  }, [])
+    let mounted = true
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const query = new URLSearchParams({ period: selectedPeriod })
+        const res = await api.get<ReportsOverview>(`/api/reports/overview?${query.toString()}`)
+        if (!mounted) return
+        if (res.ok && res.data) {
+          setOverview(res.data)
+        } else {
+          setError(res.error || 'Unable to load reports')
+        }
+      } catch (e) {
+        setError('Unable to load reports')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      mounted = false
+    }
+  }, [selectedPeriod])
 
-  const handleDownloadReport = (reportType: string) => {
-    // Mock download functionality
-    alert(`Downloading ${reportType} report...`)
+  const formatter = useMemo(
+    () =>
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }),
+    [],
+  )
+
+  const handleDownloadReport = (type: string) => {
+    const url = `${config.backendUrl}/dashboard/export-report?type=${encodeURIComponent(
+      type.toLowerCase().replace(/\s+/g, '-'),
+    )}&format=pdf`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) {
@@ -62,12 +123,18 @@ export default function ReportsPage() {
               <SelectItem value="year">This Year</SelectItem>
             </SelectContent>
           </Select>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => window.open(`${config.backendUrl}/dashboard/export-report?type=summary&format=pdf`, "_blank", "noopener,noreferrer")}>
             <Download className="h-4 w-4" />
             Export All
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <Tabs value={selectedReport} onValueChange={setSelectedReport} className="space-y-4">
         <TabsList>
@@ -86,10 +153,8 @@ export default function ReportsPage() {
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">156</div>
-                <p className="text-xs text-muted-foreground">
-                  +12% from last month
-                </p>
+                <div className="text-2xl font-bold">{overview?.ops.total_batches ?? 0}</div>
+                <p className="text-xs text-muted-foreground">Operations across silos</p>
               </CardContent>
             </Card>
 
@@ -99,10 +164,10 @@ export default function ReportsPage() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">$45,000</div>
-                <p className="text-xs text-muted-foreground">
-                  +8% from last month
-                </p>
+                <div className="text-2xl font-bold">
+                  {formatter.format(overview?.payments.total_revenue || 0)}
+                </div>
+                <p className="text-xs text-muted-foreground">Subscription revenue (period)</p>
               </CardContent>
             </Card>
 
@@ -112,10 +177,8 @@ export default function ReportsPage() {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">24</div>
-                <p className="text-xs text-muted-foreground">
-                  +2 this week
-                </p>
+                <div className="text-2xl font-bold">{overview?.payments.active ?? 0}</div>
+                <p className="text-xs text-muted-foreground">Active subscriptions</p>
               </CardContent>
             </Card>
 
@@ -125,10 +188,13 @@ export default function ReportsPage() {
                 <AlertTriangle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">15%</div>
-                <p className="text-xs text-muted-foreground">
-                  Average risk level
-                </p>
+                <div className="text-2xl font-bold">
+                  {overview?.insurance.total_policies
+                    ? Math.round((overview.insurance.approved_claims / overview.insurance.total_policies) * 100)
+                    : 0}
+                  %
+                </div>
+                <p className="text-xs text-muted-foreground">Approved claims ratio</p>
               </CardContent>
             </Card>
           </div>
@@ -142,10 +208,24 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px] flex items-center justify-center bg-gray-50 rounded-lg">
-                <div className="text-center">
-                  <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Performance charts will be implemented with Chart.js</p>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm text-muted-foreground">Coverage In Force</p>
+                  <p className="text-2xl font-semibold">
+                    {formatter.format(overview?.insurance.total_coverage || 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm text-muted-foreground">Claims Paid</p>
+                  <p className="text-2xl font-semibold">
+                    {formatter.format(overview?.insurance.total_claims_amount || 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm text-muted-foreground">Silos Online</p>
+                  <p className="text-2xl font-semibold">
+                    {overview?.ops.active_silos ?? 0}/{overview?.ops.total_silos ?? 0}
+                  </p>
                 </div>
               </div>
             </CardContent>

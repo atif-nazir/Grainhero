@@ -8,7 +8,7 @@ const insuranceClaimSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
-  
+
   // Policy and tenant association
   policy_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,7 +20,7 @@ const insuranceClaimSchema = new mongoose.Schema({
     ref: 'Tenant',
     required: [true, "Tenant ID is required"],
   },
-  
+
   // Claim details
   claim_type: {
     type: String,
@@ -32,7 +32,7 @@ const insuranceClaimSchema = new mongoose.Schema({
     required: [true, "Description is required"],
     trim: true
   },
-  
+
   // Financial details
   amount_claimed: {
     type: Number,
@@ -49,14 +49,14 @@ const insuranceClaimSchema = new mongoose.Schema({
     default: 0,
     min: [0, "Deductible applied must be positive"]
   },
-  
+
   // Claim status
   status: {
     type: String,
     enum: ['pending', 'under_review', 'approved', 'rejected', 'partially_approved', 'closed'],
     default: 'pending'
   },
-  
+
   // Dates
   incident_date: {
     type: Date,
@@ -69,7 +69,7 @@ const insuranceClaimSchema = new mongoose.Schema({
   reviewed_date: Date,
   approved_date: Date,
   closed_date: Date,
-  
+
   // Affected grain batch
   batch_affected: {
     batch_id: {
@@ -92,7 +92,7 @@ const insuranceClaimSchema = new mongoose.Schema({
       min: [0, "Estimated value must be positive"]
     }
   },
-  
+
   // Supporting documents
   documents: [{
     document_type: {
@@ -106,7 +106,7 @@ const insuranceClaimSchema = new mongoose.Schema({
     },
     description: String
   }],
-  
+
   // Investigation details
   investigation: {
     investigator_name: String,
@@ -118,7 +118,7 @@ const insuranceClaimSchema = new mongoose.Schema({
       enum: ['preventable', 'partially_preventable', 'unpreventable']
     }
   },
-  
+
   // Assessment details
   assessment: {
     assessor_name: String,
@@ -129,7 +129,7 @@ const insuranceClaimSchema = new mongoose.Schema({
     depreciation: Number,
     final_settlement: Number
   },
-  
+
   // Payment details
   payment: {
     payment_date: Date,
@@ -143,7 +143,7 @@ const insuranceClaimSchema = new mongoose.Schema({
       enum: ['pending', 'processing', 'completed', 'failed']
     }
   },
-  
+
   // Communication log
   communications: [{
     date: {
@@ -160,7 +160,7 @@ const insuranceClaimSchema = new mongoose.Schema({
     message: String,
     attachments: [String]
   }],
-  
+
   // Internal notes
   internal_notes: [{
     date: {
@@ -177,7 +177,7 @@ const insuranceClaimSchema = new mongoose.Schema({
       default: true
     }
   }],
-  
+
   // Configuration
   priority: {
     type: String,
@@ -188,10 +188,10 @@ const insuranceClaimSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  
+
   // Metadata
   tags: [String],
-  
+
   // Audit trail
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -202,40 +202,39 @@ const insuranceClaimSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Soft delete
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes for better query performance
 insuranceClaimSchema.index({ tenant_id: 1, status: 1 });
 insuranceClaimSchema.index({ policy_id: 1 });
-insuranceClaimSchema.index({ claim_number: 1 });
 insuranceClaimSchema.index({ incident_date: 1 });
 insuranceClaimSchema.index({ filed_date: 1 });
 
 // Exclude deleted claims by default
-insuranceClaimSchema.pre(/^find/, function() {
+insuranceClaimSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Virtual for claim processing time
-insuranceClaimSchema.virtual('processing_days').get(function() {
+insuranceClaimSchema.virtual('processing_days').get(function () {
   if (!this.approved_date && !this.closed_date) return null;
-  
+
   const endDate = this.closed_date || this.approved_date;
   return Math.ceil((endDate - this.filed_date) / (1000 * 60 * 60 * 24));
 });
 
 // Virtual for claim status color
-insuranceClaimSchema.virtual('status_color').get(function() {
+insuranceClaimSchema.virtual('status_color').get(function () {
   const colors = {
     pending: 'yellow',
     under_review: 'blue',
@@ -248,12 +247,12 @@ insuranceClaimSchema.virtual('status_color').get(function() {
 });
 
 // Method to approve claim
-insuranceClaimSchema.methods.approve = function(approvedAmount, reviewerId) {
+insuranceClaimSchema.methods.approve = function (approvedAmount, reviewerId) {
   this.status = 'approved';
   this.amount_approved = approvedAmount;
   this.approved_date = new Date();
   this.updated_by = reviewerId;
-  
+
   // Add communication log
   this.communications.push({
     type: 'system_update',
@@ -262,15 +261,15 @@ insuranceClaimSchema.methods.approve = function(approvedAmount, reviewerId) {
     subject: 'Claim Approved',
     message: `Your claim has been approved for $${approvedAmount.toLocaleString()}`
   });
-  
+
   return this.save();
 };
 
 // Method to reject claim
-insuranceClaimSchema.methods.reject = function(reason, reviewerId) {
+insuranceClaimSchema.methods.reject = function (reason, reviewerId) {
   this.status = 'rejected';
   this.updated_by = reviewerId;
-  
+
   // Add communication log
   this.communications.push({
     type: 'system_update',
@@ -279,29 +278,29 @@ insuranceClaimSchema.methods.reject = function(reason, reviewerId) {
     subject: 'Claim Rejected',
     message: `Your claim has been rejected. Reason: ${reason}`
   });
-  
+
   // Add internal note
   this.internal_notes.push({
     author: reviewerId,
     note: `Claim rejected. Reason: ${reason}`
   });
-  
+
   return this.save();
 };
 
 // Method to add document
-insuranceClaimSchema.methods.addDocument = function(documentType, documentUrl, description) {
+insuranceClaimSchema.methods.addDocument = function (documentType, documentUrl, description) {
   this.documents.push({
     document_type: documentType,
     document_url: documentUrl,
     description: description
   });
-  
+
   return this.save();
 };
 
 // Method to add communication
-insuranceClaimSchema.methods.addCommunication = function(type, from, to, subject, message) {
+insuranceClaimSchema.methods.addCommunication = function (type, from, to, subject, message) {
   this.communications.push({
     type: type,
     from: from,
@@ -309,25 +308,25 @@ insuranceClaimSchema.methods.addCommunication = function(type, from, to, subject
     subject: subject,
     message: message
   });
-  
+
   return this.save();
 };
 
 // Method to add internal note
-insuranceClaimSchema.methods.addInternalNote = function(note, authorId) {
+insuranceClaimSchema.methods.addInternalNote = function (note, authorId) {
   this.internal_notes.push({
     author: authorId,
     note: note
   });
-  
+
   return this.save();
 };
 
 // Method to update status
-insuranceClaimSchema.methods.updateStatus = function(newStatus, updatedById) {
+insuranceClaimSchema.methods.updateStatus = function (newStatus, updatedById) {
   this.status = newStatus;
   this.updated_by = updatedById;
-  
+
   // Set appropriate date based on status
   switch (newStatus) {
     case 'under_review':
@@ -340,7 +339,7 @@ insuranceClaimSchema.methods.updateStatus = function(newStatus, updatedById) {
       this.closed_date = new Date();
       break;
   }
-  
+
   return this.save();
 };
 

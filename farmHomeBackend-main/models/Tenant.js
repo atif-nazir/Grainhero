@@ -15,7 +15,7 @@ const tenantSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
     validate: {
-      validator: function(v) {
+      validator: function (v) {
         return /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
       },
       message: "Please enter a valid email address"
@@ -51,14 +51,14 @@ const tenantSchema = new mongoose.Schema({
   },
   registration_number: String,
   tax_id: String,
-  
+
   // Subscription and billing
   subscription_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subscription'
   },
   billing_email: String,
-  
+
   // Settings
   timezone: {
     type: String,
@@ -74,7 +74,7 @@ const tenantSchema = new mongoose.Schema({
     default: 'USD',
     enum: ['USD', 'PKR', 'EUR', 'GBP', 'INR']
   },
-  
+
   // Status and metadata
   is_active: {
     type: Boolean,
@@ -85,7 +85,7 @@ const tenantSchema = new mongoose.Schema({
     default: false
   },
   verification_date: Date,
-  
+
   // Limits and quotas
   user_limit: {
     type: Number,
@@ -99,7 +99,7 @@ const tenantSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
-  
+
   // Metadata
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -109,37 +109,36 @@ const tenantSchema = new mongoose.Schema({
     type: String,
     maxlength: [500, "Notes cannot exceed 500 characters"]
   },
-  
+
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes
-tenantSchema.index({ email: 1 });
 tenantSchema.index({ is_active: 1 });
 tenantSchema.index({ location: '2dsphere' });
 tenantSchema.index({ created_at: -1 });
 
 // Exclude deleted tenants by default
-tenantSchema.pre(/^find/, function() {
+tenantSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Virtual for full address
-tenantSchema.virtual('full_address').get(function() {
+tenantSchema.virtual('full_address').get(function () {
   const addr = this.address;
   if (!addr) return '';
   return [addr.street, addr.city, addr.state, addr.country].filter(Boolean).join(', ');
 });
 
 // Method to soft delete
-tenantSchema.methods.softDelete = function() {
+tenantSchema.methods.softDelete = function () {
   this.deleted_at = new Date();
   this.is_active = false;
   return this.save();

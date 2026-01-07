@@ -14,7 +14,7 @@ const grainBatchSchema = new mongoose.Schema({
     unique: true,
     sparse: true // Allows multiple null values
   },
-  
+
   // Admin and location
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -30,7 +30,7 @@ const grainBatchSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Farmhouse'
   },
-  
+
   // Grain details
   grain_type: {
     type: String,
@@ -49,7 +49,7 @@ const grainBatchSchema = new mongoose.Schema({
     enum: ['A', 'B', 'C', 'Premium', 'Standard'],
     default: 'Standard'
   },
-  
+
   // Quantity and measurements
   quantity_kg: {
     type: Number,
@@ -63,7 +63,7 @@ const grainBatchSchema = new mongoose.Schema({
   },
   protein_content: Number,
   test_weight: Number,
-  
+
   // Status and tracking
   status: {
     type: String,
@@ -73,7 +73,7 @@ const grainBatchSchema = new mongoose.Schema({
     },
     default: BATCH_STATUSES.STORED
   },
-  
+
   // Dates
   harvest_date: Date,
   intake_date: {
@@ -82,7 +82,7 @@ const grainBatchSchema = new mongoose.Schema({
   },
   expected_dispatch_date: Date,
   actual_dispatch_date: Date,
-  
+
   // Source information
   farmer_name: String,
   farmer_contact: String,
@@ -91,7 +91,7 @@ const grainBatchSchema = new mongoose.Schema({
     latitude: Number,
     longitude: Number
   },
-  
+
   // Quality and AI predictions
   spoilage_label: {
     type: String,
@@ -110,14 +110,14 @@ const grainBatchSchema = new mongoose.Schema({
     max: 1
   },
   last_risk_assessment: Date,
-  
+
   // Environmental conditions at intake
   intake_conditions: {
     temperature: Number,
     humidity: Number,
     weather: String
   },
-  
+
   // Insurance and financial
   insured: {
     type: Boolean,
@@ -127,7 +127,7 @@ const grainBatchSchema = new mongoose.Schema({
   insurance_value: Number,
   purchase_price_per_kg: Number,
   total_purchase_value: Number,
-  
+
   // Buyer and dispatch information
   buyer_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -140,7 +140,7 @@ const grainBatchSchema = new mongoose.Schema({
     destination: String,
     transport_cost: Number
   },
-  
+
   // Quality tests and certificates
   quality_tests: [{
     test_type: {
@@ -152,7 +152,7 @@ const grainBatchSchema = new mongoose.Schema({
     tested_by: String,
     certificate_url: String
   }],
-  
+
   // Sensor data summary
   sensor_summary: {
     avg_temperature: Number,
@@ -161,11 +161,11 @@ const grainBatchSchema = new mongoose.Schema({
     avg_voc: Number,
     last_updated: Date
   },
-  
+
   // Notes and metadata
   notes: String,
   tags: [String],
-  
+
   // Insurance and spoilage events
   spoilage_events: [{
     event_id: String,
@@ -195,7 +195,7 @@ const grainBatchSchema = new mongoose.Schema({
       moisture_content: Number
     }
   }],
-  
+
   // Audit trail
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -206,22 +206,20 @@ const grainBatchSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Soft delete
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes for better query performance
 grainBatchSchema.index({ admin_id: 1, status: 1 });
-grainBatchSchema.index({ batch_id: 1 });
-grainBatchSchema.index({ qr_code: 1 });
 grainBatchSchema.index({ silo_id: 1 });
 grainBatchSchema.index({ grain_type: 1 });
 grainBatchSchema.index({ intake_date: -1 });
@@ -229,28 +227,28 @@ grainBatchSchema.index({ risk_score: -1 });
 grainBatchSchema.index({ spoilage_label: 1 });
 
 // Exclude deleted batches by default
-grainBatchSchema.pre(/^find/, function() {
+grainBatchSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Virtual for total value
-grainBatchSchema.virtual('total_value').get(function() {
+grainBatchSchema.virtual('total_value').get(function () {
   return this.quantity_kg * (this.purchase_price_per_kg || 0);
 });
 
 // Virtual for storage duration
-grainBatchSchema.virtual('storage_duration_days').get(function() {
+grainBatchSchema.virtual('storage_duration_days').get(function () {
   const now = new Date();
   const intake = this.intake_date || this.created_at;
   return Math.floor((now - intake) / (1000 * 60 * 60 * 24));
 });
 
 // Method to update risk score
-grainBatchSchema.methods.updateRiskScore = function(newScore, confidence) {
+grainBatchSchema.methods.updateRiskScore = function (newScore, confidence) {
   this.risk_score = newScore;
   this.ai_prediction_confidence = confidence;
   this.last_risk_assessment = new Date();
-  
+
   // Update spoilage label based on risk score
   if (newScore >= 80) {
     this.spoilage_label = SPOILAGE_LABELS.SPOILED;
@@ -259,12 +257,12 @@ grainBatchSchema.methods.updateRiskScore = function(newScore, confidence) {
   } else {
     this.spoilage_label = SPOILAGE_LABELS.SAFE;
   }
-  
+
   return this.save();
 };
 
 // Method to dispatch batch
-grainBatchSchema.methods.dispatch = function(buyerId, dispatchDetails) {
+grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails) {
   this.status = BATCH_STATUSES.DISPATCHED;
   this.buyer_id = buyerId;
   this.dispatch_details = dispatchDetails;
@@ -273,7 +271,7 @@ grainBatchSchema.methods.dispatch = function(buyerId, dispatchDetails) {
 };
 
 // Method to generate QR code
-grainBatchSchema.methods.generateQRCode = function() {
+grainBatchSchema.methods.generateQRCode = function () {
   if (!this.qr_code) {
     this.qr_code = `GH-${this.batch_id}-${Date.now()}`;
   }

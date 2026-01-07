@@ -16,7 +16,7 @@ const warehouseSchema = new mongoose.Schema({
     trim: true
   },
 
-  
+
   // Admin and tenant
   admin_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -27,7 +27,7 @@ const warehouseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant'
   },
-  
+
   // Location information
   location: {
     description: String,
@@ -43,7 +43,7 @@ const warehouseSchema = new mongoose.Schema({
       postal_code: String
     }
   },
-  
+
   // Physical specifications
   total_capacity_kg: {
     type: Number,
@@ -55,7 +55,7 @@ const warehouseSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
-  
+
   // Status
   status: {
     type: String,
@@ -65,20 +65,20 @@ const warehouseSchema = new mongoose.Schema({
     },
     default: DEVICE_STATUSES.ACTIVE
   },
-  
+
   // Manager assignment (exactly one manager per warehouse)
   manager_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: false // Will be set when manager is assigned
   },
-  
+
   // Team members (technicians assigned to this warehouse)
   technician_ids: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
-  
+
   // Operational statistics
   statistics: {
     total_batches_stored: {
@@ -101,7 +101,7 @@ const warehouseSchema = new mongoose.Schema({
     },
     last_activity_date: Date
   },
-  
+
   // Configuration
   is_active: {
     type: Boolean,
@@ -111,11 +111,11 @@ const warehouseSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  
+
   // Notes and metadata
   notes: String,
   tags: [String],
-  
+
   // Audit trail
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -126,21 +126,20 @@ const warehouseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Soft delete
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes for better query performance
 warehouseSchema.index({ admin_id: 1, status: 1 });
-warehouseSchema.index({ warehouse_id: 1 });
 warehouseSchema.index({ manager_id: 1 });
 warehouseSchema.index({ tenant_id: 1 });
 warehouseSchema.index({ status: 1 });
@@ -149,29 +148,29 @@ warehouseSchema.index({ status: 1 });
 warehouseSchema.index({ admin_id: 1, name: 1 }, { unique: true });
 
 // Exclude deleted warehouses by default
-warehouseSchema.pre(/^find/, function() {
+warehouseSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Virtual for occupancy percentage
-warehouseSchema.virtual('occupancy_percentage').get(function() {
+warehouseSchema.virtual('occupancy_percentage').get(function () {
   if (this.total_capacity_kg <= 0) return 0;
   return Math.round((this.statistics.current_occupancy_kg / this.total_capacity_kg) * 100);
 });
 
 // Virtual for available capacity
-warehouseSchema.virtual('available_capacity_kg').get(function() {
+warehouseSchema.virtual('available_capacity_kg').get(function () {
   return Math.max(0, this.total_capacity_kg - this.statistics.current_occupancy_kg);
 });
 
 // Method to assign manager
-warehouseSchema.methods.assignManager = function(managerId) {
+warehouseSchema.methods.assignManager = function (managerId) {
   this.manager_id = managerId;
   return this.save();
 };
 
 // Method to add technician
-warehouseSchema.methods.addTechnician = function(technicianId) {
+warehouseSchema.methods.addTechnician = function (technicianId) {
   if (!this.technician_ids.includes(technicianId)) {
     this.technician_ids.push(technicianId);
   }
@@ -179,7 +178,7 @@ warehouseSchema.methods.addTechnician = function(technicianId) {
 };
 
 // Method to remove technician
-warehouseSchema.methods.removeTechnician = function(technicianId) {
+warehouseSchema.methods.removeTechnician = function (technicianId) {
   this.technician_ids = this.technician_ids.filter(
     id => id.toString() !== technicianId.toString()
   );
@@ -187,25 +186,25 @@ warehouseSchema.methods.removeTechnician = function(technicianId) {
 };
 
 // Method to update statistics
-warehouseSchema.methods.updateStatistics = async function() {
+warehouseSchema.methods.updateStatistics = async function () {
   const Silo = mongoose.model('Silo');
   const silos = await Silo.find({ warehouse_id: this._id });
-  
+
   this.total_silos = silos.length;
   this.total_capacity_kg = silos.reduce((sum, silo) => sum + (silo.capacity_kg || 0), 0);
   this.statistics.current_occupancy_kg = silos.reduce(
-    (sum, silo) => sum + (silo.current_occupancy_kg || 0), 
+    (sum, silo) => sum + (silo.current_occupancy_kg || 0),
     0
   );
   this.statistics.utilization_percentage = this.total_capacity_kg > 0
     ? Math.round((this.statistics.current_occupancy_kg / this.total_capacity_kg) * 100)
     : 0;
-  
+
   return this.save();
 };
 
 // Auto-generate warehouse_id if missing (before validate) using sequential W001 numbering per admin
-warehouseSchema.pre('validate', async function() {
+warehouseSchema.pre('validate', async function () {
   if (this.isNew && !this.warehouse_id) {
     const Warehouse = mongoose.model('Warehouse');
     // Find max numeric suffix among this admin's warehouses
