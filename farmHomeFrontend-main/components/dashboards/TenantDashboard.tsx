@@ -4,25 +4,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { 
-  Users, 
-  DollarSign, 
-  AlertTriangle, 
+import {
+  Users,
+  DollarSign,
+  AlertTriangle,
   Activity,
   Package,
   Smartphone,
   BarChart3,
   Settings,
-  Crown,
   Zap,
   UserPlus,
-  Shield,
-  Bell
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 type DashboardResponse = {
   stats: Array<{ title: string; value: number | string }>
@@ -48,6 +46,8 @@ interface RecentBatch {
   status: string
   risk_score: number
   intake_date: string
+  purchase_price_per_kg?: number
+  actual_dispatch_date?: string
 }
 
 export function TenantDashboard() {
@@ -78,15 +78,16 @@ export function TenantDashboard() {
     storage_gb: number;
     api_calls_this_month: number;
   } | null>(null)
+  const [totalBatches, setTotalBatches] = useState(0)
 
   useEffect(() => {
     let mounted = true
       ; (async () => {
-      try {
+        try {
           const [dashboardRes, usersRes, batchesRes, planRes] = await Promise.all([
-          api.get<DashboardResponse>("/dashboard"),
-          api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
-            api.get<{ batches: RecentBatch[] }>("/grain-batches?limit=5"),
+            api.get<DashboardResponse>("/dashboard"),
+            api.get<{ users: User[] }>("/api/user-management/users?limit=5"),
+            api.get<{ batches: RecentBatch[]; pagination?: { total_items: number } }>("/api/grain-batches?limit=100"),
             api.get<{
               plan: {
                 name: string;
@@ -110,44 +111,69 @@ export function TenantDashboard() {
                 api_calls_this_month: number;
               };
             }>("/api/plan-management/plan-info")
-        ])
-        
-        if (!mounted) return
-        
-        if (dashboardRes.ok && dashboardRes.data) {
-          setData(dashboardRes.data)
-        } else {
-          setError(dashboardRes.error || "Failed to load dashboard")
-        }
-        
-        if (usersRes.ok && usersRes.data) {
-          setUsers(usersRes.data.users as unknown as User[])
-        }
-        
-        if (batchesRes.ok && batchesRes.data) {
-          setRecentBatches(batchesRes.data.batches as unknown as RecentBatch[])
-        }
+          ])
+
+          if (!mounted) return
+
+          if (dashboardRes.ok && dashboardRes.data) {
+            setData(dashboardRes.data)
+          } else {
+            setError(dashboardRes.error || "Failed to load dashboard")
+          }
+
+          if (usersRes.ok && usersRes.data) {
+            // Filter out admin users from the list (they have their own profile)
+            const filteredUsers = (usersRes.data.users as unknown as User[]).filter(user => user.role !== 'admin')
+            setUsers(filteredUsers)
+          }
+
+          if (batchesRes.ok && batchesRes.data) {
+            const batches = batchesRes.data.batches as unknown as RecentBatch[]
+            setRecentBatches(batches.slice(0, 5)) // Show only 5 most recent
+            // Update total batches count from pagination if available
+            if (batchesRes.data.pagination?.total_items !== undefined && batchesRes.data.pagination.total_items > 0) {
+              setTotalBatches(batchesRes.data.pagination.total_items)
+            } else if (batches.length > 0) {
+              // If no pagination info but we got batches, use the count
+              setTotalBatches(batches.length)
+            } else {
+              // Only set to 0 if we truly have no batches
+              setTotalBatches(0)
+            }
+          } else {
+            // Only set to 0 if API call failed
+            setTotalBatches(0)
+            setRecentBatches([])
+          }
 
           if (planRes.ok && planRes.data) {
             setPlanInfo(planRes.data.plan)
             setUsageStats(planRes.data.usage)
           }
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error)
-        setError('Failed to load dashboard data')
-      } finally {
-        setIsLoading(false)
-      }
-    })()
+        } catch (error) {
+          console.error('Failed to load dashboard data:', error)
+          setError('Failed to load dashboard data')
+        } finally {
+          setIsLoading(false)
+        }
+      })()
     return () => {
       mounted = false
     }
   }, [])
 
+  // Calculate real revenue from dispatched batches
+  const totalRevenue = recentBatches
+    .filter(b => b.status === 'dispatched' && b.actual_dispatch_date)
+    .reduce((sum, b) => {
+      const pricePerKg = b.purchase_price_per_kg || 50 // Default to 50 if not available
+      return sum + (b.quantity_kg * pricePerKg)
+    }, 0)
+
   const tenantStats = {
-    totalUsers: users.length,
-    totalBatches: recentBatches.length,
-    totalRevenue: 0,
+    totalUsers: usageStats?.users?.total || users.length,
+    totalBatches: totalBatches > 0 ? totalBatches : (usageStats?.grain_batches || (recentBatches.length > 0 ? recentBatches.length : 0)),
+    totalRevenue: totalRevenue,
     systemHealth: data?.capacityStats?.utilizationPercentage ?? 0,
     activeAlerts: 0,
     criticalIssues: (data?.suggestions?.criticalStorage?.length ?? 0) > 0 ? 1 : 0,
@@ -257,7 +283,7 @@ export function TenantDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{tenantStats.totalBatches}</div>
             <p className="text-xs text-muted-foreground">
-              +8 new this week
+              {recentBatches.length > 0 ? `${recentBatches.length} recent` : 'No batches yet'}
             </p>
           </CardContent>
         </Card>
@@ -287,60 +313,8 @@ export function TenantDashboard() {
         </Card>
       </div>
 
-      {/* Plan Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Crown className="h-5 w-5 mr-2" />
-            Current Plan: {planDetails.name}
-          </CardTitle>
-          <CardDescription>
-            {planDetails.price} - Plan usage and limits
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Users</span>
-                <span>{planDetails.usage.users.used}/{planDetails.usage.users.limit}</span>
-              </div>
-              <Progress value={
-                planDetails.usage.users.limit === "unlimited" ? 0 :
-                  typeof planDetails.usage.users.limit === 'number' ? (planDetails.usage.users.used / planDetails.usage.users.limit) * 100 : 0
-              } />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Storage</span>
-                <span>{planDetails.usage.storage.used}GB/{planDetails.usage.storage.limit}GB</span>
-              </div>
-              <Progress value={
-                planDetails.usage.storage.limit === "unlimited" ? 0 :
-                  typeof planDetails.usage.storage.limit === 'number' ? (planDetails.usage.storage.used / planDetails.usage.storage.limit) * 100 : 0
-              } />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Batches</span>
-                <span>{planDetails.usage.batches.used}/{planDetails.usage.batches.limit}</span>
-              </div>
-              <Progress value={
-                planDetails.usage.batches.limit === "unlimited" ? 0 :
-                  typeof planDetails.usage.batches.limit === 'number' ? (planDetails.usage.batches.used / planDetails.usage.batches.limit) * 100 : 0
-              } />
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => router.push('/plans')}>Upgrade Plan</Button>
-            <Button size="sm" variant="outline">View Usage Details</Button>
-            <Button size="sm" variant="outline">Billing</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Critical Alerts */}
-      {tenantStats.criticalIssues > 0 && (
+      {/* Critical Alerts - Only show if there are actual critical issues */}
+      {tenantStats.criticalIssues > 0 && systemAlerts.filter(alert => alert.type === "critical").length > 0 && (
         <Card className="border-red-200 bg-red-50">
           <CardHeader>
             <CardTitle className="flex items-center text-red-800">
@@ -356,7 +330,7 @@ export function TenantDashboard() {
                     <p className="font-medium text-red-900">{alert.message}</p>
                     <p className="text-sm text-red-600">{alert.location} • {alert.time}</p>
                   </div>
-                  <Button size="sm" variant="destructive">Resolve</Button>
+                  <Button size="sm" variant="destructive" onClick={() => toast.info('Alert resolution feature coming soon')}>Resolve</Button>
                 </div>
               ))}
             </div>
@@ -393,7 +367,7 @@ export function TenantDashboard() {
                   </div>
                   <div className="flex space-x-2">
                     <Button size="sm" variant="outline" onClick={() => router.push('/team-management')}>Edit</Button>
-                    <Button size="sm" variant="outline">View</Button>
+                    <Button size="sm" variant="outline" onClick={() => router.push(`/team-management?user=${user._id}`)}>View</Button>
                   </div>
                 </div>
               ))}
@@ -420,7 +394,7 @@ export function TenantDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentBatches.map((batch) => {
+              {recentBatches.length > 0 ? recentBatches.map((batch) => {
                 const riskBadge = getRiskBadge(batch.risk_score)
                 return (
                   <div key={batch._id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -437,59 +411,23 @@ export function TenantDashboard() {
                         <span>{batch.batch_id}</span>
                       </div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => router.push('/grain-batches')}>View</Button>
+                    <Button size="sm" variant="outline" onClick={() => router.push(`/grain-batches?id=${batch._id}`)}>View</Button>
                   </div>
                 )
-              })}
+              }) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No recent batches yet</p>
+              )}
             </div>
+            {recentBatches.length > 0 && (
+              <div className="mt-4">
+                <Button className="w-full" variant="outline" onClick={() => router.push('/grain-batches')}>
+                  View All Batches
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* System Alerts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Bell className="h-5 w-5 mr-2" />
-            System Alerts
-          </CardTitle>
-          <CardDescription>
-            Recent notifications and system events
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {systemAlerts.map((alert) => (
-              <div key={alert.id} className={`flex items-center justify-between p-3 rounded-lg border ${alert.type === "critical" ? "bg-red-50 border-red-200" :
-                alert.type === "warning" ? "bg-yellow-50 border-yellow-200" :
-                "bg-blue-50 border-blue-200"
-              }`}>
-                <div>
-                  <p className={`font-medium ${alert.type === "critical" ? "text-red-900" :
-                    alert.type === "warning" ? "text-yellow-900" :
-                    "text-blue-900"
-                  }`}>
-                    {alert.message}
-                  </p>
-                  <p className={`text-sm ${alert.type === "critical" ? "text-red-600" :
-                    alert.type === "warning" ? "text-yellow-600" :
-                    "text-blue-600"
-                  }`}>
-                    {alert.location} • {alert.time}
-                  </p>
-                </div>
-                <Badge variant={
-                  alert.type === "critical" ? "destructive" :
-                  alert.type === "warning" ? "secondary" :
-                  "default"
-                }>
-                  {alert.type}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Quick Actions */}
       <Card>
@@ -504,52 +442,52 @@ export function TenantDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
-            <Button 
+            <Button
               className="h-20 flex flex-col items-center justify-center space-y-2"
               onClick={() => router.push('/team-management')}
             >
               <UserPlus className="h-6 w-6" />
               <span>Invite Team Member</span>
             </Button>
-            <Button 
-              className="h-20 flex flex-col items-center justify-center space-y-2" 
+            <Button
+              className="h-20 flex flex-col items-center justify-center space-y-2"
               variant="outline"
               onClick={() => router.push('/grain-batches')}
             >
               <Package className="h-6 w-6" />
               <span>New Batch</span>
             </Button>
-            <Button 
-              className="h-20 flex flex-col items-center justify-center space-y-2" 
+            <Button
+              className="h-20 flex flex-col items-center justify-center space-y-2"
               variant="outline"
               onClick={() => router.push('/sensors')}
             >
               <Smartphone className="h-6 w-6" />
               <span>Manage Sensors</span>
             </Button>
-            <Button 
-              className="h-20 flex flex-col items-center justify-center space-y-2" 
+            <Button
+              className="h-20 flex flex-col items-center justify-center space-y-2"
               variant="outline"
-              onClick={() => router.push('/reports')}
+              onClick={() => router.push('/analytics')}
             >
               <BarChart3 className="h-6 w-6" />
-              <span>View Reports</span>
+              <span>View Analytics</span>
             </Button>
-            <Button 
-              className="h-20 flex flex-col items-center justify-center space-y-2" 
+            <Button
+              className="h-20 flex flex-col items-center justify-center space-y-2"
               variant="outline"
               onClick={() => router.push('/settings')}
             >
               <Settings className="h-6 w-6" />
               <span>Settings</span>
             </Button>
-            <Button 
-              className="h-20 flex flex-col items-center justify-center space-y-2" 
+            <Button
+              className="h-20 flex flex-col items-center justify-center space-y-2"
               variant="outline"
-              onClick={() => router.push('/security')}
+              onClick={() => router.push('/billing')}
             >
-              <Shield className="h-6 w-6" />
-              <span>Security</span>
+              <DollarSign className="h-6 w-6" />
+              <span>Billing</span>
             </Button>
           </div>
         </CardContent>

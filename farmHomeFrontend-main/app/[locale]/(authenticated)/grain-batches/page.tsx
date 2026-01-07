@@ -93,6 +93,7 @@ export default function GrainBatchesPage() {
   // Dispatch form data
   const [dispatchData, setDispatchData] = useState({
     buyer_name: '',
+    buyer_email: '',
     buyer_contact: '',
     quantity_dispatched: '',
     dispatch_date: '',
@@ -137,7 +138,7 @@ export default function GrainBatchesPage() {
         if (!token) {
           console.error('No authentication token found')
           toast.error('Please log in to access grain batches')
-      setLoading(false)
+          setLoading(false)
           return
         }
 
@@ -146,7 +147,7 @@ export default function GrainBatchesPage() {
         if (mounted) {
           setLoading(false)
         }
-    })()
+      })()
     return () => {
       mounted = false
     }
@@ -287,8 +288,13 @@ export default function GrainBatchesPage() {
       if (res.ok) {
         toast.success('Grain batch dispatched successfully')
         setIsDispatchDialogOpen(false)
+        // Trigger buyers page refresh if it's open (via window event)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('buyers-refresh'))
+        }
         setDispatchData({
           buyer_name: '',
+          buyer_email: '',
           buyer_contact: '',
           quantity_dispatched: '',
           dispatch_date: '',
@@ -308,6 +314,7 @@ export default function GrainBatchesPage() {
     setSelectedBatch(batch)
     setDispatchData({
       buyer_name: '',
+      buyer_email: '',
       buyer_contact: '',
       quantity_dispatched: batch.quantity_kg.toString(),
       dispatch_date: new Date().toISOString().split('T')[0],
@@ -390,8 +397,8 @@ export default function GrainBatchesPage() {
 
   const filteredBatches = batches.filter(batch => {
     const matchesSearch = batch.batch_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         batch.farmer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         batch.grain_type.toLowerCase().includes(searchTerm.toLowerCase())
+      batch.farmer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      batch.grain_type.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || batch.status === statusFilter
     const matchesGrainType = grainTypeFilter === 'all' || batch.grain_type === grainTypeFilter
     return matchesSearch && matchesStatus && matchesGrainType
@@ -421,9 +428,9 @@ export default function GrainBatchesPage() {
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2 bg-black hover:bg-gray-800">
-          <Plus className="h-4 w-4" />
-          Add New Batch
-        </Button>
+              <Plus className="h-4 w-4" />
+              Add New Batch
+            </Button>
           </DialogTrigger>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -771,7 +778,7 @@ export default function GrainBatchesPage() {
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                           <MoreVertical className="h-4 w-4" />
-                      </Button>
+                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem
@@ -1397,6 +1404,16 @@ export default function GrainBatchesPage() {
                         />
                       </div>
                       <div className="space-y-2">
+                        <Label htmlFor="buyer_email">Buyer Email</Label>
+                        <Input
+                          id="buyer_email"
+                          type="email"
+                          placeholder="buyer@example.com"
+                          value={dispatchData.buyer_email}
+                          onChange={(e) => setDispatchData({ ...dispatchData, buyer_email: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="buyer_contact">Buyer Contact *</Label>
                         <Input
                           id="buyer_contact"
@@ -1459,7 +1476,7 @@ export default function GrainBatchesPage() {
             <Button
               onClick={handleDispatchBatch}
               className="bg-black hover:bg-gray-800 text-white"
-              disabled={!dispatchData.buyer_name || !dispatchData.buyer_contact || !dispatchData.quantity_dispatched || !dispatchData.dispatch_date}
+              disabled={!dispatchData.buyer_name || (!dispatchData.buyer_email && !dispatchData.buyer_contact) || !dispatchData.quantity_dispatched || !dispatchData.dispatch_date}
             >
               <Truck className="h-4 w-4 mr-2" />
               Dispatch Batch

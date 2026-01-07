@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,8 +17,10 @@ interface TeamMember {
     _id: string
     name: string
     email: string
+    phone?: string
     role: string
     status: string
+    blocked?: boolean
     created_at: string
     emailVerified: boolean
     warehouse_id?: {
@@ -33,11 +35,23 @@ export default function TeamManagementPage() {
     const currentUserRole = user?.role || ''
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [searchQuery, setSearchQuery] = useState("")
+    const [roleFilter, setRoleFilter] = useState("all")
+    const [statusFilter, setStatusFilter] = useState("all")
     const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+    const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
+    const [planLimit, setPlanLimit] = useState<PlanLimit | null>(null)
     const [inviteForm, setInviteForm] = useState({
         email: '',
         name: '',
         role: 'technician'
+    })
+    const [editForm, setEditForm] = useState({
+        name: '',
+        phone: '',
+        role: ''
     })
     const [isInviting, setIsInviting] = useState(false)
     const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
@@ -90,21 +104,53 @@ export default function TeamManagementPage() {
 
     const fetchTeamMembers = async () => {
         try {
-            const res = await api.get<TeamMember[]>('/auth/users')
-            if (res.ok) {
-                setTeamMembers(res.data || [])
+            setIsLoading(true)
+            const res = await api.get<{ users: TeamMember[] }>('/api/user-management/users?limit=100')
+            if (res.ok && res.data) {
+                // Filter out admin users from the list (they have their own profile)
+                const filteredUsers = (res.data.users || []).filter(user => user.role !== 'admin')
+                setTeamMembers(filteredUsers)
             } else {
                 toast.error('Failed to fetch team members')
             }
-        } catch {
+        } catch (err) {
+            console.error('Error fetching team members:', err)
             toast.error('Failed to fetch team members')
         } finally {
             setIsLoading(false)
         }
     }
 
+    const checkPlanLimits = async () => {
+        try {
+            const res = await api.post<{
+                canPerform: boolean
+                currentCount: number
+                limit: number | string
+            }>('/api/plan-management/check-limits', {
+                action: 'create_user',
+                resourceType: 'user'
+            })
+            if (res.ok && res.data) {
+                setPlanLimit({
+                    canInvite: res.data.canPerform,
+                    currentCount: res.data.currentCount,
+                    limit: res.data.limit,
+                    message: res.data.canPerform
+                        ? undefined
+                        : `You've reached your user limit (${res.data.limit}). Please upgrade your plan to invite more team members.`
+                })
+            }
+        } catch (err) {
+            console.error('Error checking plan limits:', err)
+            // Don't block invitation if limit check fails
+            setPlanLimit({ canInvite: true, currentCount: 0, limit: 'unlimited' })
+        }
+    }
+
     useEffect(() => {
         fetchTeamMembers()
+        checkPlanLimits()
     }, [])
 
     const handleInvite = async () => {
@@ -131,12 +177,13 @@ export default function TeamManagementPage() {
                 toast.success('Invitation sent successfully!')
                 setInviteForm({ email: '', name: '', role: 'technician' })
                 setIsInviteDialogOpen(false)
-                fetchTeamMembers() // Refresh the list
+                fetchTeamMembers()
+                checkPlanLimits()
             } else {
                 toast.error(res.error || 'Failed to send invitation')
             }
-        } catch {
-            toast.error('Failed to send invitation')
+        } catch (err) {
+            toast.error((err as Error).message || 'Failed to send invitation')
         } finally {
             setIsInviting(false)
         }
@@ -173,30 +220,33 @@ export default function TeamManagementPage() {
                 return 'bg-blue-100 text-blue-800 border-blue-200'
             case 'technician':
                 return 'bg-green-100 text-green-800 border-green-200'
+            case 'pending':
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200'
             default:
                 return 'bg-gray-100 text-gray-800 border-gray-200'
         }
     }
 
-    const getStatusBadge = (status: string, emailVerified: boolean) => {
-        if (status === 'pending') {
-            return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    const getStatusBadge = (member: TeamMember) => {
+        if (member.blocked) {
+            return { text: 'Blocked', class: 'bg-red-100 text-red-800 border-red-200' }
         }
-        if (!emailVerified) {
-            return 'bg-orange-100 text-orange-800 border-orange-200'
+        if (member.role === 'pending') {
+            return { text: 'Pending Invitation', class: 'bg-yellow-100 text-yellow-800 border-yellow-200' }
         }
-        return 'bg-green-100 text-green-800 border-green-200'
+        if (!member.emailVerified) {
+            return { text: 'Email Not Verified', class: 'bg-orange-100 text-orange-800 border-orange-200' }
+        }
+        return { text: 'Active', class: 'bg-green-100 text-green-800 border-green-200' }
     }
 
-    const getStatusText = (status: string, emailVerified: boolean) => {
-        if (status === 'pending') {
-            return 'Pending Invitation'
-        }
-        if (!emailVerified) {
-            return 'Email Not Verified'
-        }
-        return 'Active'
-    }
+    const stats = useMemo(() => {
+        const total = teamMembers.length
+        const active = teamMembers.filter(m => m.emailVerified && m.role !== 'pending' && !m.blocked).length
+        const pending = teamMembers.filter(m => m.role === 'pending').length
+        const unverified = teamMembers.filter(m => !m.emailVerified && m.role !== 'pending').length
+        return { total, active, pending, unverified }
+    }, [teamMembers])
 
     return (
         <div className="container mx-auto px-4 py-8">
@@ -307,7 +357,7 @@ export default function TeamManagementPage() {
                             <Users className="h-8 w-8 text-blue-600" />
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Total Members</p>
-                                <p className="text-2xl font-bold text-gray-900">{teamMembers.length}</p>
+                                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -319,9 +369,7 @@ export default function TeamManagementPage() {
                             <UserCheck className="h-8 w-8 text-green-600" />
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Active Members</p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {teamMembers.filter(member => member.emailVerified && member.role !== 'pending').length}
-                                </p>
+                                <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -333,9 +381,7 @@ export default function TeamManagementPage() {
                             <Clock className="h-8 w-8 text-yellow-600" />
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Pending Invitations</p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {teamMembers.filter(member => member.role === 'pending').length}
-                                </p>
+                                <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -347,16 +393,59 @@ export default function TeamManagementPage() {
                             <AlertCircle className="h-8 w-8 text-orange-600" />
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Unverified</p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {teamMembers.filter(member => !member.emailVerified && member.role !== 'pending').length}
-                                </p>
+                                <p className="text-2xl font-bold text-gray-900">{stats.unverified}</p>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Team Members List */}
+            {/* Search and Filters */}
+            <Card className="mb-6">
+                <CardHeader>
+                    <CardTitle>Search & Filter</CardTitle>
+                    <CardDescription>Find team members by name, email, or filter by role and status</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search by name, email, or phone..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-8"
+                            />
+                        </div>
+                        <Select value={roleFilter} onValueChange={setRoleFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Filter by role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Roles</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="manager">Manager</SelectItem>
+                                <SelectItem value="technician">Technician</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="blocked">Blocked</SelectItem>
+                                <SelectItem value="unverified">Unverified</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Team Members Table */}
             <Card>
                 <CardHeader>
                     <CardTitle>Team Members</CardTitle>
@@ -372,7 +461,7 @@ export default function TeamManagementPage() {
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
                             <p className="text-gray-600 mt-2">Loading team members...</p>
                         </div>
-                    ) : teamMembers.length === 0 ? (
+                    ) : filteredMembers.length === 0 ? (
                         <div className="text-center py-8">
                             <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                             <p className="text-gray-600">No team members found</p>
@@ -444,6 +533,72 @@ export default function TeamManagementPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Edit Dialog */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Team Member</DialogTitle>
+                        <DialogDescription>Update team member information</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Name</Label>
+                            <Input
+                                value={editForm.name}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Phone</Label>
+                            <Input
+                                value={editForm.phone}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Role</Label>
+                            <Select value={editForm.role} onValueChange={(value) => setEditForm(prev => ({ ...prev, role: value }))}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="manager">Manager</SelectItem>
+                                    <SelectItem value="technician">Technician</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isUpdating}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleUpdate} disabled={isUpdating}>
+                            {isUpdating ? 'Updating...' : 'Update'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Team Member</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete {selectedMember?.name}? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                            {isDeleting ? 'Deleting...' : 'Delete'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

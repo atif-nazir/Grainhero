@@ -117,23 +117,27 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
     try {
       setLoading(true);
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`${backendUrl}/iot/devices?type=actuator`, {
+      const response = await fetch(`${backendUrl}/api/iot/devices?type=actuator`, {
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      if (!response.ok) throw new Error("Failed to fetch actuators");
-      const data = await response.json();
-      const mapping: Record<ShortcutKey, IoTActuator | null> = { fan: null, light: null, alarm: null };
-      shortcutDefinitions.forEach((def) => {
-        const match =
-          data.devices?.find((device: IoTActuator) =>
-            def.categories.includes(device.category),
-          ) || null;
-        mapping[def.key] = match;
-      });
-      setActuators(mapping);
+      if (response.ok) {
+        const data = await response.json();
+        const mapping: Record<ShortcutKey, IoTActuator | null> = { fan: null, light: null, alarm: null };
+        shortcutDefinitions.forEach((def) => {
+          const match =
+            data.devices?.find((device: IoTActuator) =>
+              def.categories.includes(device.category),
+            ) || null;
+          mapping[def.key] = match;
+        });
+        setActuators(mapping);
+      } else {
+        // Gracefully handle unauthorized or server errors by clearing shortcuts
+        setActuators({ fan: null, light: null, alarm: null });
+      }
     } catch (error) {
       console.error("Actuator shortcuts load error:", error);
     } finally {
@@ -143,24 +147,30 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
 
   const controlDevice = async (
     shortcut: ShortcutKey,
-    action: "turn_on" | "turn_off" | "set_value",
-    value?: number,
+    action: "turn_on" | "turn_off",
   ) => {
     const device = actuators[shortcut];
     if (!device) return;
     try {
       setActionLoading((prev) => ({ ...prev, [shortcut]: true }));
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const resp = await fetch(`${backendUrl}/iot/devices/${device._id}/control`, {
+      const resp = await fetch(`${backendUrl}/api/iot/devices/${device._id}/control`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ action, value }),
+        body: JSON.stringify({ action }),
       });
       if (!resp.ok) throw new Error("Control command failed");
       const result = await resp.json();
+      if (result?.status === "blocked") {
+        setLastMessage((prev) => ({
+          ...prev,
+          [shortcut]: `Blocked: ${result.reason}`,
+        }));
+        return;
+      }
       setLastMessage((prev) => ({
         ...prev,
         [shortcut]: result.message || `Sent ${action}`,

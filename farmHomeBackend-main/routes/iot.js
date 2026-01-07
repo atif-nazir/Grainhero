@@ -5,6 +5,27 @@ const { requirePermission, requireTenantAccess } = require('../middleware/permis
 const SensorDevice = require('../models/SensorDevice');
 const SensorReading = require('../models/SensorReading');
 const mqtt = require('mqtt'); // Added for MQTT support
+const Silo = require('../models/Silo');
+const admin = require('firebase-admin');
+let firebaseDb = null;
+function ensureFirebase() {
+  if (!admin.apps.length) {
+    const url = process.env.FIREBASE_DATABASE_URL;
+    const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+    const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    if (!url) throw new Error('FIREBASE_DATABASE_URL missing');
+    let credential;
+    if (saJson) {
+      credential = admin.credential.cert(JSON.parse(saJson));
+    } else if (saPath) {
+      credential = admin.credential.cert(require(saPath));
+    } else {
+      credential = admin.credential.applicationDefault();
+    }
+    admin.initializeApp({ credential, databaseURL: url });
+  }
+  firebaseDb = admin.database();
+}
 
 // MQTT client initialization
 let mqttClient = null;
@@ -32,86 +53,12 @@ try {
   console.error('Failed to initialize MQTT client:', error);
 }
 
-// Mock IoT devices data (keeping for backward compatibility)
-const mockDevices = [
-  {
-    _id: 'sensor-temp-001',
-    device_id: 'TEMP-001',
-    name: 'Temperature Sensor 1',
-    type: 'sensor',
-    category: 'environmental',
-    location: 'Silo A',
-    status: 'online',
-    current_value: 25.3,
-    unit: '°C',
-    threshold_min: 15,
-    threshold_max: 35,
-    last_reading: new Date(),
-    tenant_id: '652a266c69576a07b18d1c5c'
-  },
-  {
-    _id: 'sensor-humidity-001',
-    device_id: 'HUM-001',
-    name: 'Humidity Sensor 1',
-    type: 'sensor',
-    category: 'environmental',
-    location: 'Silo A',
-    status: 'online',
-    current_value: 65.2,
-    unit: '%',
-    threshold_min: 30,
-    threshold_max: 80,
-    last_reading: new Date(),
-    tenant_id: '652a266c69576a07b18d1c5c'
-  },
-  {
-    _id: 'actuator-fan-001',
-    device_id: 'FAN-001',
-    name: 'Ventilation Fan 1',
-    type: 'actuator',
-    category: 'ventilation',
-    location: 'Silo A',
-    status: 'offline',
-    current_value: 0,
-    unit: 'RPM',
-    power_consumption: 150,
-    last_activity: new Date(),
-    tenant_id: '652a266c69576a07b18d1c5c'
-  },
-  {
-    _id: 'actuator-humidifier-001',
-    device_id: 'HUMID-001',
-    name: 'Humidifier 1',
-    type: 'actuator',
-    category: 'humidity_control',
-    location: 'Silo A',
-    status: 'offline',
-    current_value: 0,
-    unit: '%',
-    power_consumption: 200,
-    last_activity: new Date(),
-    tenant_id: '652a266c69576a07b18d1c5c'
-  },
-  {
-    _id: 'actuator-alarm-001',
-    device_id: 'ALARM-001',
-    name: 'Alert System 1',
-    type: 'actuator',
-    category: 'alert',
-    location: 'Silo A',
-    status: 'online',
-    current_value: 0,
-    unit: 'dB',
-    power_consumption: 50,
-    last_activity: new Date(),
-    tenant_id: '652a266c69576a07b18d1c5c'
-  }
-];
+// Live data only — no mock devices
 
 // GET /iot/devices - Get all IoT devices
 router.get('/devices', [
   auth,
-  requirePermission('iot.read'),
+  requirePermission('sensor.view'),
   requireTenantAccess
 ], async (req, res) => {
   try {
@@ -122,51 +69,25 @@ router.get('/devices', [
     try {
       const filter = { admin_id: req.user.admin_id };
       
-      if (type) filter.type = type;
+      if (type) filter.device_type = type;
       if (category) filter.category = category;
-      if (status) filter.status = status;
-      if (location) filter.location = location;
+      if (status) filter.connection_status = status;
+      // location filter not supported on SensorDevice
       
       devices = await SensorDevice.find(filter)
         .populate('silo_id', 'name silo_id')
         .sort({ created_at: -1 });
     } catch (dbError) {
-      console.warn('Database query failed, using mock data:', dbError.message);
+      console.warn('Database query failed:', dbError.message);
     }
     
-    // If no real devices found, use mock data
-    let filteredDevices = devices.length > 0 ? devices : mockDevices;
-    
-    // Apply filters for mock data
-    if (devices.length === 0) {
-      // Filter by type (sensor/actuator)
-      if (type) {
-        filteredDevices = filteredDevices.filter(d => d.type === type);
-      }
-      
-      // Filter by category
-      if (category) {
-        filteredDevices = filteredDevices.filter(d => d.category === category);
-      }
-      
-      // Filter by status
-      if (status) {
-        filteredDevices = filteredDevices.filter(d => d.status === status);
-      }
-      
-      // Filter by location
-      if (location) {
-        filteredDevices = filteredDevices.filter(d => d.location === location);
-      }
-    }
-    
-    console.log(`📡 Serving ${filteredDevices.length} IoT devices`);
+    console.log(`📡 Serving ${devices.length} IoT devices`);
     
     res.json({
-      devices: filteredDevices,
-      total: filteredDevices.length,
-      online: filteredDevices.filter(d => d.status === 'online').length,
-      offline: filteredDevices.filter(d => d.status === 'offline').length
+      devices,
+      total: devices.length,
+      online: devices.filter(d => d.connection_status === 'online').length,
+      offline: devices.filter(d => d.connection_status === 'offline').length
     });
   } catch (error) {
     console.error('Get IoT devices error:', error);
@@ -177,7 +98,7 @@ router.get('/devices', [
 // GET /iot/devices/:id - Get specific device
 router.get('/devices/:id', [
   auth,
-  requirePermission('iot.read'),
+  requirePermission('sensor.view'),
   requireTenantAccess
 ], async (req, res) => {
   try {
@@ -192,11 +113,6 @@ router.get('/devices/:id', [
       }).populate('silo_id');
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
-    }
-    
-    // If not found in database, check mock devices
-    if (!device) {
-      device = mockDevices.find(d => d._id === id);
     }
     
     if (!device) {
@@ -216,7 +132,7 @@ const noCache = require('../middleware/noCache');
 router.post('/devices/:id/control', [
   auth,
   noCache, // Critical: Real-time control must never be cached
-  requirePermission('iot.control'),
+  requirePermission('actuator.control'),
   requireTenantAccess
 ], async (req, res) => {
   try {
@@ -243,6 +159,23 @@ router.post('/devices/:id/control', [
       return res.status(404).json({ error: 'Device not found' });
     }
     
+    let guardrailBlocked = false;
+    let guardrailReason = '';
+    try {
+      const recentReading = await SensorReading.findOne({ device_id: device._id || id }).sort({ timestamp: -1 });
+      if (recentReading) {
+        const t = recentReading.temperature || recentReading.readings?.temperature || 0;
+        const h = recentReading.humidity || recentReading.readings?.humidity || 0;
+        const tv = recentReading.tvoc_ppb || recentReading.readings?.tvoc || 0;
+        if (t > 60 || tv > 1000) {
+          guardrailBlocked = true;
+          guardrailReason = 'unsafe_conditions';
+        }
+      }
+    } catch {}
+    if (guardrailBlocked) {
+      return res.status(200).json({ status: 'blocked', reason: guardrailReason });
+    }
     // Handle real device control via MQTT
     if (device.device_id && mqttClient && mqttClient.connected) {
       const controlTopic = `grainhero/actuators/${device.device_id}/control`;
@@ -253,62 +186,53 @@ router.post('/devices/:id/control', [
         timestamp: new Date().toISOString(),
         user: req.user._id
       };
-      
+
       mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
       console.log(`📡 MQTT command sent to ${controlTopic}`);
     }
     
-    // Simulate device control for mock devices or fallback
     let newStatus = device.status;
     let newValue = device.current_value;
     let message = '';
     
-    if (device.type === 'actuator') {
+    if (device.device_type === 'actuator') {
       switch (action) {
         case 'turn_on':
-          newStatus = 'online';
-          newValue = value || (device.category === 'ventilation' ? 1200 : 100);
-          message = `${device.name} turned ON`;
+          newStatus = 'active';
+          newValue = value || 100;
+          message = `${device.device_name} turned ON`;
           break;
         case 'turn_off':
-          newStatus = 'offline';
+          newStatus = 'inactive';
           newValue = 0;
-          message = `${device.name} turned OFF`;
+          message = `${device.device_name} turned OFF`;
           break;
         case 'set_value':
-          newStatus = 'online';
+          newStatus = 'active';
           newValue = value;
-          message = `${device.name} set to ${value}${device.unit}`;
+          message = `${device.device_name} set to ${value}`;
           break;
         default:
           return res.status(400).json({ error: 'Invalid action' });
       }
       
-      // Update device status for real devices
-      if (device._id && device.constructor.modelName) {
-        try {
-          device.status = newStatus;
-          device.current_value = newValue;
-          device.last_activity = new Date();
-          await device.save();
-        } catch (saveError) {
-          console.warn('Failed to save device state:', saveError.message);
-        }
-      } else {
-        // Update mock device status
+      try {
         device.status = newStatus;
         device.current_value = newValue;
         device.last_activity = new Date();
+        await device.save();
+      } catch (saveError) {
+        console.warn('Failed to save device state:', saveError.message);
       }
       
-      console.log(`🎛️ Device control: ${device.name} - ${action} - ${newValue}${device.unit}`);
+      console.log(`🎛️ Device control: ${device.device_name} - ${action} - ${newValue}`);
       
       res.json({
         message,
         device: {
           _id: device._id,
           device_id: device.device_id,
-          name: device.name,
+          name: device.device_name,
           status: device.status,
           current_value: device.current_value,
           last_activity: device.last_activity
@@ -323,6 +247,63 @@ router.post('/devices/:id/control', [
   } catch (error) {
     console.error('Control device error:', error);
     res.status(500).json({ error: 'Failed to control device' });
+  }
+});
+
+router.get('/silos/:siloId/telemetry', [
+  auth,
+  requirePermission('sensor.view'),
+  requireTenantAccess
+], async (req, res) => {
+  try {
+    const { siloId } = req.params;
+    let device = null;
+    try {
+      device = await SensorDevice.findOne({ device_id: siloId, admin_id: req.user.admin_id });
+    } catch {}
+    if (!device) {
+      const silo = await Silo.findById(siloId);
+      if (!silo) {
+        return res.status(404).json({ error: 'Silo not found' });
+      }
+    }
+    ensureFirebase();
+    let snapshot;
+    try {
+      snapshot = await firebaseDb.ref(`sensor_data/${siloId}/latest`).get();
+    } catch (e) {
+      console.error('Firebase read error:', e.message);
+      return res.status(503).json({ error: 'Silo offline' });
+    }
+    if (!snapshot || snapshot.val() === null) {
+      console.warn(`Firebase node missing for siloId ${siloId}`);
+      return res.status(503).json({ error: 'Silo offline' });
+    }
+    const payload = snapshot.val() || {};
+    const temperature = payload.temperature !== undefined ? Number(payload.temperature) : 0;
+    const humidity = payload.humidity !== undefined ? Number(payload.humidity) : 0;
+    const tvocRaw = payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0);
+    const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
+    const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
+    const mlDecision = payload.mlDecision || ((humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle');
+    const humanOverride = payload.humanOverride !== undefined ? !!payload.humanOverride : !!payload.human_override;
+    const guardrails = [];
+    if (temperature > 60) guardrails.push('high_temperature');
+    if (tvocRaw > 1000) guardrails.push('high_tvoc');
+    console.log(`Firebase read success for ${siloId}`);
+    res.json({
+      temperature,
+      humidity,
+      tvoc: tvocRaw,
+      fanState,
+      lidState,
+      mlDecision,
+      humanOverride,
+      guardrails,
+      timestamp: payload.timestamp || Date.now()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch telemetry' });
   }
 });
 
@@ -347,11 +328,6 @@ router.post('/devices/:id/readings', [
       console.warn('Database query failed:', dbError.message);
     }
     
-    // If not found in database, check mock devices
-    if (!device) {
-      device = mockDevices.find(d => d._id === id);
-    }
-    
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
     }
@@ -361,40 +337,16 @@ router.post('/devices/:id/readings', [
     try {
       const startDate = new Date(Date.now() - (hours * 60 * 60 * 1000));
       readings = await SensorReading.find({
-        device_id: device._id || id,
+        device_id: device._id,
         timestamp: { $gte: startDate }
       }).sort({ timestamp: -1 }).limit(100);
     } catch (dbError) {
       console.warn('Database readings query failed:', dbError.message);
     }
     
-    // If no real readings found, generate mock readings
-    if (readings.length === 0) {
-      const now = new Date();
-      const startTime = new Date(now.getTime() - (hours * 60 * 60 * 1000));
-      
-      for (let i = 0; i < hours; i++) {
-        const timestamp = new Date(startTime.getTime() + (i * 60 * 60 * 1000));
-        let value = device.current_value;
-        
-        // Add some realistic variation
-        if (device.type === 'sensor') {
-          const variation = (Math.random() - 0.5) * 10;
-          value = Math.max(0, device.current_value + variation);
-        }
-        
-        readings.push({
-          timestamp,
-          value: parseFloat(value.toFixed(2)),
-          unit: device.unit,
-          quality: 'good'
-        });
-      }
-    }
-    
     res.json({
       device_id: device.device_id,
-      device_name: device.name,
+      device_name: device.device_name,
       readings,
       total_readings: readings.length,
       time_range: {
@@ -518,22 +470,20 @@ router.get('/status', [
       console.warn('Database query failed:', dbError.message);
     }
     
-    // If no real devices found, use mock data
-    const allDevices = devices.length > 0 ? devices : mockDevices;
-    const sensors = allDevices.filter(d => d.type === 'sensor');
-    const actuators = allDevices.filter(d => d.type === 'actuator');
+    const sensors = devices.filter(d => d.device_type === 'sensor');
+    const actuators = devices.filter(d => d.device_type === 'actuator');
     
     const status = {
-      total_devices: allDevices.length,
+      total_devices: devices.length,
       sensors: {
         total: sensors.length,
-        online: sensors.filter(s => s.status === 'online').length,
-        offline: sensors.filter(s => s.status === 'offline').length
+        online: sensors.filter(s => s.connection_status === 'online').length,
+        offline: sensors.filter(s => s.connection_status === 'offline').length
       },
       actuators: {
         total: actuators.length,
-        online: actuators.filter(a => a.status === 'online').length,
-        offline: actuators.filter(a => a.status === 'offline').length
+        online: actuators.filter(a => a.connection_status === 'online').length,
+        offline: actuators.filter(a => a.connection_status === 'offline').length
       },
       system_health: 'good',
       mqtt_connected: mqttClient ? mqttClient.connected : false,
@@ -559,17 +509,15 @@ router.post('/emergency-shutdown', [
     try {
       actuators = await SensorDevice.find({ 
         admin_id: req.user.admin_id,
-        type: 'actuator'
+        device_type: 'actuator'
       });
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
     
-    // If no real actuators found, use mock data
-    const allActuators = actuators.length > 0 ? actuators : mockDevices.filter(d => d.type === 'actuator');
     let shutdownCount = 0;
     
-    for (const actuator of allActuators) {
+    for (const actuator of actuators) {
       // Handle real device control via MQTT
       if (actuator.device_id && mqttClient && mqttClient.connected) {
         const controlTopic = `grainhero/actuators/${actuator.device_id}/control`;
@@ -584,21 +532,13 @@ router.post('/emergency-shutdown', [
         console.log(`📡 Emergency shutdown command sent to ${controlTopic}`);
       }
       
-      // Update device status for real devices
-      if (actuator._id && actuator.constructor.modelName) {
-        try {
-          actuator.status = 'offline';
-          actuator.current_value = 0;
-          actuator.last_activity = new Date();
-          await actuator.save();
-        } catch (saveError) {
-          console.warn('Failed to save actuator state:', saveError.message);
-        }
-      } else {
-        // Update mock actuator status
-        actuator.status = 'offline';
+      try {
+        actuator.status = 'inactive';
         actuator.current_value = 0;
         actuator.last_activity = new Date();
+        await actuator.save();
+      } catch (saveError) {
+        console.warn('Failed to save actuator state:', saveError.message);
       }
       
       shutdownCount++;
@@ -629,13 +569,27 @@ router.post('/mqtt-ingest', async (req, res) => {
       return res.status(404).json({ error: 'Device not found' });
     }
     
+    // Normalize readings: tvoc -> voc, include actuator fields
+    const normalized = { ...(readings || {}) };
+    if (normalized.tvoc !== undefined && normalized.voc === undefined) {
+      normalized.voc = normalized.tvoc;
+      delete normalized.tvoc;
+    }
+    if (normalized.pwm_speed !== undefined && typeof normalized.pwm_speed === 'number') {
+      normalized.pwm_speed = { value: normalized.pwm_speed, unit: 'percent' };
+    }
+    if (normalized.servo_state !== undefined) {
+      const val = typeof normalized.servo_state === 'boolean' ? (normalized.servo_state ? 1 : 0) : normalized.servo_state;
+      normalized.servo_state = { value: val, unit: 'boolean' };
+    }
+    
     // Create sensor reading
     const sensorReading = new SensorReading({
       device_id: device._id,
       tenant_id: device.admin_id,
       silo_id: device.silo_id,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      ...readings,
+      ...normalized,
       quality_indicators: {
         is_valid: true,
         confidence_score: 0.95,

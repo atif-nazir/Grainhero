@@ -139,7 +139,12 @@ export default function PlansPage() {
                     <Button
                       className="w-full"
                       variant="outline"
-                      onClick={() => window.open(p.link, '_blank')}
+                      onClick={() => {
+                        // Open contact form or email
+                        const subject = encodeURIComponent('Custom Solution Inquiry - GrainHero')
+                        const body = encodeURIComponent(`Hello,\n\nI'm interested in learning more about your Custom Solution for grain management.\n\nPlease contact me at: ${email || 'my email'}\n\nThank you!`)
+                        window.location.href = `mailto:support@grainhero.com?subject=${subject}&body=${body}`
+                      }}
                     >
                       Contact Sales
                     </Button>
