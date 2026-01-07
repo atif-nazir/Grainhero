@@ -233,6 +233,16 @@ const sensorReadingSchema = new mongoose.Schema({
       enum: ['on', 'off', 'auto', 'unknown'],
       default: 'unknown'
     },
+    lid_state: {
+      type: Number,
+      enum: [0, 1], // 0 = CLOSED, 1 = OPEN
+      default: 0
+    },
+    lid_status: {
+      type: String,
+      enum: ['open', 'closed', 'moving', 'unknown'],
+      default: 'unknown'
+    },
     fan_speed_factor: {
       type: Number,
       min: 0,

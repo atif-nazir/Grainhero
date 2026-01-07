@@ -40,6 +40,7 @@ const userManagementRoute = require("./routes/userManagement");
 
 const Alert = require("./models/Alert");
 const environmentalDataService = require("./services/environmentalDataService");
+const firebaseRealtimeService = require("./services/firebaseRealtimeService");
 
 const cors = require("cors");
 require("dotenv").config();
@@ -80,8 +81,15 @@ db.once("open", () => {
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
   }
-
-  // Start limit warning scheduler
+  
+  try {
+    firebaseRealtimeService.start(io);
+    console.log("Firebase realtime service started");
+  } catch (error) {
+    console.error("Failed to start Firebase realtime service:", error.message);
+  }
+  
+  // Start data aggregation service (30s raw → 5min averages)
   try {
     const {
       startLimitWarningScheduler,
@@ -235,8 +243,3 @@ wss.on("connection", async function connection(ws, req) {
     alertChangeStream.close();
   });
 });
-
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () =>
-  console.log(`Server & WebSocket running on port ${PORT}`)
-);

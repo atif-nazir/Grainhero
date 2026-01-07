@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -38,6 +38,13 @@ export default function DataVisualizationPage() {
   const [selectedRange, setSelectedRange] = useState<'24h' | '7d' | '30d'>('24h');
   const points = selectedRange === '24h' ? 288 : selectedRange === '7d' ? 288 * 7 : 288 * 30;
   const { data: envHistory, latest } = useEnvironmentalHistory({ limit: points });
+  const [mlMetrics, setMlMetrics] = useState<null | {
+    accuracy: number
+    precision: number
+    recall: number
+    f1_score: number
+  }>(null);
+  const [mlLoading, setMlLoading] = useState(false);
 
   const chartData = useMemo(() => {
     return envHistory.map((record) => ({
@@ -86,6 +93,43 @@ export default function DataVisualizationPage() {
       avgHumidity: entry.count ? entry.avgHumidity / entry.count : 0,
     }));
   }, [envHistory]);
+  
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMetrics = async () => {
+      try {
+        setMlLoading(true);
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const res = await fetch(`${backendUrl}/ai-spoilage/model-performance`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        if (!res.ok) {
+          setMlLoading(false);
+          return;
+        }
+        const json = await res.json();
+        const latest = json?.performance_summary?.latest_metrics;
+        if (isMounted && latest && typeof latest === 'object') {
+          setMlMetrics({
+            accuracy: Number(latest.accuracy ?? 0),
+            precision: Number(latest.precision ?? 0),
+            recall: Number(latest.recall ?? 0),
+            f1_score: Number(latest.f1_score ?? 0),
+          });
+        }
+      } catch {
+      } finally {
+        if (isMounted) setMlLoading(false);
+      }
+    };
+    fetchMetrics();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -180,6 +224,40 @@ export default function DataVisualizationPage() {
           </CardContent>
         </Card>
       </div>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>ML Evaluation Metrics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-gray-500">Accuracy</div>
+              <div className="text-2xl font-semibold">
+                {mlMetrics ? `${(mlMetrics.accuracy * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
+              </div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-gray-500">Precision</div>
+              <div className="text-2xl font-semibold">
+                {mlMetrics ? `${(mlMetrics.precision * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
+              </div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-gray-500">Recall</div>
+              <div className="text-2xl font-semibold">
+                {mlMetrics ? `${(mlMetrics.recall * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
+              </div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-gray-500">F1 Score</div>
+              <div className="text-2xl font-semibold">
+                {mlMetrics ? `${(mlMetrics.f1_score * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
