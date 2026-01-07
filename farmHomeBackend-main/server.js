@@ -355,3 +355,20 @@ wss.on("connection", async function connection(ws, req) {
     alertChangeStream.close();
   });
 });
+
+// ============================================
+// START SERVER
+// ============================================
+const PORT = process.env.PORT || 5000;
+
+server.listen(PORT, () => {
+  console.log("\n" + "=".repeat(80));
+  console.log(`🚀 GrainHero Backend Server is running on port ${PORT}`);
+  console.log(`📡 Server URL: http://localhost:${PORT}`);
+  console.log(`🔐 Auth endpoints: http://localhost:${PORT}/auth/*`);
+  console.log(`🌐 API endpoints: http://localhost:${PORT}/api/*`);
+  console.log(`📚 API Docs: http://localhost:${PORT}/api/docs`);
+  console.log(`💚 Health check: http://localhost:${PORT}/status`);
+  console.log("=".repeat(80) + "\n");
+  console.log("📱 Ready to receive requests from Flutter app...\n");
+});
