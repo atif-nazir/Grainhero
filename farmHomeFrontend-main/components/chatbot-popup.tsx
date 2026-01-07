@@ -58,7 +58,7 @@ export function ChatbotPopup() {
         })
         if (!res.ok) throw new Error("Failed to fetch grain batches")
         const data = await res.json()
-        const batches = (data.predictions || []).map((pred: any) => ({
+        const batches = (data.predictions || []).map((pred: Record<string, any>) => ({
           _id: pred._id,
           batch_id: pred.batch_id?.batch_id || pred.batch_id || 'Unknown',
           grain_type: pred.grain_factors?.grain_type || pred.grain_type || 'Rice',
@@ -67,7 +67,7 @@ export function ChatbotPopup() {
           risk_level: pred.risk_level || 'low'
         }))
         setGrainBatches(batches)
-      } catch (err: any) {
+      } catch (err: unknown) {
         setBatchError(err.message || "Failed to fetch grain batches")
       } finally {
         setBatchLoading(false)

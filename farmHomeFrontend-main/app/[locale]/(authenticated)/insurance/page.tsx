@@ -198,8 +198,8 @@ export default function InsurancePage() {
       } else {
         throw new Error(res.error || 'Unable to save policy')
       }
-    } catch (error: any) {
-      toast.error(error?.message || 'Unable to save policy')
+    } catch (error: unknown) {
+      toast.error((error as Error).message || 'Unable to save policy')
     } finally {
       setSaving(false)
     }
@@ -232,8 +232,8 @@ export default function InsurancePage() {
       } else {
         toast.error(res.error || 'Failed to cancel policy')
       }
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to cancel policy')
+    } catch (e: unknown) {
+      toast.error((e as Error).message || 'Failed to cancel policy')
     }
   }
 
@@ -274,8 +274,8 @@ export default function InsurancePage() {
       } else {
         toast.error(res.error || 'Failed to file claim')
       }
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to file claim')
+    } catch (e: unknown) {
+      toast.error((e as Error).message || 'Failed to file claim')
     } finally {
       setClaimSaving(false)
     }

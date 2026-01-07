@@ -190,7 +190,7 @@ export default function RiskAssessmentPage() {
       } else {
         throw new Error(res.error || "Prediction failed")
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setPredictionError(error?.message || "Prediction failed")
       toast.error(error?.message || "Prediction failed")
     } finally {
@@ -235,7 +235,7 @@ export default function RiskAssessmentPage() {
       } else {
         throw new Error(res.error || "Batch prediction failed")
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setPredictionError(error?.message || "Batch prediction failed")
       toast.error(error?.message || "Batch prediction failed")
     } finally {

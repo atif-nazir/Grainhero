@@ -21,7 +21,8 @@ import {
   Eye,
   Download,
   Filter,
-  Calendar
+  Calendar,
+  LucideIcon
 } from "lucide-react"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { DataTable } from "@/components/dashboard/DataTable"
@@ -32,7 +33,7 @@ interface AnalyticsMetric {
   change: number
   trend: "up" | "down" | "stable"
   unit: string
-  icon: any
+  icon: LucideIcon | undefined
 }
 
 interface GeographicData {
@@ -43,7 +44,7 @@ interface GeographicData {
   percentage: number
 }
 
-interface TenantAnalytics {
+interface TenantAnalytics extends Record<string, unknown> {
   id: string
   name: string
   users: number
@@ -159,7 +160,7 @@ export default function GlobalAnalyticsPage() {
     {
       key: "tenant",
       label: "Tenant",
-      render: (value: any, row: TenantAnalytics) => (
+      render: (value: unknown, row: TenantAnalytics) => (
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
             <Building2 className="h-4 w-4 text-blue-600" />
@@ -174,7 +175,7 @@ export default function GlobalAnalyticsPage() {
     {
       key: "users",
       label: "Users",
-      render: (value: any, row: TenantAnalytics) => (
+      render: (value: unknown, row: TenantAnalytics) => (
         <div className="text-center">
           <div className="font-medium">{row.users.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">active users</div>
@@ -184,7 +185,7 @@ export default function GlobalAnalyticsPage() {
     {
       key: "revenue",
       label: "Revenue",
-      render: (value: any, row: TenantAnalytics) => (
+      render: (value: unknown, row: TenantAnalytics) => (
         <div className="text-center">
           <div className="font-medium">${row.revenue.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">per month</div>
@@ -194,7 +195,7 @@ export default function GlobalAnalyticsPage() {
     {
       key: "growth",
       label: "Growth",
-      render: (value: any, row: TenantAnalytics) => (
+      render: (value: unknown, row: TenantAnalytics) => (
         <div className="flex items-center space-x-2">
           {getTrendIcon("up")}
           <span className={`font-medium ${getTrendColor("up")}`}>
@@ -206,7 +207,7 @@ export default function GlobalAnalyticsPage() {
     {
       key: "plan",
       label: "Plan",
-      render: (value: any, row: TenantAnalytics) => (
+      render: (value: unknown, row: TenantAnalytics) => (
         <Badge variant={row.plan === "Enterprise" ? "default" : "secondary"}>
           {row.plan}
         </Badge>
@@ -215,7 +216,7 @@ export default function GlobalAnalyticsPage() {
     {
       key: "lastActivity",
       label: "Last Activity",
-      render: (value: any, row: TenantAnalytics) => (
+      render: (value: unknown, row: TenantAnalytics) => (
         <div className="text-sm text-muted-foreground">
           {row.lastActivity}
         </div>
@@ -223,7 +224,13 @@ export default function GlobalAnalyticsPage() {
     }
   ]
 
-  const actions = [
+  const actions: {
+    label: string;
+    icon?: LucideIcon;
+    onClick: (row: TenantAnalytics) => void;
+    variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+    show?: (row: TenantAnalytics) => boolean;
+  }[] = [
     {
       label: "View",
       icon: Eye,
@@ -264,7 +271,7 @@ export default function GlobalAnalyticsPage() {
               title={metric.name}
               value={metric.value.toLocaleString()}
               description={`${metric.change > 0 ? '+' : ''}${metric.change}% from last month`}
-              icon={IconComponent}
+              icon={IconComponent || TrendingUp}
               trend={{ 
                 value: Math.abs(metric.change), 
                 label: "from last month", 

@@ -96,7 +96,7 @@ export default function SettingsPage() {
       const userRes = await api.get('/api/user-management/users/profile')
 
       if (userRes.ok && userRes.data) {
-        const user: Record<string, any> = userRes.data.user || userRes.data
+        const user: Record<string, unknown> = userRes.data.user || userRes.data
         const tenantRes = await api.get('/api/tenant/settings').catch(() => null)
         setSettings({
           name: user.organization_name || user.name || '',

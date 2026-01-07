@@ -35,6 +35,31 @@ import SiloVisualization from '@/components/silo-visualization';
 import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from '@/lib/useEnvironmentalData';
 import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 
+interface AIPredictionRaw {
+  batch_id?: {
+    batch_id: string;
+  } | string;
+  grain_factors?: {
+    grain_type: string;
+  };
+  grain_type?: string;
+  risk_score?: number;
+  confidence_score?: number;
+  risk_level?: string;
+  prediction_details?: {
+    time_to_spoilage?: number;
+    key_risk_factors?: string[];
+    recommended_actions?: string[];
+  };
+  silo_id?: {
+    name: string;
+  };
+  updated_at?: string;
+  ai_prediction_confidence?: number;
+  spoilage_label?: string;
+  [key: string]: unknown;
+}
+
 interface AIPrediction {
   batch_id: string
   grain_type: string
@@ -83,8 +108,8 @@ const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(nu
         })
         if (resp.ok) {
           const data = await resp.json()
-          let mapped: AIPrediction[] = (data.predictions || []).map((r: any) => ({
-            batch_id: r.batch_id?.batch_id || r.batch_id || 'Unknown',
+          let mapped: AIPrediction[] = (data.predictions || []).map((r: AIPredictionRaw) => ({
+            batch_id: typeof r.batch_id === 'object' && r.batch_id !== null ? r.batch_id.batch_id : r.batch_id || 'Unknown',
             grain_type: r.grain_factors?.grain_type || r.grain_type || 'Rice',
             risk_score: Math.round(r.risk_score || 0),
             confidence: Math.round((r.confidence_score || 0.87) * 100) / 100,
@@ -227,7 +252,7 @@ const openActuatorPanel = (prediction: AIPrediction) => {
             const resp = await fetch(`${backendUrl}/ai/predictions/overview`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
             if (resp.ok) {
               const data = await resp.json()
-              const mapped: AIPrediction[] = (data.recent || []).map((r: any) => ({
+              const mapped: AIPrediction[] = (data.recent || []).map((r: AIPredictionRaw) => ({
                 batch_id: r.batch_id,
                 grain_type: r.grain_type,
                 risk_score: Math.round(r.risk_score || 0),

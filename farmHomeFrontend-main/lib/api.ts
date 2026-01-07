@@ -32,7 +32,7 @@ async function request<T>(path: string, method: HttpMethod = "GET", body?: unkno
       return { ok: false, status: res.status, error: (payload && (payload.error || payload.msg)) || res.statusText };
     }
     return { ok: true, status: res.status, data: payload as T };
-  } catch (e: any) {
+  } catch (e: unknown) {
     return { ok: false, status: 0, error: e?.message || "Network error" };
   }
 }

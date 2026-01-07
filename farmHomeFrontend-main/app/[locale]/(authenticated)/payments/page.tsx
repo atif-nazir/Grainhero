@@ -9,6 +9,7 @@ import { api } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/app/[locale]/providers"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { config } from "@/config"
 
 interface PaymentItem {
   _id: string
@@ -33,12 +34,55 @@ interface PaymentsResponse {
   }
 }
 
+interface DispatchedBatch {
+  _id: string
+  batch_id: string
+  grain_type: string
+  quantity_kg: number
+  purchase_price_per_kg: number
+  dispatch_details?: {
+    quantity: number
+    buyer_name: string
+    dispatch_date: string
+    vehicle_number?: string;
+    driver_name?: string;
+    driver_contact?: string;
+    destination?: string;
+    transport_cost?: number;
+  };
+  buyer_id?: {
+    name: string;
+    contact_info?: string;
+  };
+  status: string;
+  created_at: string;
+  updated_at: string;
+  // Additional fields that might be in the response
+  admin_id?: string;
+  silo_id?: string;
+  farmer_name?: string;
+  farmer_contact?: string;
+  source_location?: string;
+  risk_score?: number;
+  spoilage_label?: string;
+}
+
 interface PaymentsSummary {
   total_subscriptions: number
   total_revenue: number
   active: number
   cancelled: number
   past_due: number
+}
+
+interface BatchesResponse {
+  batches: DispatchedBatch[];
+  pagination: {
+    current_page: number;
+    total_pages: number;
+    total_items: number;
+    items_per_page: number;
+  };
 }
 
 export default function PaymentsPage() {
@@ -48,7 +92,7 @@ export default function PaymentsPage() {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const { user } = useAuth()
   const [avgPricePerKg, setAvgPricePerKg] = useState<number>(0)
-  const [dispatchedBatches, setDispatchedBatches] = useState<Array<any>>([])
+  const [dispatchedBatches, setDispatchedBatches] = useState<DispatchedBatch[]>([])
   const [dispatchLoading, setDispatchLoading] = useState(true)
 
   useEffect(() => {
@@ -102,7 +146,7 @@ export default function PaymentsPage() {
           const dash = await dashRes.json()
           setAvgPricePerKg(dash?.business?.avgPricePerKg || 0)
         }
-        const batchesRes = await api.get<{ batches: any[]; pagination: any }>(`/api/grain-batches?status=dispatched&limit=100`)
+        const batchesRes = await api.get<BatchesResponse>(`/api/grain-batches?status=dispatched&limit=100`)
         if (mounted && batchesRes.ok && batchesRes.data) {
           setDispatchedBatches(batchesRes.data.batches || [])
         } else if (mounted && !batchesRes.ok) {

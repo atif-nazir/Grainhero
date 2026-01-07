@@ -182,7 +182,7 @@ function ProductRatingModal({ open, onClose, order, products, userToken, onRatin
       // Update userRatings
       const myRating = prod.ratings.find((r: { user: string }) => r.user === order.userId);
       setUserRatings((prev) => ({ ...prev, [selectedProduct]: myRating }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError((err as Error).message);
     } finally {
       setRatingLoading(false);

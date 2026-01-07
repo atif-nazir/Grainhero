@@ -65,14 +65,22 @@ interface Alert {
   }
 }
 
+interface SystemStats {
+  overallHealth: number;
+  uptime: string;
+  activeUsers: number;
+  responseTime: number;
+  errorRate: number;
+}
+
 export default function SystemHealthPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
 
   // Fetch system stats from backend instead of using mock data
-  const [systemStats, setSystemStats] = useState<any | null>(null);
-  const [systemMetrics, setSystemMetrics] = useState<any[]>([]);
-  const [servers, setServers] = useState<any[]>([]);
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [systemMetrics, setSystemMetrics] = useState<SystemMetric[]>([]);
+  const [servers, setServers] = useState<ServerStatus[]>([]);
 
   useEffect(() => {
     const fetchSystemHealth = async () => {

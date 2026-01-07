@@ -49,7 +49,7 @@ export default function GrainAlertsPage() {
         const res = await fetch(`${backendUrl}/alerts/all-public`)
         if (res.ok) {
           const data = await res.json()
-          const mapped: GrainAlert[] = (data || []).map((a: any) => ({
+          const mapped: GrainAlert[] = (data || []).map((a: Record<string, unknown>) => ({
             _id: a._id,
             alert_id: a._id?.slice(-6) || 'AL',
             title: a.title || a.category || 'Alert',

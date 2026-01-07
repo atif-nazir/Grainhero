@@ -1,6 +1,21 @@
 "use client"
 
 import { useState } from "react"
+
+interface Tenant extends Record<string, unknown> {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  plan: string;
+  status: string;
+  users: number;
+  revenue: number;
+  location: string;
+  joinDate: string;
+  lastActivity: string;
+  subscriptionEnd: string;
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -183,7 +198,7 @@ export default function TenantManagementPage() {
     {
       key: "tenant",
       label: "Tenant",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
             <Building2 className="h-5 w-5 text-blue-600" />
@@ -198,7 +213,7 @@ export default function TenantManagementPage() {
     {
       key: "contact",
       label: "Contact",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div>
           <div className="flex items-center space-x-1 text-sm">
             <Mail className="h-3 w-3" />
@@ -214,7 +229,7 @@ export default function TenantManagementPage() {
     {
       key: "plan",
       label: "Plan",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div className="flex items-center space-x-2">
           <Crown className="h-4 w-4 text-yellow-600" />
           <Badge variant={row.plan === "Enterprise" ? "default" : "secondary"}>
@@ -226,7 +241,7 @@ export default function TenantManagementPage() {
     {
       key: "status",
       label: "Status",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div className="flex items-center space-x-2">
           {getStatusIcon(row.status)}
           <Badge variant={getStatusColor(row.status)}>
@@ -238,7 +253,7 @@ export default function TenantManagementPage() {
     {
       key: "metrics",
       label: "Metrics",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div className="text-sm">
           <div className="flex items-center space-x-1">
             <Users className="h-3 w-3" />
@@ -254,7 +269,7 @@ export default function TenantManagementPage() {
     {
       key: "location",
       label: "Location",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div className="flex items-center space-x-1 text-sm">
           <MapPin className="h-3 w-3" />
           <span>{row.location}</span>
@@ -264,7 +279,7 @@ export default function TenantManagementPage() {
     {
       key: "lastActivity",
       label: "Last Activity",
-      render: (value: any, row: any) => (
+      render: (value: unknown, row: Tenant) => (
         <div className="text-sm text-muted-foreground">
           {row.lastActivity}
         </div>
@@ -272,25 +287,33 @@ export default function TenantManagementPage() {
     }
   ]
 
-  const actions = [
+  type LucideIconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
+  const actions: {
+    label: string;
+    icon?: LucideIconComponent;
+    onClick: (row: Tenant) => void;
+    variant: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+    show?: (row: Tenant) => boolean;
+  }[] = [
     {
       label: "View",
       icon: Eye,
-      onClick: (row: any) => console.log("View tenant:", row.id),
+      onClick: (row: Tenant) => console.log("View tenant:", row.id),
       variant: "outline" as const
     },
     {
       label: "Edit",
       icon: Edit,
-      onClick: (row: any) => console.log("Edit tenant:", row.id),
+      onClick: (row: Tenant) => console.log("Edit tenant:", row.id),
       variant: "outline" as const
     },
     {
       label: "Delete",
       icon: Trash2,
-      onClick: (row: any) => console.log("Delete tenant:", row.id),
+      onClick: (row: Tenant) => console.log("Delete tenant:", row.id),
       variant: "destructive" as const,
-      show: (row: any) => row.status !== "active"
+      show: (row: Tenant) => row.status !== "active"
     }
   ]
 
@@ -376,7 +399,7 @@ export default function TenantManagementPage() {
           </div>
 
           {/* Data Table */}
-          <DataTable
+          <DataTable<Tenant>
             title=""
             data={filteredTenants}
             columns={columns}

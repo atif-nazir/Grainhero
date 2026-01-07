@@ -8,24 +8,59 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { AlertTriangle, TrendingDown, TrendingUp, Brain } from "lucide-react"
 
+interface SpoilagePrediction {
+  _id: string;
+  batch_id: string | {
+    batch_id: string;
+  };
+  grain_factors?: {
+    grain_type: string;
+  };
+  grain_type?: string;
+  risk_score: number;
+  risk_level: string;
+  confidence_score: number;
+  prediction_details?: {
+    key_risk_factors: string[];
+  };
+  updated_at?: string;
+  created_at?: string;
+}
+
+interface MappedAnalysis {
+  id: string;
+  batchId: string;
+  grainType: string;
+  riskLevel: string;
+  riskScore: number;
+  factors: string[];
+  prediction: string;
+  confidence: number;
+  lastAnalysis: string;
+}
+
 export default function SpoilageAnalysisPage() {
-  const [batches, setBatches] = useState<any[]>([])
+  const [batches, setBatches] = useState<SpoilagePrediction[]>([])
   const [loading, setLoading] = useState(true)
 
   const mapped = useMemo(() => {
     return (batches || []).map((b) => {
       const riskScore = Math.round(b.risk_score || 0)
       const riskLevel = riskScore >= 70 ? 'High' : riskScore >= 40 ? 'Medium' : 'Low'
+      
+      // Handle batch_id which could be string or object
+      const batchIdValue = typeof b.batch_id === 'object' ? b.batch_id.batch_id : b.batch_id;
+      
       return {
         id: b._id,
-        batchId: b.batch_id?.batch_id || b.batch_id || 'Unknown',
+        batchId: batchIdValue || 'Unknown',
         grainType: b.grain_factors?.grain_type || b.grain_type || 'Rice',
         riskLevel,
         riskScore,
         factors: b.prediction_details?.key_risk_factors || [],
         prediction: b.risk_level === 'critical' ? 'Immediate action required' : b.risk_level === 'high' ? 'Monitor closely' : 'Stable',
         confidence: Math.round((b.confidence_score || 0) * 100),
-        lastAnalysis: new Date(b.updated_at || b.created_at).toLocaleString()
+        lastAnalysis: new Date(b.updated_at || b.created_at || new Date()).toLocaleString()
       }
     })
   }, [batches])
@@ -173,7 +208,7 @@ export default function SpoilageAnalysisPage() {
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Contributing Factors:</h4>
                   <div className="flex flex-wrap gap-2">
-                    {analysis.factors.map((factor, index) => (
+                    {analysis.factors.map((factor: string, index: number) => (
                       <Badge key={index} variant="outline" className="text-xs">
                         {factor}
                       </Badge>

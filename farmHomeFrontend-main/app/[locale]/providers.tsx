@@ -176,14 +176,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setIsLoading(false)
 
     // Listen for user updates from other components (e.g., PlansPage)
-    const handleUserUpdate = (e: any) => {
-      if (e.detail) {
-        setUser(e.detail);
+    const handleUserUpdate = (e: Event) => {
+      if ('detail' in e && e.detail) {
+        setUser(e.detail as User);
       }
     };
-    window.addEventListener('farm-home-user-updated', handleUserUpdate);
+    window.addEventListener('farm-home-user-updated', handleUserUpdate as EventListener);
     return () => {
-      window.removeEventListener('farm-home-user-updated', handleUserUpdate);
+      window.removeEventListener('farm-home-user-updated', handleUserUpdate as EventListener);
     };
   }, [])
 

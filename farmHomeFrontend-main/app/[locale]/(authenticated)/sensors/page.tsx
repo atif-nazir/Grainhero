@@ -53,7 +53,7 @@ export default function SensorsPage() {
     timestamp: number
   }>(null)
   const [siloId, setSiloId] = useState<string>('')
-  const backendUrl = (typeof window !== 'undefined' ? (window as any).__BACKEND_URL : undefined) || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  const backendUrl = (typeof window !== 'undefined' ? (window as typeof window & Record<string, unknown>).__BACKEND_URL : undefined) || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
 
   // Load sensors from backend
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function SensorsPage() {
         if (!mounted) return
         if (res.ok) {
           const data = await res.json()
-          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: Record<string, unknown>) => ({
             _id: s._id,
             device_id: s.device_id || s._id,
             device_name: s.device_name,

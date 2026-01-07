@@ -6,30 +6,30 @@ import { Badge } from "@/components/ui/badge"
 import { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface Column {
+interface Column<T extends Record<string, unknown> = Record<string, unknown>> {
   key: string
   label: string
-  render?: (value: any, row: any) => React.ReactNode
+  render?: (value: unknown, row: T) => React.ReactNode
   className?: string
 }
 
-interface DataTableProps {
+interface DataTableProps<T extends Record<string, unknown> = Record<string, unknown>> {
   title: string
   description?: string
-  data: any[]
-  columns: Column[]
+  data: T[]
+  columns: Column<T>[]
   actions?: {
     label: string
     icon?: LucideIcon
-    onClick: (row: any) => void
+    onClick: (row: T) => void
     variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
-    show?: (row: any) => boolean
+    show?: (row: T) => boolean
   }[]
   emptyMessage?: string
   className?: string
 }
 
-export function DataTable({ 
+export function DataTable<T extends Record<string, unknown> = Record<string, unknown>>({ 
   title,
   description,
   data,
@@ -37,7 +37,7 @@ export function DataTable({
   actions = [],
   emptyMessage = "No data available",
   className 
-}: DataTableProps) {
+}: DataTableProps<T>) {
   if (data.length === 0) {
     return (
       <Card className={cn("", className)}>
@@ -72,7 +72,7 @@ export function DataTable({
                       <span>
                         {typeof row[column.key] === 'object' && row[column.key] !== null
                           ? JSON.stringify(row[column.key])
-                          : row[column.key]
+                          : String(row[column.key] ?? '')
                         }
                       </span>
                     }

@@ -14,6 +14,14 @@ import { Search, X, CalendarIcon, Plus, Save, Download, Share } from "lucide-rea
 import { useLanguage } from "@/app/[locale]/providers"
 import { format } from "date-fns"
 
+interface SearchResult {
+  id: string
+  name: string
+  type: string
+  status: string
+  [key: string]: unknown
+}
+
 interface SearchFilter {
   id: string
   field: string
@@ -111,7 +119,7 @@ const savedSearches: SavedSearch[] = [
 export function AdvancedSearch() {
   const [activeModule, setActiveModule] = useState("animals")
   const [filters, setFilters] = useState<SearchFilter[]>([])
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [searchName, setSearchName] = useState("")
