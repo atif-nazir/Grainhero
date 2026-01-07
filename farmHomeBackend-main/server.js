@@ -81,22 +81,24 @@ db.once("open", () => {
   } catch (error) {
     console.error("Failed to start environmental data service:", error);
   }
-  
-  try {
-    firebaseRealtimeService.start(io);
-    console.log("Firebase realtime service started");
-  } catch (error) {
-    console.error("Failed to start Firebase realtime service:", error.message);
-  }
-  
-  // Start data aggregation service (30s raw → 5min averages)
+
+  // Start limit warning scheduler
   try {
     const {
       startLimitWarningScheduler,
     } = require("./services/limitWarningService");
     startLimitWarningScheduler();
+    console.log("Limit warning scheduler started");
   } catch (error) {
     console.error("Failed to start limit warning scheduler:", error);
+  }
+
+  // Start Firebase realtime service
+  try {
+    firebaseRealtimeService.start(io);
+    console.log("Firebase realtime service started");
+  } catch (error) {
+    console.error("Failed to start Firebase realtime service:", error.message);
   }
 });
 
@@ -243,3 +245,8 @@ wss.on("connection", async function connection(ws, req) {
     alertChangeStream.close();
   });
 });
+
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () =>
+  console.log(`Server & WebSocket running on port ${PORT}`)
+);

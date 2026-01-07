@@ -100,12 +100,29 @@ function start(io) {
 
 function stop() {
   listeners.forEach(({ ref, cb }) => {
-    try { ref.off('value', cb) } catch {}
-    try { ref.off('child_added', cb) } catch {}
-    try { ref.off('child_changed', cb) } catch {}
+    try { ref.off('value', cb) } catch { }
+    try { ref.off('child_added', cb) } catch { }
+    try { ref.off('child_changed', cb) } catch { }
   })
   listeners = []
   subscribed.clear()
 }
 
-module.exports = { start, stop }
+async function writeControlState(deviceId, state) {
+  if (!initialized) init()
+  try {
+    const ref = database.ref(`sensor_data/${deviceId}/latest`)
+    await ref.update({
+      humanRequestedFan: !!state.human_requested_fan,
+      mlRequestedFan: !!state.ml_requested_fan,
+      targetFanSpeed: state.target_fan_speed || 0,
+      mlDecision: state.ml_decision || 'idle',
+      lastControlUpdate: admin.database.ServerValue.TIMESTAMP
+    })
+    console.log(`✅ Firebase control state updated for ${deviceId}`)
+  } catch (err) {
+    console.error(`❌ Firebase write error for ${deviceId}:`, err.message)
+  }
+}
+
+module.exports = { start, stop, writeControlState }

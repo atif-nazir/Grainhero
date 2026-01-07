@@ -6,6 +6,8 @@ const SensorDevice = require('../models/SensorDevice');
 const SensorReading = require('../models/SensorReading');
 const mqtt = require('mqtt'); // Added for MQTT support
 const Silo = require('../models/Silo');
+const firebaseRealtimeService = require('../services/firebaseRealtimeService');
+const fanControlService = require('../services/fanControlService');
 const admin = require('firebase-admin');
 let firebaseDb = null;
 function ensureFirebase() {
@@ -36,7 +38,7 @@ try {
       username: process.env.MQTT_USERNAME || 'admin',
       password: process.env.MQTT_PASSWORD || 'password'
     });
-    
+
     mqttClient.on('connect', () => {
       console.log('✅ Connected to MQTT broker');
       // Subscribe to sensor data topics
@@ -44,7 +46,7 @@ try {
       mqttClient.subscribe('grainhero/sensors/+/status');
       mqttClient.subscribe('grainhero/actuators/+/feedback');
     });
-    
+
     mqttClient.on('error', (error) => {
       console.error('MQTT connection error:', error);
     });
@@ -63,26 +65,26 @@ router.get('/devices', [
 ], async (req, res) => {
   try {
     const { type, category, status, location } = req.query;
-    
+
     // First try to get real devices from database
     let devices = [];
     try {
       const filter = { admin_id: req.user.admin_id };
-      
+
       if (type) filter.device_type = type;
       if (category) filter.category = category;
       if (status) filter.connection_status = status;
       // location filter not supported on SensorDevice
-      
+
       devices = await SensorDevice.find(filter)
         .populate('silo_id', 'name silo_id')
         .sort({ created_at: -1 });
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
-    
+
     console.log(`📡 Serving ${devices.length} IoT devices`);
-    
+
     res.json({
       devices,
       total: devices.length,
@@ -103,7 +105,7 @@ router.get('/devices/:id', [
 ], async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Try to get real device from database first
     let device = null;
     try {
@@ -114,11 +116,11 @@ router.get('/devices/:id', [
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
-    
+
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
     }
-    
+
     res.json({ device });
   } catch (error) {
     console.error('Get device error:', error);
@@ -138,7 +140,7 @@ router.post('/devices/:id/control', [
   try {
     const { id } = req.params;
     const { action, value, duration } = req.body;
-    
+
     // Try to get real device from database first
     let device = null;
     try {
@@ -149,16 +151,16 @@ router.post('/devices/:id/control', [
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
-    
+
     // If not found in database, check mock devices
     if (!device) {
       device = mockDevices.find(d => d._id === id);
     }
-    
+
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
     }
-    
+
     let guardrailBlocked = false;
     let guardrailReason = '';
     try {
@@ -172,29 +174,32 @@ router.post('/devices/:id/control', [
           guardrailReason = 'unsafe_conditions';
         }
       }
-    } catch {}
+    } catch { }
     if (guardrailBlocked) {
       return res.status(200).json({ status: 'blocked', reason: guardrailReason });
     }
-    // Handle real device control via MQTT
+    // Handle real device control via MQTT (REQUEST ONLY - authority is on ESP32 state machine)
     if (device.device_id && mqttClient && mqttClient.connected) {
       const controlTopic = `grainhero/actuators/${device.device_id}/control`;
       const controlMessage = {
-        action,
+        action, // Arduino still expects these keys for backward compatibility
         value,
         duration,
         timestamp: new Date().toISOString(),
-        user: req.user._id
+        user: req.user._id,
+        // New explicit state requests
+        human_requested_fan: action === 'turn_on' ? true : (action === 'turn_off' ? false : undefined),
+        target_fan_speed: value !== undefined ? value : (action === 'turn_on' ? 60 : 0)
       };
 
       mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
-      console.log(`📡 MQTT command sent to ${controlTopic}`);
+      console.log(`📡 MQTT request sent to ${controlTopic} - centralized control active`);
     }
-    
+
     let newStatus = device.status;
     let newValue = device.current_value;
     let message = '';
-    
+
     if (device.device_type === 'actuator') {
       switch (action) {
         case 'turn_on':
@@ -215,18 +220,36 @@ router.post('/devices/:id/control', [
         default:
           return res.status(400).json({ error: 'Invalid action' });
       }
-      
+
       try {
         device.status = newStatus;
         device.current_value = newValue;
         device.last_activity = new Date();
+
+        // Update centralized state variables
+        if (action === 'turn_on') {
+          device.human_requested_fan = true;
+          device.target_fan_speed = value || 60;
+        } else if (action === 'turn_off') {
+          device.human_requested_fan = false;
+          device.target_fan_speed = 0;
+        } else if (action === 'set_value') {
+          device.human_requested_fan = value > 0;
+          device.target_fan_speed = value;
+        }
+
         await device.save();
+
+        // Sync with Firebase for ESP32 polling
+        if (device.device_id) {
+          await firebaseRealtimeService.writeControlState(device.device_id, device);
+        }
       } catch (saveError) {
         console.warn('Failed to save device state:', saveError.message);
       }
-      
+
       console.log(`🎛️ Device control: ${device.device_name} - ${action} - ${newValue}`);
-      
+
       res.json({
         message,
         device: {
@@ -260,7 +283,7 @@ router.get('/silos/:siloId/telemetry', [
     let device = null;
     try {
       device = await SensorDevice.findOne({ device_id: siloId, admin_id: req.user.admin_id });
-    } catch {}
+    } catch { }
     if (!device) {
       const silo = await Silo.findById(siloId);
       if (!silo) {
@@ -316,7 +339,7 @@ router.post('/devices/:id/readings', [
   try {
     const { id } = req.params;
     const { hours = 24 } = req.body;
-    
+
     // Try to get real device from database first
     let device = null;
     try {
@@ -327,11 +350,11 @@ router.post('/devices/:id/readings', [
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
-    
+
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
     }
-    
+
     // Try to get real readings from database
     let readings = [];
     try {
@@ -343,7 +366,7 @@ router.post('/devices/:id/readings', [
     } catch (dbError) {
       console.warn('Database readings query failed:', dbError.message);
     }
-    
+
     res.json({
       device_id: device.device_id,
       device_name: device.device_name,
@@ -368,13 +391,13 @@ router.post('/bulk-control', [
 ], async (req, res) => {
   try {
     const { devices, action, value } = req.body;
-    
+
     if (!devices || !Array.isArray(devices)) {
       return res.status(400).json({ error: 'Devices array is required' });
     }
-    
+
     const results = [];
-    
+
     for (const deviceId of devices) {
       // Try to get real device from database first
       let device = null;
@@ -386,34 +409,46 @@ router.post('/bulk-control', [
       } catch (dbError) {
         console.warn('Database query failed:', dbError.message);
       }
-      
+
       // If not found in database, check mock devices
       if (!device) {
         device = mockDevices.find(d => d._id === deviceId);
       }
-      
+
       if (device && device.type === 'actuator') {
-        // Handle real device control via MQTT
+        // Handle real device control via MQTT (REQUEST ONLY)
         if (device.device_id && mqttClient && mqttClient.connected) {
           const controlTopic = `grainhero/actuators/${device.device_id}/control`;
           const controlMessage = {
             action,
             value,
             timestamp: new Date().toISOString(),
-            user: req.user._id
+            user: req.user._id,
+            human_requested_fan: action === 'turn_on' ? true : (action === 'turn_off' ? false : undefined),
+            target_fan_speed: value !== undefined ? value : (action === 'turn_on' ? 60 : 0)
           };
-          
+
           mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
-          console.log(`📡 MQTT command sent to ${controlTopic}`);
+          console.log(`📡 MQTT request sent to ${controlTopic}`);
         }
-        
+
         // Update device status for real devices
         if (device._id && device.constructor.modelName) {
           try {
             device.status = action === 'turn_on' ? 'online' : 'offline';
             device.current_value = action === 'turn_on' ? (value || 100) : 0;
             device.last_activity = new Date();
+
+            // Update centralized state variables
+            device.human_requested_fan = action === 'turn_on';
+            device.target_fan_speed = action === 'turn_on' ? (value || 60) : 0;
+
             await device.save();
+
+            // Sync with Firebase
+            if (device.device_id) {
+              await firebaseRealtimeService.writeControlState(device.device_id, device);
+            }
           } catch (saveError) {
             console.warn('Failed to save device state:', saveError.message);
           }
@@ -422,8 +457,10 @@ router.post('/bulk-control', [
           device.status = action === 'turn_on' ? 'online' : 'offline';
           device.current_value = action === 'turn_on' ? (value || 100) : 0;
           device.last_activity = new Date();
+          device.human_requested_fan = action === 'turn_on';
+          device.target_fan_speed = action === 'turn_on' ? (value || 60) : 0;
         }
-        
+
         results.push({
           device_id: device.device_id,
           name: device.name,
@@ -439,9 +476,9 @@ router.post('/bulk-control', [
         });
       }
     }
-    
+
     console.log(`🎛️ Bulk control: ${action} on ${devices.length} devices`);
-    
+
     res.json({
       message: `Bulk ${action} completed`,
       results,
@@ -469,10 +506,10 @@ router.get('/status', [
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
-    
+
     const sensors = devices.filter(d => d.device_type === 'sensor');
     const actuators = devices.filter(d => d.device_type === 'actuator');
-    
+
     const status = {
       total_devices: devices.length,
       sensors: {
@@ -489,7 +526,7 @@ router.get('/status', [
       mqtt_connected: mqttClient ? mqttClient.connected : false,
       last_updated: new Date()
     };
-    
+
     res.json(status);
   } catch (error) {
     console.error('Get IoT status error:', error);
@@ -507,16 +544,16 @@ router.post('/emergency-shutdown', [
     // Try to get real actuators from database
     let actuators = [];
     try {
-      actuators = await SensorDevice.find({ 
+      actuators = await SensorDevice.find({
         admin_id: req.user.admin_id,
         device_type: 'actuator'
       });
     } catch (dbError) {
       console.warn('Database query failed:', dbError.message);
     }
-    
+
     let shutdownCount = 0;
-    
+
     for (const actuator of actuators) {
       // Handle real device control via MQTT
       if (actuator.device_id && mqttClient && mqttClient.connected) {
@@ -527,25 +564,31 @@ router.post('/emergency-shutdown', [
           user: req.user._id,
           emergency: true
         };
-        
+
         mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
         console.log(`📡 Emergency shutdown command sent to ${controlTopic}`);
       }
-      
+
       try {
         actuator.status = 'inactive';
         actuator.current_value = 0;
         actuator.last_activity = new Date();
+
+        // Clear centralized state requests
+        actuator.human_requested_fan = false;
+        actuator.ml_requested_fan = false;
+        actuator.target_fan_speed = 0;
+
         await actuator.save();
       } catch (saveError) {
         console.warn('Failed to save actuator state:', saveError.message);
       }
-      
+
       shutdownCount++;
     }
-    
+
     console.log(`🚨 Emergency shutdown: ${shutdownCount} actuators turned off`);
-    
+
     res.json({
       message: 'Emergency shutdown completed',
       devices_shutdown: shutdownCount,
@@ -562,13 +605,13 @@ router.post('/emergency-shutdown', [
 router.post('/mqtt-ingest', async (req, res) => {
   try {
     const { device_id, readings, timestamp } = req.body;
-    
+
     // Find the device in database
     const device = await SensorDevice.findOne({ device_id });
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
     }
-    
+
     // Normalize readings: tvoc -> voc, include actuator fields
     const normalized = { ...(readings || {}) };
     if (normalized.tvoc !== undefined && normalized.voc === undefined) {
@@ -582,7 +625,7 @@ router.post('/mqtt-ingest', async (req, res) => {
       const val = typeof normalized.servo_state === 'boolean' ? (normalized.servo_state ? 1 : 0) : normalized.servo_state;
       normalized.servo_state = { value: val, unit: 'boolean' };
     }
-    
+
     // Create sensor reading
     const sensorReading = new SensorReading({
       device_id: device._id,
@@ -600,15 +643,15 @@ router.post('/mqtt-ingest', async (req, res) => {
         signal_strength: device.signal_strength
       }
     });
-    
+
     await sensorReading.save();
-    
+
     // Update device heartbeat
     await device.updateHeartbeat();
     await device.incrementReadingCount();
-    
+
     console.log(`📥 MQTT data ingested for device ${device_id}`);
-    
+
     res.status(201).json({
       message: 'Data ingested successfully',
       reading_id: sensorReading._id
@@ -624,19 +667,19 @@ if (mqttClient) {
   mqttClient.on('message', async (topic, message) => {
     try {
       console.log(`📥 MQTT message received on ${topic}`);
-      
+
       // Handle sensor readings
       if (topic.endsWith('/readings')) {
         const deviceId = topic.split('/')[2];
         const payload = JSON.parse(message.toString());
-        
+
         // Find the device in database
         const device = await SensorDevice.findOne({ device_id: deviceId });
         if (!device) {
           console.warn(`Device ${deviceId} not found in database`);
           return;
         }
-        
+
         // Create sensor reading
         const sensorReading = new SensorReading({
           device_id: device._id,
@@ -655,25 +698,58 @@ if (mqttClient) {
           },
           raw_payload: payload
         });
-        
+
         await sensorReading.save();
-        
+
         // Update device heartbeat and stats
         await device.updateHeartbeat();
         await device.incrementReadingCount();
-        
+
+        // Automated Fan Control Logic (IoT Spec)
+        if (device.device_type === 'sensor' && device.silo_id) {
+          try {
+            const recommendation = fanControlService.calculateFanRecommendation(sensorReading);
+
+            if (recommendation.should_change) {
+              console.log(`🤖 ML Recommendation for Silo ${device.silo_id}: ${recommendation.recommendation} (${recommendation.reason})`);
+
+              // Find associated fan for this silo
+              const Actuator = require('../models/Actuator');
+              const fan = await Actuator.findOne({ silo_id: device.silo_id, actuator_type: 'fan' });
+
+              if (fan) {
+                if (recommendation.fan_state === 1) {
+                  await fan.startOperation('AI', 'ai_prediction', { reason: recommendation.reason });
+                } else {
+                  await fan.stopOperation();
+                }
+
+                // Sync with Firebase
+                if (fan.actuator_id) {
+                  await firebaseRealtimeService.writeControlState(fan.actuator_id, fan);
+                }
+
+                // Internal state sync
+                fanControlService.updateFanState(device.silo_id, recommendation.fan_state, recommendation.reason);
+              }
+            }
+          } catch (fanError) {
+            console.error('Fan recommendation error:', fanError.message);
+          }
+        }
+
         console.log(`📥 Sensor data saved for device ${deviceId}`);
       }
-      
+
       // Handle device status updates
       else if (topic.endsWith('/status')) {
         const deviceId = topic.split('/')[2];
         const payload = JSON.parse(message.toString());
-        
+
         // Update device status
         await SensorDevice.updateOne(
           { device_id: deviceId },
-          { 
+          {
             status: payload.status || 'unknown',
             health_metrics: {
               ...payload.health_metrics,
@@ -681,25 +757,25 @@ if (mqttClient) {
             }
           }
         );
-        
+
         console.log(`🔄 Device status updated for ${deviceId}`);
       }
-      
+
       // Handle actuator feedback
       else if (topic.endsWith('/feedback')) {
         const actuatorId = topic.split('/')[2];
         const payload = JSON.parse(message.toString());
-        
+
         // Update actuator status
         await SensorDevice.updateOne(
           { device_id: actuatorId },
-          { 
+          {
             status: payload.status || 'unknown',
             current_value: payload.current_value,
             last_activity: new Date()
           }
         );
-        
+
         console.log(`🔄 Actuator feedback received for ${actuatorId}`);
       }
     } catch (error) {

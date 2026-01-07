@@ -14,7 +14,7 @@ const actuatorSchema = new mongoose.Schema({
     required: [true, "Actuator name is required"],
     trim: true
   },
-  
+
   // Tenant and location
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -26,7 +26,7 @@ const actuatorSchema = new mongoose.Schema({
     ref: 'Silo',
     required: [true, "Silo ID is required"]
   },
-  
+
   // Device specifications
   actuator_type: {
     type: String,
@@ -40,7 +40,7 @@ const actuatorSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
-  
+
   // Current status
   status: {
     type: String,
@@ -55,7 +55,7 @@ const actuatorSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
+
   // Control settings
   control_mode: {
     type: String,
@@ -68,7 +68,13 @@ const actuatorSchema = new mongoose.Schema({
     max: 100,
     default: 0
   },
-  
+
+  // Centralized Control State (IoT Spec Alignment)
+  ml_requested_fan: { type: Boolean, default: false },
+  human_requested_fan: { type: Boolean, default: false },
+  target_fan_speed: { type: Number, min: 0, max: 100, default: 0 },
+  ml_decision: { type: String, default: 'idle' },
+
   // Thresholds for automatic control
   thresholds: {
     temperature: {
@@ -102,7 +108,7 @@ const actuatorSchema = new mongoose.Schema({
       critical_max: Number
     }
   },
-  
+
   // AI control settings
   ai_control: {
     enabled: {
@@ -122,7 +128,7 @@ const actuatorSchema = new mongoose.Schema({
       default: 0.8
     }
   },
-  
+
   // Scheduling
   schedule: {
     enabled: {
@@ -144,7 +150,7 @@ const actuatorSchema = new mongoose.Schema({
       max: 6 // 0 = Sunday, 6 = Saturday
     }]
   },
-  
+
   // Device health metrics
   health_metrics: {
     last_heartbeat: Date,
@@ -172,7 +178,7 @@ const actuatorSchema = new mongoose.Schema({
       default: 0
     }
   },
-  
+
   // Performance metrics
   performance_metrics: {
     energy_consumption: {
@@ -192,7 +198,7 @@ const actuatorSchema = new mongoose.Schema({
     last_maintenance: Date,
     next_maintenance_due: Date
   },
-  
+
   // Safety and limits
   safety_limits: {
     max_runtime_hours: {
@@ -208,7 +214,7 @@ const actuatorSchema = new mongoose.Schema({
       default: true
     }
   },
-  
+
   // Current operation context
   current_operation: {
     started_at: Date,
@@ -223,11 +229,11 @@ const actuatorSchema = new mongoose.Schema({
     target_conditions: mongoose.Schema.Types.Mixed,
     expected_duration_minutes: Number
   },
-  
+
   // Tags and metadata
   tags: [String],
   notes: String,
-  
+
   // Audit fields
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -238,16 +244,16 @@ const actuatorSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Soft delete
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes for better query performance
@@ -257,12 +263,12 @@ actuatorSchema.index({ control_mode: 1, is_enabled: 1 });
 actuatorSchema.index({ 'health_metrics.last_heartbeat': -1 });
 
 // Exclude deleted actuators by default
-actuatorSchema.pre(/^find/, function() {
+actuatorSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Virtual for operation status
-actuatorSchema.virtual('operation_status').get(function() {
+actuatorSchema.virtual('operation_status').get(function () {
   if (!this.is_enabled) return 'disabled';
   if (this.status === 'maintenance') return 'maintenance';
   if (this.status === 'error') return 'error';
@@ -272,14 +278,14 @@ actuatorSchema.virtual('operation_status').get(function() {
 });
 
 // Method to update heartbeat
-actuatorSchema.methods.updateHeartbeat = function() {
+actuatorSchema.methods.updateHeartbeat = function () {
   this.health_metrics.last_heartbeat = new Date();
   this.health_metrics.uptime_percentage = Math.min(100, this.health_metrics.uptime_percentage + 0.1);
   return this.save();
 };
 
 // Method to record error
-actuatorSchema.methods.recordError = function(errorMessage, errorCode = 'UNKNOWN') {
+actuatorSchema.methods.recordError = function (errorMessage, errorCode = 'UNKNOWN') {
   this.health_metrics.error_count += 1;
   this.health_metrics.last_error = {
     message: errorMessage,
@@ -290,9 +296,23 @@ actuatorSchema.methods.recordError = function(errorMessage, errorCode = 'UNKNOWN
   return this.save();
 };
 
-// Method to start operation
-actuatorSchema.methods.startOperation = function(triggeredBy, triggerType, targetConditions = {}) {
-  this.is_on = true;
+// Method to start operation (REQUEST ONLY - authority on hardware)
+actuatorSchema.methods.startOperation = function (triggeredBy, triggerType, targetConditions = {}) {
+  this.is_on = true; // This represents current local intention
+
+  // Set centralized state variables
+  if (triggeredBy === 'AI') {
+    this.ml_requested_fan = true;
+    this.ml_decision = 'fan_on';
+  } else {
+    this.human_requested_fan = true;
+  }
+
+  if (this.power_level === 0) {
+    this.power_level = 60; // Default requested speed
+  }
+  this.target_fan_speed = this.power_level;
+
   this.current_operation = {
     started_at: new Date(),
     triggered_by: triggeredBy,
@@ -303,62 +323,69 @@ actuatorSchema.methods.startOperation = function(triggeredBy, triggerType, targe
   return this.save();
 };
 
-// Method to stop operation
-actuatorSchema.methods.stopOperation = function() {
+// Method to stop operation (REQUEST ONLY)
+actuatorSchema.methods.stopOperation = function () {
   if (this.current_operation?.started_at) {
     const runtimeHours = (new Date() - this.current_operation.started_at) / (1000 * 60 * 60);
     this.health_metrics.total_runtime_hours += runtimeHours;
   }
-  
+
   this.is_on = false;
   this.current_operation = null;
+
+  // Clear centralized state requests
+  this.ml_requested_fan = false;
+  this.human_requested_fan = false;
+  this.target_fan_speed = 0;
+  this.ml_decision = 'idle';
+
   return this.save();
 };
 
 // Method to check if maintenance is due
-actuatorSchema.methods.isMaintenanceDue = function() {
+actuatorSchema.methods.isMaintenanceDue = function () {
   if (!this.performance_metrics.last_maintenance) return true;
-  
+
   const daysSinceMaintenance = (new Date() - this.performance_metrics.last_maintenance) / (1000 * 60 * 60 * 24);
   return daysSinceMaintenance >= this.performance_metrics.maintenance_interval_days;
 };
 
 // Method to check if actuator should be triggered based on sensor data
-actuatorSchema.methods.shouldTrigger = function(sensorReading, riskScore = 0) {
+actuatorSchema.methods.shouldTrigger = function (sensorReading, riskScore = 0) {
   if (!this.is_enabled || this.status !== 'active') return false;
-  
+
   // Check AI control
   if (this.ai_control.enabled && riskScore >= this.ai_control.risk_score_threshold) {
     return true;
   }
-  
+
   // Check threshold-based triggers
   const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
-  
+
   for (const type of sensorTypes) {
     const value = sensorReading[type]?.value;
     const threshold = this.thresholds[type];
-    
+
     if (value !== undefined && threshold) {
       if ((threshold.critical_min !== undefined && value < threshold.critical_min) ||
-          (threshold.critical_max !== undefined && value > threshold.critical_max)) {
+        (threshold.critical_max !== undefined && value > threshold.critical_max)) {
         return true;
       }
     }
   }
-  
+
   return false;
 };
 
 // Method to get recommended action based on sensor data
-actuatorSchema.methods.getRecommendedAction = function(sensorReading) {
+actuatorSchema.methods.getRecommendedAction = function (sensorReading) {
   const actions = [];
   const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
-  
+
   for (const type of sensorTypes) {
     const value = sensorReading[type]?.value;
     const threshold = this.thresholds[type];
-    
+
     if (value !== undefined && threshold) {
       if (threshold.critical_max !== undefined && value > threshold.critical_max) {
         actions.push({
@@ -391,7 +418,7 @@ actuatorSchema.methods.getRecommendedAction = function(sensorReading) {
       }
     }
   }
-  
+
   return actions;
 };
 
