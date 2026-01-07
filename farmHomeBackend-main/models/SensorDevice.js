@@ -265,7 +265,6 @@ const sensorDeviceSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 sensorDeviceSchema.index({ admin_id: 1, status: 1 });
-sensorDeviceSchema.index({ device_id: 1 });
 sensorDeviceSchema.index({ silo_id: 1 });
 sensorDeviceSchema.index({ status: 1 });
 sensorDeviceSchema.index({ 'health_metrics.last_heartbeat': 1 });

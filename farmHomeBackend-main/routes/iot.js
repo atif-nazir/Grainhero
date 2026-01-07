@@ -34,9 +34,18 @@ let mqttClient = null;
 try {
   // Only initialize if MQTT broker is configured
   if (process.env.MQTT_BROKER_URL) {
-    mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
+    let brokerUrl = process.env.MQTT_BROKER_URL;
+    if (!brokerUrl.includes('://')) {
+      const port = process.env.MQTT_PORT || '1883';
+      brokerUrl = `mqtt://${brokerUrl}${brokerUrl.includes(':') ? '' : `:${port}`}`;
+    }
+
+    console.log(`📡 Connecting to MQTT broker at: ${brokerUrl}`);
+
+    mqttClient = mqtt.connect(brokerUrl, {
       username: process.env.MQTT_USERNAME || 'admin',
-      password: process.env.MQTT_PASSWORD || 'password'
+      password: process.env.MQTT_PASSWORD || 'password',
+      reconnectPeriod: 5000
     });
 
     mqttClient.on('connect', () => {

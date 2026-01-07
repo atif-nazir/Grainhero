@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const http = require("http");
@@ -43,7 +44,6 @@ const environmentalDataService = require("./services/environmentalDataService");
 const firebaseRealtimeService = require("./services/firebaseRealtimeService");
 
 const cors = require("cors");
-require("dotenv").config();
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsdoc = require("swagger-jsdoc");
@@ -250,7 +250,7 @@ wss.on("connection", async function connection(ws, req) {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
 server.listen(PORT, () =>
   console.log(`Server & WebSocket running on port ${PORT}`)
 );
