@@ -14,7 +14,7 @@ class AISpoilageService extends EventEmitter {
     constructor() {
         super();
         this.modelPath = path.join(__dirname, '../ml/smartbin_model.pkl');
-        this.smartbinScript = path.join(__dirname, '../ml/smartbin_integration.py');
+        this.smartbinScript = path.join(__dirname, '../ml/smartbin_predict.py');
         this.pythonScript = path.join(__dirname, '../ml/spoilage_predictor.py');
         this.isModelLoaded = false;
         this.predictionQueue = [];
@@ -108,6 +108,7 @@ class AISpoilageService extends EventEmitter {
 
             // Prepare features for ML model
             const features = this.prepareFeatures(environmentalData, batch);
+            console.log("ML FEATURES SENT:", features);
 
             // Get prediction from ML model
             let predictionResult;

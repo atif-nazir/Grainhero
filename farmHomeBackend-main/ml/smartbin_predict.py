@@ -5,6 +5,7 @@ import sys
 import os
 from datetime import datetime
 
+
 def predict_spoilage(input_data):
     """SmartBin Rice Spoilage Prediction"""
     try:
@@ -29,6 +30,21 @@ def predict_spoilage(input_data):
         # Reshape for prediction
         feature_array = np.array(features).reshape(1, -1)
         
+        feature_array[0][0] = max(0, min(feature_array[0][0], 60))    # temperature (°C)
+        feature_array[0][1] = max(0, min(feature_array[0][1], 100))   # humidity (%)
+        feature_array[0][7] = max(5, min(feature_array[0][7], 30))    # grain moisture (%)
+        feature_array[0][8] = max(0, min(feature_array[0][8], 300))   # rainfall (mm)
+            
+        
+        # ================= SAFETY GUARDRAILS =================
+# Feature index mapping:
+# 0: temperature, 1: humidity, 2: storage_days,
+# 3: airflow, 4: dew_point, 5: ambient_light,
+# 6: pest_presence, 7: grain_moisture, 8: rainfall
+
+  
+# =====================================================
+
         # Get prediction
         prediction = model.predict(feature_array)[0]
         
