@@ -872,4 +872,6 @@ export const languages = {
 }
 
 export type LanguageCode = keyof typeof languages
-export type TranslationKey = keyof typeof languages.en.translations | `Sidebar.${keyof typeof languages.en.translations.Sidebar}`;
+export type TranslationKey = {
+  [K in keyof typeof languages.en.translations]: K extends string ? K : never;
+}[keyof typeof languages.en.translations];
