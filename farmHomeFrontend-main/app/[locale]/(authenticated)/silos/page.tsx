@@ -20,6 +20,7 @@ interface Silo {
   capacity_kg: number
   current_occupancy_kg?: number
   status?: string
+  warehouse_id?: string
   location?: {
     description?: string
     coordinates?: {
@@ -91,10 +92,11 @@ export default function SilosPage() {
     try {
       const res = await api.get(`/api/warehouses`)
       if (res.ok && Array.isArray(res.data)) {
-        setWarehouses(res.data)
+        const warehouseData = res.data as { _id: string; warehouse_id?: string; name?: string }[];
+        setWarehouses(warehouseData)
         // default to single warehouse if manager/admin has only one
-        if (res.data.length === 1) {
-          setFormData(prev => ({ ...prev, warehouse_id: res.data[0]._id }))
+        if (warehouseData.length === 1) {
+          setFormData(prev => ({ ...prev, warehouse_id: warehouseData[0]._id }))
         }
       } else {
         console.error('Failed to fetch warehouses:', res.error)
@@ -134,15 +136,31 @@ export default function SilosPage() {
         return
       }
 
+      interface SiloApiResponse {
+        silo: Silo;
+        createdWarehouse?: {
+          _id: string;
+          warehouse_id?: string;
+          name?: string;
+        };
+        error?: string;
+      }
+      
+      interface ErrorResponse {
+        error?: string;
+      }
+      
       const res = await api.post('/api/silos', dataToSend)
       console.log('API Response:', res)
 
       if (res.ok && res.data) {
-        const created = res.data.silo
+        const response = res.data as SiloApiResponse;
+        const created = response.silo;
+        
         // If server auto-created a warehouse, refresh warehouse list so we can show its friendly ID
-        if (res.data.createdWarehouse) {
+        if (response.createdWarehouse) {
           await fetchWarehouses()
-          const w = res.data.createdWarehouse
+          const w = response.createdWarehouse
           toast.success(`Silo created: ${created.silo_id} in Warehouse: ${w.warehouse_id} (${w.name})`)
         } else {
           // attempt to resolve warehouse friendly id from cached warehouses list
@@ -155,9 +173,9 @@ export default function SilosPage() {
         await fetchSilos()
       } else {
         console.error('API Error:', res.error)
-        // If server returned validation details, show them
-        if (res.data && res.data.error) {
-          toast.error(`Failed to create silo: ${res.data.error}`)
+        const errorResponse = res.data as ErrorResponse;
+        if (errorResponse && errorResponse.error) {
+          toast.error(`Failed to create silo: ${errorResponse.error}`)
         } else {
           toast.error(`Failed to create silo: ${res.error || 'Unknown error'}`)
         }
@@ -214,6 +232,7 @@ export default function SilosPage() {
     setFormData({
       silo_id: '',
       name: '',
+      warehouse_id: '',
       capacity_kg: '',
       location: {
         description: '',
@@ -226,16 +245,18 @@ export default function SilosPage() {
 
   const openEditDialog = (silo: Silo) => {
     setSelectedSilo(silo)
-    setFormData({
+    setFormData(prev => ({
+      ...prev,
       silo_id: silo.silo_id,
       name: silo.name,
+      warehouse_id: silo.warehouse_id || '',
       capacity_kg: silo.capacity_kg.toString(),
       location: {
         description: silo.location?.description || '',
         address: silo.location?.address || ''
       },
       status: silo.status || 'active'
-    })
+    }))
     setIsEditDialogOpen(true)
   }
 

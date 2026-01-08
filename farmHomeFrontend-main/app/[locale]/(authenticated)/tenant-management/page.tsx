@@ -62,7 +62,7 @@ interface Alert {
 
 export default function TenantManagementPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  //const [filterStatus, setFilterStatus] = useState("all")
+  const [filterStatus, setFilterStatus] = useState("all")
 
   // Mock data - in real app, this would come from API
   const tenantStats = {
@@ -186,6 +186,7 @@ export default function TenantManagementPage() {
     }
   }
 
+  // Move filteredTenants after filterStatus state is declared
   const filteredTenants = tenants.filter(tenant => {
     const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          tenant.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -287,15 +288,7 @@ export default function TenantManagementPage() {
     }
   ]
 
-  type LucideIconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
-
-  const actions: {
-    label: string;
-    icon?: LucideIconComponent;
-    onClick: (row: Tenant) => void;
-    variant: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
-    show?: (row: Tenant) => boolean;
-  }[] = [
+  const actions = [
     {
       label: "View",
       icon: Eye,
@@ -315,7 +308,7 @@ export default function TenantManagementPage() {
       variant: "destructive" as const,
       show: (row: Tenant) => row.status !== "active"
     }
-  ]
+  ] as const
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -403,7 +396,7 @@ export default function TenantManagementPage() {
             title=""
             data={filteredTenants}
             columns={columns}
-            actions={actions}
+            actions={actions as unknown as { label: string; icon?: any; onClick: (row: Tenant) => void; variant?: any; show?: (row: Tenant) => boolean }[]}
             emptyMessage="No tenants found matching your criteria"
           />
         </CardContent>
