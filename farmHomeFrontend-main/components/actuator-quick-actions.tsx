@@ -155,13 +155,18 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
     try {
       setActionLoading((prev) => ({ ...prev, [shortcut]: true }));
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const requestBody: { action: string; value?: number } = { action };
+      if (value !== undefined) {
+        requestBody.value = value;
+      }
+      
       const resp = await fetch(`${backendUrl}/api/iot/devices/${device._id}/control`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(requestBody),
       });
       if (!resp.ok) throw new Error("Control command failed");
       const result = await resp.json();
