@@ -76,7 +76,7 @@ export async function POST(
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Failed to process environmental request',
+        error: 'Failed to process environmesntal request',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
