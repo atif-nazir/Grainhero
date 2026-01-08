@@ -214,9 +214,10 @@ export default function AnalyticsPage() {
           <Button
             size="sm"
             onClick={() => {
-              const config = (await import("@/config")).config
-              const url = `${config.backendUrl}/dashboard/export-report?type=summary&format=pdf`
-              window.open(url, "_blank", "noopener,noreferrer")
+              import("@/config").then(({ config }) => {
+                const url = `${config.backendUrl}/dashboard/export-report?type=summary&format=pdf`
+                window.open(url, "_blank", "noopener,noreferrer")
+              })
             }}
           >
             <Download className="mr-2 h-4 w-4" />
