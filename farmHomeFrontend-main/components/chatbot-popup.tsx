@@ -18,6 +18,15 @@ interface Message {
   role: 'user' | 'assistant'
 }
 
+interface PredictionData {
+  _id: string;
+  batch_id?: string | { batch_id: string };
+  grain_factors?: { grain_type: string };
+  grain_type?: string;
+  silo_id?: { name: string };
+  risk_level?: string;
+}
+
 interface GrainBatch {
   _id: string
   batch_id: string
@@ -58,15 +67,15 @@ export function ChatbotPopup() {
         })
         if (!res.ok) throw new Error("Failed to fetch grain batches")
         const data = await res.json()
-        const batches = (data.predictions || []).map((pred: Record<string, unknown>) => ({
+        const batches = (data.predictions || []).map((pred: PredictionData) => ({
           _id: pred._id,
-          batch_id: pred.batch_id?.batch_id || pred.batch_id || 'Unknown',
+          batch_id: typeof pred.batch_id === 'object' && pred.batch_id !== null ? pred.batch_id.batch_id : pred.batch_id || 'Unknown',
           grain_type: pred.grain_factors?.grain_type || pred.grain_type || 'Rice',
-          silo_name: pred.silo_id?.name || 'Unknown Silo',
+          silo_name: pred.silo_id && typeof pred.silo_id === 'object' && 'name' in pred.silo_id ? pred.silo_id.name : 'Unknown Silo',
           quantity: Math.floor(Math.random() * 5000) + 1000, // Mock quantity
           risk_level: pred.risk_level || 'low'
         }))
-        setGrainBatches(batches)
+        setGrainBatches(batches as GrainBatch[])
       } catch {
         setBatchError("Failed to fetch grain batches");
       } finally {
@@ -77,7 +86,7 @@ export function ChatbotPopup() {
   }, [isOpen])
 
   // Filtered grain batches for search
-  const filteredBatches = grainBatches.filter(batch => {
+  const filteredBatches: GrainBatch[] = grainBatches.filter((batch: GrainBatch) => {
     const search = batchSearch.toLowerCase()
     return (
       (batch.batch_id && batch.batch_id.toLowerCase().includes(search)) ||
@@ -209,7 +218,7 @@ export function ChatbotPopup() {
                   {filteredBatches.length === 0 ? (
                     <div className="text-gray-400 text-sm p-2">No grain batches found.</div>
                   ) : (
-                    filteredBatches.map(batch => (
+                    filteredBatches.map((batch: GrainBatch) => (
                       <div
                         key={batch._id}
                         className={`cursor-pointer px-3 py-2 hover:bg-green-50 ${selectedBatch && selectedBatch._id === batch._id ? "bg-green-100" : ""}`}
