@@ -96,32 +96,85 @@ export default function SettingsPage() {
       const userRes = await api.get('/api/user-management/users/profile')
 
       if (userRes.ok && userRes.data) {
-        const user: Record<string, unknown> = userRes.data.user || userRes.data
+        // Define type for user data from API response
+        interface UserData {
+          user?: {
+            organization_name?: string;
+            name?: string;
+            email?: string;
+            phone?: string;
+            business_type?: string;
+            address?: string;
+            city?: string;
+            country?: string;
+          };
+          organization_name?: string;
+          name?: string;
+          email?: string;
+          phone?: string;
+          business_type?: string;
+          address?: string;
+          city?: string;
+          country?: string;
+        }
+        
+        const userData: UserData = userRes.data;
+        const user = userData.user || userData;
+        
+        // Define type for tenant settings response
+        interface TenantSettingsResponse {
+          location?: {
+            address?: string;
+            city?: string;
+            country?: string;
+          };
+          notifications?: {
+            email_alerts: boolean;
+            sms_alerts: boolean;
+            push_notifications: boolean;
+            weekly_reports: boolean;
+            monthly_reports: boolean;
+          };
+          system?: {
+            auto_backup: boolean;
+            data_retention_days: number;
+            session_timeout_minutes: number;
+            two_factor_auth: boolean;
+          };
+          integrations?: {
+            weather_api: boolean;
+            market_prices: boolean;
+            government_data: boolean;
+          };
+        }
+        
         const tenantRes = await api.get('/api/tenant/settings').catch(() => null)
+        const tenantData: TenantSettingsResponse | null = tenantRes?.data || null;
+        
         setSettings({
           name: user.organization_name || user.name || '',
           email: user.email || '',
           phone: user.phone || '',
           business_type: user.business_type || 'farm',
           location: {
-            address: user.address || tenantRes?.data?.location?.address || '',
-            city: user.city || tenantRes?.data?.location?.city || '',
-            country: user.country || tenantRes?.data?.location?.country || 'Pakistan'
+            address: user.address || tenantData?.location?.address || '',
+            city: user.city || tenantData?.location?.city || '',
+            country: user.country || tenantData?.location?.country || 'Pakistan'
           },
-          notifications: (tenantRes && tenantRes.data && tenantRes.data.notifications) ? tenantRes.data.notifications : {
+          notifications: tenantData?.notifications || {
             email_alerts: true,
             sms_alerts: false,
             push_notifications: true,
             weekly_reports: true,
             monthly_reports: true
           },
-          system: (tenantRes && tenantRes.data && tenantRes.data.system) ? tenantRes.data.system : {
+          system: tenantData?.system || {
             auto_backup: true,
             data_retention_days: 365,
             session_timeout_minutes: 60,
             two_factor_auth: false
           },
-          integrations: (tenantRes && tenantRes.data && tenantRes.data.integrations) ? tenantRes.data.integrations : {
+          integrations: tenantData?.integrations || {
             weather_api: true,
             market_prices: true,
             government_data: false
