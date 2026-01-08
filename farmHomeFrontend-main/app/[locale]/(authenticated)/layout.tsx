@@ -65,7 +65,7 @@ export default function AuthenticatedLayout({
   return (
     <CartProvider>
       <div className="flex h-screen bg-gray-100">
-        <Sidebar user={user} />
+        <Sidebar />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </CartProvider>
