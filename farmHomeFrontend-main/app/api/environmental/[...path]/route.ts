@@ -4,15 +4,17 @@ import { NextRequest, NextResponse } from 'next/server'
  * Environmental Data API Proxy
  * Forwards requests to the backend environmental API
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
+export async function GET(request: NextRequest) {
   try {
+    // Extract path from the request URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split('/api/environmental/')[1];
+    const path = pathSegments ? pathSegments.split('/').filter(segment => segment) : [];
+
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
-    const path = params.path.join('/')
-    const searchParams = request.nextUrl.searchParams.toString()
-    const url = `${backendUrl}/api/environmental/${path}${searchParams ? `?${searchParams}` : ''}`
+    const joinedPath = path.join('/')
+    const searchParams = url.searchParams.toString()
+    const fullUrl = `${backendUrl}/api/environmental/${joinedPath}${searchParams ? `?${searchParams}` : ''}`
 
     // Forward Authorization header if present
     const authHeader = request.headers.get('authorization')
@@ -24,7 +26,7 @@ export async function GET(
       headers['Authorization'] = authHeader
     }
 
-    const response = await fetch(url, {
+    const response = await fetch(fullUrl, {
       method: 'GET',
       headers,
     })
@@ -44,13 +46,15 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
+export async function POST(request: NextRequest) {
   try {
+    // Extract path from the request URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split('/api/environmental/')[1];
+    const path = pathSegments ? pathSegments.split('/').filter(segment => segment) : [];
+
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
-    const path = params.path.join('/')
+    const joinedPath = path.join('/')
     const body = await request.json()
 
     // Forward Authorization header if present
@@ -63,7 +67,7 @@ export async function POST(
       headers['Authorization'] = authHeader
     }
 
-    const response = await fetch(`${backendUrl}/api/environmental/${path}`, {
+    const response = await fetch(`${backendUrl}/api/environmental/${joinedPath}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
