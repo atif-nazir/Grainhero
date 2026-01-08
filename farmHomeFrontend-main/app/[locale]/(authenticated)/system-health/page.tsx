@@ -11,7 +11,7 @@ import {
   Database, 
   Cpu, 
   HardDrive, 
-  Wifi, 
+  //Wifi, 
   AlertTriangle, 
   CheckCircle, 
   XCircle,
@@ -23,7 +23,7 @@ import {
   Globe,
   Zap
 } from "lucide-react"
-import { StatCard } from "@/components/dashboard/StatCard"
+//import { StatCard } from "@/components/dashboard/StatCard"
 import { AlertCard } from "@/components/dashboard/AlertCard"
 
 interface SystemMetric {

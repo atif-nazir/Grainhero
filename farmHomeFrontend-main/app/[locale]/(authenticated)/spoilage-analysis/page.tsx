@@ -27,17 +27,17 @@ interface SpoilagePrediction {
   created_at?: string;
 }
 
-interface MappedAnalysis {
-  id: string;
-  batchId: string;
-  grainType: string;
-  riskLevel: string;
-  riskScore: number;
-  factors: string[];
-  prediction: string;
-  confidence: number;
-  lastAnalysis: string;
-}
+// interface MappedAnalysis {
+//   id: string;
+//   batchId: string;
+//   grainType: string;
+//   riskLevel: string;
+//   riskScore: number;
+//   factors: string[];
+//   prediction: string;
+//   confidence: number;
+//   lastAnalysis: string;
+// }
 
 export default function SpoilageAnalysisPage() {
   const [batches, setBatches] = useState<SpoilagePrediction[]>([])

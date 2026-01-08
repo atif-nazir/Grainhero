@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+//import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,7 @@ import {
   Zap,
   Eye,
   Download,
-  Filter,
+  //Filter,
   Calendar,
   LucideIcon
 } from "lucide-react"
@@ -56,18 +56,18 @@ interface TenantAnalytics extends Record<string, unknown> {
 }
 
 export default function GlobalAnalyticsPage() {
-  const [timeRange, setTimeRange] = useState("30d")
-  const [selectedMetric, setSelectedMetric] = useState("all")
+  //const [timeRange, setTimeRange] = useState("30d")
+  //const [selectedMetric, setSelectedMetric] = useState("all")
 
   // Mock data - in real app, this would come from API
-  const globalStats = {
-    totalUsers: 12470,
-    totalTenants: 245,
-    totalRevenue: 1250000,
-    averageSessionTime: 24.5,
-    bounceRate: 12.3,
-    conversionRate: 8.7
-  }
+  // const globalStats = {
+  //   totalUsers: 12470,
+  //   totalTenants: 245,
+  //   totalRevenue: 1250000,
+  //   averageSessionTime: 24.5,
+  //   bounceRate: 12.3,
+  //   conversionRate: 8.7
+  // }
 
   const analyticsMetrics: AnalyticsMetric[] = [
     {

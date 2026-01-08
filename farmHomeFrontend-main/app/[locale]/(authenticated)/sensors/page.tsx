@@ -38,7 +38,7 @@ export default function SensorsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [activeTab, setActiveTab] = useState('overview')
+  //const [activeTab, setActiveTab] = useState('overview')
   const { latest } = useEnvironmentalHistory({ limit: 50 })
   const { t } = useLanguage()
   const [telemetry, setTelemetry] = useState<null | {

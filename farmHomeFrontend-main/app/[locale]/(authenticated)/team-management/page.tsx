@@ -48,8 +48,8 @@ export default function TeamManagementPage() {
     const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-    const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
-    const [planLimit, setPlanLimit] = useState<PlanLimit | null>(null)
+    //const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
+    //const [planLimit, setPlanLimit] = useState<PlanLimit | null>(null)
     const [inviteForm, setInviteForm] = useState({
         email: '',
         name: '',

@@ -91,7 +91,7 @@ export default function ResetPasswordPage() {
         setMessage(data?.message || "Password reset successful! You can now log in.")
         setTimeout(() => router.push("/auth/login"), 2000)
       }
-    } catch (err) {
+    } catch {
       setMessage("Network error. Please try again.")
     }
     setIsLoading(false)

@@ -76,7 +76,7 @@ export default function NewIncidentPage() {
         const error = await res.json().catch(() => ({}))
         toast.error(error?.message || 'Failed to create incident record')
       }
-    } catch (err) {
+    } catch {
       toast.error('Network error')
     } finally {
       setIsLoading(false)

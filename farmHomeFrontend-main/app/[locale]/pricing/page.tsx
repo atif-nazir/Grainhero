@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import pricingData from '../pricing-data.js'
 import { useTranslations } from 'next-intl'
-import { Link, useRouter } from '@/i18n/navigation'
+import { useRouter } from '@/i18n/navigation'
 import { Wheat as WheatIcon, Check } from 'lucide-react'
 
 export default function PricingPage() {

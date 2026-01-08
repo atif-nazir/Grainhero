@@ -107,10 +107,10 @@ export default function NewAlertPage() {
           <CardTitle>{t('alertInformation')}</CardTitle>
           <CardDescription>{t('fillRequiredInfo')}</CardDescription>
         </CardHeader>
-        <CardContent>
+        {/* <CardContent>
           {error && <div className="text-red-500 mb-2">{error}</div>}
           <AlertForm onSubmit={handleCreate} loading={loading} />
-        </CardContent>
+        </CardContent> */}
       </Card>
     </div>
   );

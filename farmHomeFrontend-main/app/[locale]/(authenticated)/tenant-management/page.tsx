@@ -25,13 +25,13 @@ import {
   Plus, 
   Search, 
   Filter, 
-  MoreHorizontal, 
+  //MoreHorizontal, 
   Eye, 
   Edit, 
   Trash2, 
   Users, 
   DollarSign, 
-  Activity,
+  //Activity,
   Crown,
   Calendar,
   MapPin,
@@ -62,7 +62,7 @@ interface Alert {
 
 export default function TenantManagementPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
+  //const [filterStatus, setFilterStatus] = useState("all")
 
   // Mock data - in real app, this would come from API
   const tenantStats = {

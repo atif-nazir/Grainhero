@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useAuth } from "@/app/[locale]/providers"
 import { useRouter, usePathname } from "next/navigation"
-import { hasRouteAccess, validateUserSession } from "@/lib/auth-utils"
+import { validateUserSession } from "@/lib/auth-utils"
 
 interface AuthGuardProps {
   children: React.ReactNode
