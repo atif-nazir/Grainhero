@@ -86,7 +86,7 @@ export function ChatbotPopup() {
   }, [isOpen])
 
   // Filtered grain batches for search
-  const filteredBatches: GrainBatch[] = grainBatches.filter((batch: GrainBatch) => {
+  const filteredBatches: readonly GrainBatch[] = grainBatches.filter((batch: GrainBatch) => {
     const search = batchSearch.toLowerCase()
     return (
       (batch.batch_id && batch.batch_id.toLowerCase().includes(search)) ||
@@ -218,26 +218,30 @@ export function ChatbotPopup() {
                   {filteredBatches.length === 0 ? (
                     <div className="text-gray-400 text-sm p-2">No grain batches found.</div>
                   ) : (
-                    filteredBatches.map((batch: GrainBatch) => (
-                      <div
-                        key={batch._id}
-                        className={`cursor-pointer px-3 py-2 hover:bg-green-50 ${selectedBatch && selectedBatch._id === batch._id ? "bg-green-100" : ""}`}
-                        onClick={() => setSelectedBatch(batch)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{batch.batch_id}</span>
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            batch.risk_level === 'critical' ? 'bg-red-100 text-red-800' :
-                            batch.risk_level === 'high' ? 'bg-orange-100 text-orange-800' :
-                            batch.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {batch.risk_level.toUpperCase()}
-                          </span>
+                    filteredBatches.map((batch: GrainBatch) => {
+                      // Type assertion to ensure TypeScript recognizes the batch type
+                      const typedBatch = batch as GrainBatch;
+                      return (
+                        <div
+                          key={typedBatch._id.toString()}
+                          className="cursor-pointer px-3 py-2 hover:bg-green-50"
+                          onClick={() => setSelectedBatch(typedBatch)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{typedBatch.batch_id}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              typedBatch.risk_level === 'critical' ? 'bg-red-100 text-red-800' :
+                              typedBatch.risk_level === 'high' ? 'bg-orange-100 text-orange-800' :
+                              typedBatch.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {typedBatch.risk_level.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500">{typedBatch.grain_type} - {typedBatch.silo_name}</div>
                         </div>
-                        <div className="text-xs text-gray-500">{batch.grain_type} - {batch.silo_name}</div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </>
