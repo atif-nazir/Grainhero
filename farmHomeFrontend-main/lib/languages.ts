@@ -14,6 +14,7 @@ export const languages = {
       marketplace: "Marketplace",
       users: "Users",
       alerts: "Alerts",
+      sensors: "Sensors",
       settings: "Settings",
       logout: "Logout",
 
@@ -671,6 +672,7 @@ export const languages = {
       marketplace: "مارکیٹ",
       users: "صارفین",
       alerts: "الرٹس",
+      sensors: "سینسرز",
       settings: "ترتیبات",
       logout: "لاگ آؤٹ",
 
