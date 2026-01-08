@@ -58,7 +58,7 @@ export function ChatbotPopup() {
         })
         if (!res.ok) throw new Error("Failed to fetch grain batches")
         const data = await res.json()
-        const batches = (data.predictions || []).map((pred: any) => ({
+        const batches = (data.predictions || []).map((pred: Record<string, unknown>) => ({
           _id: pred._id,
           batch_id: pred.batch_id?.batch_id || pred.batch_id || 'Unknown',
           grain_type: pred.grain_factors?.grain_type || pred.grain_type || 'Rice',
@@ -119,7 +119,7 @@ export function ChatbotPopup() {
         role: 'assistant',
       }
       setMessages(prev => [...prev, aiMessage])
-    } catch (err) {
+    } catch {
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         text: "Sorry, there was an error contacting the AI assistant.",

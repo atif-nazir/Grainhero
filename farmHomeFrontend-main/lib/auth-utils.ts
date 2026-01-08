@@ -2,6 +2,8 @@
 
 import { User } from "@/app/[locale]/providers"
 
+
+
 export interface RoleHierarchy {
   [key: string]: number
 }
@@ -224,10 +226,9 @@ export function validateUserSession(user: User | null, currentPath: string): { i
 /**
  * Get user's tenant information for display
  */
-export function getUserTenantInfo(user: User): { name: string; type: 'owned' | 'member' | 'none' } {
+export function getUserTenantInfo(): { name: string; type: 'owned' | 'member' | 'none' } {
   // This would need to be implemented based on your data structure
   // For now, returning placeholder
-  // You can use the user parameter if needed in the future
   return { name: 'Default Tenant', type: 'member' }
 }
 
