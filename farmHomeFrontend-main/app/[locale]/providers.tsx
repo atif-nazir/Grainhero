@@ -43,10 +43,7 @@ interface PlanContextType {
   setPlan: (plan: string) => void;
 }
 
-const PlanContext = createContext<PlanContextType>({
-  plan: "basic",
-  setPlan: (plan: string) => {},
-});
+const PlanContext = createContext<PlanContextType | undefined>(undefined);
 
 export function useAuth() {
   const context = useContext(AuthContext)
@@ -65,7 +62,11 @@ export function useLanguage() {
 }
 
 export function usePlan() {
-  return useContext(PlanContext);
+  const context = useContext(PlanContext);
+  if (context === undefined) {
+    throw new Error("usePlan must be used within a PlanProvider");
+  }
+  return context;
 }
 
 function LanguageProvider({

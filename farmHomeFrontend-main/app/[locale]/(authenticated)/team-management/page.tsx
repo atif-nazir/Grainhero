@@ -30,12 +30,7 @@ interface TeamMember {
     }
 }
 
-interface PlanLimit {
-    canInvite: boolean
-    currentCount: number
-    limit: number | string
-    message?: string
-}
+
 
 export default function TeamManagementPage() {
     const { user } = useAuth()
@@ -48,8 +43,7 @@ export default function TeamManagementPage() {
     const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-    //const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
-    //const [planLimit, setPlanLimit] = useState<PlanLimit | null>(null)
+
     const [inviteForm, setInviteForm] = useState({
         email: '',
         name: '',
@@ -189,36 +183,10 @@ export default function TeamManagementPage() {
         }
     }
 
-    const checkPlanLimits = async () => {
-        try {
-            const res = await api.post<{
-                canPerform: boolean
-                currentCount: number
-                limit: number | string
-            }>('/api/plan-management/check-limits', {
-                action: 'create_user',
-                resourceType: 'user'
-            })
-            if (res.ok && res.data) {
-                setPlanLimit({
-                    canInvite: res.data.canPerform,
-                    currentCount: res.data.currentCount,
-                    limit: res.data.limit,
-                    message: res.data.canPerform
-                        ? undefined
-                        : `You've reached your user limit (${res.data.limit}). Please upgrade your plan to invite more team members.`
-                })
-            }
-        } catch (err) {
-            console.error('Error checking plan limits:', err)
-            // Don't block invitation if limit check fails
-            setPlanLimit({ canInvite: true, currentCount: 0, limit: 'unlimited' })
-        }
-    }
+
 
     useEffect(() => {
         fetchTeamMembers()
-        checkPlanLimits()
     }, [])
 
     const handleInvite = async () => {
@@ -246,7 +214,6 @@ export default function TeamManagementPage() {
                 setInviteForm({ email: '', name: '', role: 'technician' })
                 setIsInviteDialogOpen(false)
                 fetchTeamMembers()
-                checkPlanLimits()
             } else {
                 toast.error(res.error || 'Failed to send invitation')
             }
@@ -661,25 +628,7 @@ export default function TeamManagementPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Confirmation Dialog */}
-            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete Team Member</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to delete {selectedMember?.name}? This action cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={!!isDeleting}>
-                            Cancel
-                        </Button>
-                        <Button variant="destructive" onClick={() => selectedMember && handleDelete(selectedMember._id)} disabled={!!isDeleting}>
-                            {isDeleting ? 'Deleting...' : 'Delete'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+
         </div>
     )
 }

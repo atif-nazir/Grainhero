@@ -81,7 +81,7 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
@@ -156,7 +156,7 @@ export default function AlertsPage() {
         setError(err.message);
       })
       .finally(() => setLoading(false));
-  }, [role, userId, creating, editingId, deleteLoadingId]);
+  }, [role, userId, editingId, deleteLoadingId]);
 
   // WebSocket for real-time alerts (admin, manager, assistant only)
   useEffect(() => {

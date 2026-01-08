@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,7 +64,11 @@ export default function GrainAlertsPage() {
             acknowledged_at?: string;
             resolved_at?: string;
             silo_id?: { name?: string } | string;
-            trigger_conditions?: any;
+            trigger_conditions?: {
+              threshold_type: string;
+              threshold_value: number;
+              actual_value: number;
+            };
           }
                   
           const mapped: GrainAlert[] = (data || []).map((a: RawAlert) => ({

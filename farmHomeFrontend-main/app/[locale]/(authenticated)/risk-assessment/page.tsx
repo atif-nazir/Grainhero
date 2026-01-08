@@ -368,14 +368,14 @@ export default function RiskAssessmentPage() {
                     latestRecord.ambient?.humidity?.value ??
                     latestRecord.environmental_context?.weather?.humidity ??
                     DEFAULT_INPUTS.ambientHumidity,
-                  vocIndex: ((latestRecord as any).voc?.value) ?? DEFAULT_INPUTS.vocIndex,
+                  vocIndex: (latestRecord as unknown as { voc?: { value: number } }).voc?.value ?? DEFAULT_INPUTS.vocIndex,
                   baselineVoc24h:
                     latestRecord.derived_metrics?.voc_baseline_24h ??
                     DEFAULT_INPUTS.baselineVoc24h,
                   moisture:
-                    ((latestRecord as any).moisture?.value) ?? DEFAULT_INPUTS.moisture,
+                    (latestRecord as unknown as { moisture?: { value: number } }).moisture?.value ?? DEFAULT_INPUTS.moisture,
                   storageDays:
-                    ((latestRecord as any).metadata?.storage_days) ??
+                    (latestRecord as unknown as { metadata?: { storage_days: number } }).metadata?.storage_days ??
                     DEFAULT_INPUTS.storageDays,
                   airflow:
                     latestRecord.derived_metrics?.airflow ??

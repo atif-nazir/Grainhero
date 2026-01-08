@@ -22,14 +22,13 @@ function encryptAccess(access: string): string {
 }
 export default function PlansPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
+
   const { logout, user } = useAuth();
   const t = useTranslations("PricingPage");
   const { plan } = usePlan();
   const email = localStorage.getItem("email");
   useEffect(() => {
     (async () => {
-      setIsLoading(true);
       try {
         const token =
           typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -68,7 +67,6 @@ export default function PlansPage() {
       } catch {
         // Optionally handle error
       }
-      setIsLoading(false);
     })();
   }, []);
   return (

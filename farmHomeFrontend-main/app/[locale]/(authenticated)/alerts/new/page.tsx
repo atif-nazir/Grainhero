@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -107,10 +107,10 @@ export default function NewAlertPage() {
           <CardTitle>{t('alertInformation')}</CardTitle>
           <CardDescription>{t('fillRequiredInfo')}</CardDescription>
         </CardHeader>
-        {/* <CardContent>
+        <CardContent>
           {error && <div className="text-red-500 mb-2">{error}</div>}
           <AlertForm onSubmit={handleCreate} loading={loading} />
-        </CardContent> */}
+        </CardContent>
       </Card>
     </div>
   );
