@@ -94,7 +94,7 @@ export default function AlertsPage() {
     setTimeout(() => {
       try {
         const userStr = localStorage.getItem("farm-home-user");
-        let idRaw = localStorage.getItem("id") || "";
+        const idRaw = localStorage.getItem("id") || "";
         let cleanId = idRaw;
         try {
           cleanId = JSON.parse(idRaw);
@@ -186,34 +186,7 @@ export default function AlertsPage() {
     };
   }, [role, userId]);
 
-  // Create alert handler
-  const handleCreate = (data: Omit<Alert, '_id' | 'createdAt' | 'status'>) => {
-    setCreating(true);
-    setError(null);
-    const token = localStorage.getItem("token");
-    fetch("http://localhost:5000/alerts", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to create alert");
-        }
-        return res.json();
-      })
-      .then(() => {
-        setCreating(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setCreating(false);
-      });
-  };
+  
 
   // Edit alert handler
   const handleEdit = (id: string, data: Omit<Alert, '_id' | 'createdAt' | 'status'>) => {
@@ -281,8 +254,7 @@ export default function AlertsPage() {
     );
   }
 
-  // Print user details (id, role, token)
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+  
 
   return (
     <div className="space-y-6">

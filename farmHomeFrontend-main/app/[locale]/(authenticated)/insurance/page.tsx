@@ -24,13 +24,13 @@ import {
   DollarSign, 
   AlertTriangle, 
   FileText, 
-  Calendar,
-  TrendingUp,
+  //Calendar,
+  //TrendingUp,
   CheckCircle,
   XCircle,
   Clock,
-  Building2,
-  Package
+  //Building2,
+  //Package
 } from 'lucide-react'
 import { api } from '@/lib/api'
 
@@ -151,7 +151,7 @@ export default function InsurancePage() {
         if (res.ok && res.data) {
           setBatches(res.data.batches || [])
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     })()

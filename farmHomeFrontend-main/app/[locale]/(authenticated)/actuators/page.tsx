@@ -4,14 +4,12 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Fan,
   Droplets,
   Volume2,
   Thermometer,
-  Gauge,
   Power,
   Settings,
   Activity,
@@ -45,7 +43,7 @@ export default function ActuatorsPage() {
   const [devices, setDevices] = useState<IoTDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
-  const [bulkAction, setBulkAction] = useState('')
+
   const [selectedDevices, setSelectedDevices] = useState<string[]>([])
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
@@ -425,7 +423,7 @@ export default function ActuatorsPage() {
                       <div className="text-xs text-gray-500">
                         Last {device.type === 'sensor' ? 'reading' : 'activity'}: {
                           device.last_reading || device.last_activity ?
-                            new Date(device.last_reading || device.last_activity).toLocaleString() :
+                            new Date(device.last_reading || device.last_activity || '').toLocaleString() :
                             'Never'
                         }
                       </div>

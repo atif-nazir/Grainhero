@@ -61,7 +61,7 @@ export default function ReportsPage() {
         } else {
           setError(res.error || 'Unable to load reports')
         }
-      } catch (e) {
+      } catch {
         setError('Unable to load reports')
       } finally {
         if (mounted) setLoading(false)

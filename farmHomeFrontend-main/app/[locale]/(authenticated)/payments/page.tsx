@@ -106,7 +106,7 @@ export default function PaymentsPage() {
         } else {
           toast.error(res.error || "Failed to load payments")
         }
-      } catch (e) {
+      } catch {
         toast.error("Failed to load payments")
       } finally {
         if (mounted) setLoading(false)

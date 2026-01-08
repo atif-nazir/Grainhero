@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+//import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
-import { api } from '@/lib/api'
+//import { api } from '@/lib/api'
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 import { useLanguage } from '@/app/[locale]/providers'

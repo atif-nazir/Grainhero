@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Brain, CheckCircle, BarChart3, RefreshCcw } from "lucide-react"
+import { Brain, RefreshCcw } from "lucide-react"
 import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from "@/lib/useEnvironmentalData"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
@@ -30,27 +30,27 @@ interface PredictionResult {
   }
 }
 
-interface ValidationResult {
-  type: "validation"
-  trainingAccuracy: number
-  testAccuracy: number
-  precision: number
-  recall: number
-  f1Score: number
-  crossValidation: number
-  crossValidationStd: number
-}
+// interface ValidationResult {
+//   type: "validation"
+//   trainingAccuracy: number
+//   testAccuracy: number
+//   precision: number
+//   recall: number
+//   f1Score: number
+//   crossValidation: number
+//   crossValidationStd: number
+// }
 
-interface DatasetResult {
-  type: "dataset"
-  totalSamples: number
-  trainingSamples: number
-  testSamples: number
-  features: number
-  dataQuality: number
-  outliers: number
-  classBalance: string
-}
+// interface DatasetResult {
+//   type: "dataset"
+//   totalSamples: number
+//   trainingSamples: number
+//   testSamples: number
+//   features: number
+//   dataQuality: number
+//   outliers: number
+//   classBalance: string
+// }
 
 type Result =
   | (PredictionResult & {
@@ -95,7 +95,7 @@ export default function RiskAssessmentPage() {
   const [predictionError, setPredictionError] = useState<string | null>(null)
   const { locations } = useEnvironmentalLocations()
   const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(null)
-  const { data: envHistory, latest: latestRecord } = useEnvironmentalHistory({
+  const { latest: latestRecord } = useEnvironmentalHistory({
     limit: 120,
     latitude: selectedLocation?.latitude,
     longitude: selectedLocation?.longitude,
@@ -191,8 +191,9 @@ export default function RiskAssessmentPage() {
         throw new Error(res.error || "Prediction failed")
       }
     } catch (error: unknown) {
-      setPredictionError(error?.message || "Prediction failed")
-      toast.error(error?.message || "Prediction failed")
+      const errorMessage = error instanceof Error ? error.message : "Prediction failed";
+      setPredictionError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setPredicting(false)
     }
@@ -236,8 +237,9 @@ export default function RiskAssessmentPage() {
         throw new Error(res.error || "Batch prediction failed")
       }
     } catch (error: unknown) {
-      setPredictionError(error?.message || "Batch prediction failed")
-      toast.error(error?.message || "Batch prediction failed")
+      const errorMessage = error instanceof Error ? error.message : "Batch prediction failed";
+      setPredictionError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setBatchPredicting(false)
     }
@@ -366,14 +368,14 @@ export default function RiskAssessmentPage() {
                     latestRecord.ambient?.humidity?.value ??
                     latestRecord.environmental_context?.weather?.humidity ??
                     DEFAULT_INPUTS.ambientHumidity,
-                  vocIndex: (latestRecord as any)?.voc?.value ?? DEFAULT_INPUTS.vocIndex,
+                  vocIndex: ((latestRecord as any).voc?.value) ?? DEFAULT_INPUTS.vocIndex,
                   baselineVoc24h:
                     latestRecord.derived_metrics?.voc_baseline_24h ??
                     DEFAULT_INPUTS.baselineVoc24h,
                   moisture:
-                    (latestRecord as any)?.moisture?.value ?? DEFAULT_INPUTS.moisture,
+                    ((latestRecord as any).moisture?.value) ?? DEFAULT_INPUTS.moisture,
                   storageDays:
-                    (latestRecord as any)?.metadata?.storage_days ??
+                    ((latestRecord as any).metadata?.storage_days) ??
                     DEFAULT_INPUTS.storageDays,
                   airflow:
                     latestRecord.derived_metrics?.airflow ??

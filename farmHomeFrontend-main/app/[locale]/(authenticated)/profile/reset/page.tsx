@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
         setSuccess("Password updated successfully.");
         setTimeout(() => router.push("/profile"), 1500);
       }
-    } catch (err) {
+    } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);

@@ -43,15 +43,6 @@ export function SuperAdminDashboard() {
     { id: 3, type: "info", message: "Scheduled maintenance completed", time: "1 hour ago" }
   ]
 
-  const revenueData = [
-    { month: "Jan", revenue: 45000 },
-    { month: "Feb", revenue: 52000 },
-    { month: "Mar", revenue: 48000 },
-    { month: "Apr", revenue: 61000 },
-    { month: "May", revenue: 55000 },
-    { month: "Jun", revenue: 67000 }
-  ]
-
   return (
     <div className="space-y-6">
       {/* System Overview Cards */}

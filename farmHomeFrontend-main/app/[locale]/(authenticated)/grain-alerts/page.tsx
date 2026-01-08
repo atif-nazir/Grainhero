@@ -34,7 +34,7 @@ interface GrainAlert {
 }
 
 export default function GrainAlertsPage() {
-  const t = useTranslations('GrainAlerts')
+
   const [alerts, setAlerts] = useState<GrainAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -49,9 +49,28 @@ export default function GrainAlertsPage() {
         const res = await fetch(`${backendUrl}/alerts/all-public`)
         if (res.ok) {
           const data = await res.json()
-          const mapped: GrainAlert[] = (data || []).map((a: Record<string, unknown>) => ({
+                  
+          // Define a more specific type for the raw data
+          interface RawAlert {
+            _id?: string;
+            title?: string;
+            category?: string;
+            description?: string;
+            message?: string;
+            priority?: string;
+            status?: string;
+            source?: string;
+            sensor_type?: string;
+            createdAt?: string;
+            acknowledged_at?: string;
+            resolved_at?: string;
+            silo_id?: { name?: string } | string;
+            trigger_conditions?: any;
+          }
+                  
+          const mapped: GrainAlert[] = (data || []).map((a: RawAlert) => ({
             _id: a._id,
-            alert_id: a._id?.slice(-6) || 'AL',
+            alert_id: (a._id && typeof a._id === 'string' && a._id.slice) ? a._id.slice(-6) : 'AL',
             title: a.title || a.category || 'Alert',
             message: a.description || a.message || '',
             priority: a.priority || 'medium',
@@ -61,7 +80,7 @@ export default function GrainAlertsPage() {
             triggered_at: a.createdAt || new Date().toISOString(),
             acknowledged_at: a.acknowledged_at,
             resolved_at: a.resolved_at,
-            silo_id: a.silo_id ? { name: a.silo_id.name || 'Silo', silo_id: String(a.silo_id) } : { name: '-', silo_id: '-' },
+            silo_id: a.silo_id ? { name: typeof a.silo_id === 'object' && a.silo_id ? a.silo_id.name || 'Silo' : 'Silo', silo_id: String(a.silo_id) } : { name: '-', silo_id: '-' },
             trigger_conditions: a.trigger_conditions,
           }))
           setAlerts(mapped)

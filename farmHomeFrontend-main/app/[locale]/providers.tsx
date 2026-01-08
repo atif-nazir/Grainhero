@@ -4,7 +4,7 @@ import type React from "react"
 
 import { createContext, useContext, useState, useEffect } from "react"
 import { languages, type LanguageCode, type TranslationKey } from "@/lib/languages"
-import { usePathname } from "next/navigation"
+//import { usePathname } from "next/navigation"
 import { config } from "@/config"
 
 export interface User {
@@ -38,7 +38,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 // Plan Context
-const PlanContext = createContext({
+interface PlanContextType {
+  plan: string;
+  setPlan: (plan: string) => void;
+}
+
+const PlanContext = createContext<PlanContextType>({
   plan: "basic",
   setPlan: (plan: string) => {},
 });
@@ -168,7 +173,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Check for existing session
     const savedUser = localStorage.getItem("farm-home-user")
     const savedAccess = localStorage.getItem("farm-home-access")
-    let parsedUser = savedUser ? JSON.parse(savedUser) : null;
+    const parsedUser = savedUser ? JSON.parse(savedUser) : null;
     if (parsedUser && savedAccess) {
       parsedUser.hasAccess = decryptAccess(savedAccess);
     }
@@ -217,7 +222,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       setUser(userObj);
       console.log(3)
       localStorage.setItem('farm-home-user', JSON.stringify(userObj));
-    } catch (err) {
+    } catch {
       // Optionally handle error
     }
     console.log(4)
@@ -255,7 +260,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }
       setUser(userObj)
       localStorage.setItem("farm-home-user", JSON.stringify(userObj))
-    } catch (err) {
+    } catch {
       setUser(null)
       localStorage.removeItem("token")
     }

@@ -31,7 +31,7 @@ export async function apiFetch(path: string, options?: RequestInit) {
     try {
       const errorData = await res.json();
       throw new Error(errorData.message || errorData.error || `API error: ${res.status}`);
-    } catch (_parseError) {
+    } catch {
       throw new Error(`API error: ${res.status} - ${res.statusText}`);
   }
   }

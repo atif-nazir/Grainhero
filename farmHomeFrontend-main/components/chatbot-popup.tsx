@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+//import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { X, Send, Minimize2 } from "lucide-react"
 import { useChatbot } from "./chatbot-provider"
 // Remove: import { useTranslations } from "next-intl"
@@ -58,7 +58,7 @@ export function ChatbotPopup() {
         })
         if (!res.ok) throw new Error("Failed to fetch grain batches")
         const data = await res.json()
-        const batches = (data.predictions || []).map((pred: Record<string, any>) => ({
+        const batches = (data.predictions || []).map((pred: any) => ({
           _id: pred._id,
           batch_id: pred.batch_id?.batch_id || pred.batch_id || 'Unknown',
           grain_type: pred.grain_factors?.grain_type || pred.grain_type || 'Rice',
@@ -67,8 +67,8 @@ export function ChatbotPopup() {
           risk_level: pred.risk_level || 'low'
         }))
         setGrainBatches(batches)
-      } catch (err: unknown) {
-        setBatchError(err.message || "Failed to fetch grain batches")
+      } catch {
+        setBatchError("Failed to fetch grain batches");
       } finally {
         setBatchLoading(false)
       }
@@ -133,12 +133,7 @@ export function ChatbotPopup() {
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
-    }
-  }
+
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })

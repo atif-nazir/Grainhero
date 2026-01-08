@@ -200,7 +200,7 @@ export function AdvancedSearch() {
             <div className="space-y-4">
               {/* Search Filters */}
               <div className="space-y-3">
-                {filters.map((filter, index) => (
+                {filters.map((filter) => (
                   <div key={filter.id} className="flex items-center space-x-2 p-3 border rounded-lg">
                     <Select
                       value={filter.field}
@@ -210,7 +210,7 @@ export function AdvancedSearch() {
                         )
                         updateFilter(filter.id, {
                           field: value,
-                          type: field?.type as any,
+                          type: field?.type as "text" | "number" | "date" | "select",
                           operator: "",
                           value: "",
                         })

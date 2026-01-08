@@ -5,10 +5,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+//import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
-  Sparkles, 
+  //Sparkles, 
   TrendingUp, 
   AlertTriangle, 
   Brain, 
@@ -16,24 +16,23 @@ import {
   Zap,
   Activity,
   BarChart3,
-  Clock,
+  //Clock,
   Thermometer,
   Droplets,
   Wind,
   Gauge,
   Eye,
   Settings,
-  RefreshCw,
+  //RefreshCw,
   CheckCircle,
-  XCircle,
-  ArrowRight,
-  X
+  //XCircle,
+  //ArrowRight,
+  //X
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatConfidence, formatRisk, formatSmart } from '@/lib/percentageUtils';
+import { formatConfidence} from '@/lib/percentageUtils';
 import SiloVisualization from '@/components/silo-visualization';
 import { useEnvironmentalHistory, useEnvironmentalLocations, LocationOption } from '@/lib/useEnvironmentalData';
-import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 
 interface AIPredictionRaw {
   batch_id?: {
@@ -86,15 +85,13 @@ export default function AIPredictionsPage() {
     latitude: selectedLocation?.latitude,
     longitude: selectedLocation?.longitude,
   })
-const [showActuatorPanel, setShowActuatorPanel] = useState(false)
-const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(null)
+
 
   // Fetch recent predictions overview
   useEffect(() => {
     const run = async () => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-        const res = await fetch(`${window.location.origin.includes('http') ? '' : ''}${typeof window !== 'undefined' ? '' : ''}${`${window.location.origin}`}`, { method: 'HEAD' })
+        // Removed unused token and res variables
         // Ignore head call; used only to ensure window is available in Next.js client component
       } catch {}
       try {
@@ -131,7 +128,7 @@ const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(nu
           // If API fails, use mock data
           setPredictions([])
         }
-      } catch (e) {
+      } catch {
         setPredictions([]) // Display no predictions in case of error; do not set mock data
       } finally {
         setLoading(false)
@@ -156,16 +153,9 @@ const [actionPrediction, setActionPrediction] = useState<AIPrediction | null>(nu
     }))
   }, [envHistory])
 
-const openActuatorPanel = (prediction: AIPrediction) => {
-  setActionPrediction(prediction)
-  setShowActuatorPanel(true)
-}
 
-  const getRiskColor = (riskScore: number) => {
-    if (riskScore < 30) return 'text-green-600'
-    if (riskScore < 60) return 'text-yellow-600'
-    return 'text-red-600'
-  }
+
+
 
   const getRiskBadge = (prediction: string) => {
     const riskColors = {
@@ -176,11 +166,7 @@ const openActuatorPanel = (prediction: AIPrediction) => {
     return riskColors[prediction as keyof typeof riskColors] || 'bg-gray-100 text-gray-800'
   }
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence > 0.8) return 'text-green-600'
-    if (confidence > 0.6) return 'text-yellow-600'
-    return 'text-red-600'
-  }
+
 
   if (loading) {
     return (

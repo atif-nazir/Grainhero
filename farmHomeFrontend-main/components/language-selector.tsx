@@ -5,11 +5,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useLanguage } from "@/app/[locale]/providers"
 import { useAuth } from "@/app/[locale]/providers"
 import { Languages, Check } from "lucide-react"
-import { toast } from "sonner"
 import { useRouter, usePathname } from "next/navigation"
 
 export function LanguageSelector() {
-  const { currentLanguage, availableLanguages, t } = useLanguage()
+  const { currentLanguage, availableLanguages } = useLanguage()
   const { updateLanguage } = useAuth()
   const router = useRouter()
   const pathname = usePathname()

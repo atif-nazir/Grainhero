@@ -14,19 +14,18 @@ import { useAuth } from "@/app/[locale]/providers";
 import { useTranslations } from "next-intl";
 import { usePlan } from "@/app/[locale]/providers";
 import { CheckCircle2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { config } from "@/config";
 
 function encryptAccess(access: string): string {
   return btoa(access);
 }
 export default function PlansPage() {
-  const [didCall, setDidCall] = useState(false);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const { logout, refreshUser, user } = useAuth();
+  const { logout, user } = useAuth();
   const t = useTranslations("PricingPage");
-  const { plan, setPlan } = usePlan();
+  const { plan } = usePlan();
   const email = localStorage.getItem("email");
   useEffect(() => {
     (async () => {
@@ -66,7 +65,7 @@ export default function PlansPage() {
           );
         }
         localStorage.setItem("farm-home-user", JSON.stringify(userObj));
-      } catch (err) {
+      } catch {
         // Optionally handle error
       }
       setIsLoading(false);
@@ -142,7 +141,7 @@ export default function PlansPage() {
                       onClick={() => {
                         // Open contact form or email
                         const subject = encodeURIComponent('Custom Solution Inquiry - GrainHero')
-                        const body = encodeURIComponent(`Hello,\n\nI'm interested in learning more about your Custom Solution for grain management.\n\nPlease contact me at: ${email || 'my email'}\n\nThank you!`)
+                        const body = encodeURIComponent('Hello,\n\nI\'m interested in learning more about your Custom Solution for grain management.\n\nPlease contact me at: ' + (email || 'my email') + '\n\nThank you!')
                         window.location.href = `mailto:support@grainhero.com?subject=${subject}&body=${body}`
                       }}
                     >

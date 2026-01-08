@@ -37,7 +37,7 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000
 export default function DataVisualizationPage() {
   const [selectedRange, setSelectedRange] = useState<'24h' | '7d' | '30d'>('24h');
   const points = selectedRange === '24h' ? 288 : selectedRange === '7d' ? 288 * 7 : 288 * 30;
-  const { data: envHistory, latest } = useEnvironmentalHistory({ limit: points });
+  const { data: envHistory } = useEnvironmentalHistory({ limit: points });
   const [mlMetrics, setMlMetrics] = useState<null | {
     accuracy: number
     precision: number
@@ -435,7 +435,7 @@ export default function DataVisualizationPage() {
                     a.download = `iot-readings-${new Date().toISOString().split('T')[0]}.csv`;
                     a.click();
                     window.URL.revokeObjectURL(url);
-                  } catch (error) {
+                  } catch {
                     alert('Export failed');
                   }
                 }}
