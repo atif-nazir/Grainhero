@@ -93,15 +93,17 @@ export default function ProfilePage() {
       const response = await api.get("/auth/me")
       
       if (response.ok && response.data) {
-        const userData = response.data
-        setProfile(userData)
+        // Type the response data as UserProfile
+        const typedResponseData = response.data as UserProfile;
+        
+        setProfile(typedResponseData);
         setProfileData({
-          name: userData.name || "",
-          phone: userData.phone || "",
-          location: userData.location || "",
-          language: userData.language || "en"
+          name: typedResponseData.name || "",
+          phone: typedResponseData.phone || "",
+          location: typedResponseData.location || "",
+          language: typedResponseData.language || "en"
         })
-        setNotifications(userData.preferences?.notifications || {
+        setNotifications(typedResponseData.preferences?.notifications || {
           email: true,
           sms: false,
           push: true
