@@ -38,7 +38,7 @@ interface ShortcutDefinition {
   title: string;
   description: string;
   categories: string[];
-  icon: JSX.Element;
+  icon: React.ReactNode;
   actions: Array<{
     label: string;
     action: "turn_on" | "turn_off" | "set_value";
@@ -147,7 +147,8 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
 
   const controlDevice = async (
     shortcut: ShortcutKey,
-    action: "turn_on" | "turn_off",
+    action: "turn_on" | "turn_off" | "set_value",
+    value?: number,
   ) => {
     const device = actuators[shortcut];
     if (!device) return;
