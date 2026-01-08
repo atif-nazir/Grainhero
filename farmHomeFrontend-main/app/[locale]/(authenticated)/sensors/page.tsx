@@ -65,17 +65,42 @@ export default function SensorsPage() {
         if (!mounted) return
         if (res.ok) {
           const data = await res.json()
-          const mapped: SensorDevice[] = (data.sensors || []).map((s: any) => ({
-            _id: (s as any)._id || '',
-            device_id: (s as any).device_id || (s as any)._id || '',
-            device_name: (s as any).device_name || 'Unnamed Device',
-            status: (s as any).health_status === 'healthy' ? 'active' : ((s as any).health_status || (s as any).status || 'active'),
-            sensor_types: (s as any).sensor_types || [],
-            battery_level: (s as any).battery_level || (s as any).device_metrics?.battery_level || 100,
-            signal_strength: (s as any).signal_strength || (s as any).device_metrics?.signal_strength || -50,
-            silo_id: (s as any).silo_id ? { name: (s as any).silo_id.name || 'Silo', silo_id: (s as any).silo_id._id || '' } : { name: '-', silo_id: '' },
-            last_reading: (s as any).health_metrics?.last_heartbeat || new Date().toISOString(),
-            health_metrics: (s as any).health_metrics || { uptime_percentage: 99, error_count: 0, last_heartbeat: new Date().toISOString() }
+          // Define type for raw API response
+          interface RawSensorData {
+            _id?: string;
+            device_id?: string;
+            device_name?: string;
+            status?: string;
+            health_status?: string;
+            sensor_types?: string[];
+            battery_level?: number;
+            signal_strength?: number;
+            device_metrics?: {
+              battery_level?: number;
+              signal_strength?: number;
+            };
+            silo_id?: {
+              name?: string;
+              _id?: string;
+            };
+            health_metrics?: {
+              uptime_percentage?: number;
+              error_count?: number;
+              last_heartbeat?: string;
+            };
+          }
+          
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: RawSensorData) => ({
+            _id: s._id || '',
+            device_id: s.device_id || s._id || '',
+            device_name: s.device_name || 'Unnamed Device',
+            status: s.health_status === 'healthy' ? 'active' : (s.health_status || s.status || 'active'),
+            sensor_types: s.sensor_types || [],
+            battery_level: s.battery_level || s.device_metrics?.battery_level || 100,
+            signal_strength: s.signal_strength || s.device_metrics?.signal_strength || -50,
+            silo_id: s.silo_id ? { name: s.silo_id.name || 'Silo', silo_id: s.silo_id._id || '' } : { name: '-', silo_id: '' },
+            last_reading: s.health_metrics?.last_heartbeat || new Date().toISOString(),
+            health_metrics: s.health_metrics || { uptime_percentage: 99, error_count: 0, last_heartbeat: new Date().toISOString() }
           }))
           setSensors(mapped)
           if (!siloId && mapped.length > 0) {
