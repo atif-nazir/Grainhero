@@ -14,7 +14,7 @@ import { useAuth } from "@/app/[locale]/providers";
 import { useTranslations } from "next-intl";
 import { usePlan } from "@/app/[locale]/providers";
 import { CheckCircle2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { config } from "@/config";
 
 function encryptAccess(access: string): string {

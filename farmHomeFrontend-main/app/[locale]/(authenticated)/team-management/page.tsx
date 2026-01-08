@@ -42,7 +42,6 @@ export default function TeamManagementPage() {
     const [statusFilter, setStatusFilter] = useState("all")
     const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
     const [inviteForm, setInviteForm] = useState({
         email: '',
