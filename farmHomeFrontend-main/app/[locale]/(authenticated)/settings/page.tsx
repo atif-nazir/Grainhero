@@ -20,6 +20,7 @@ import {
   Clock
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 interface TenantSettings {
   name: string
@@ -277,7 +278,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -605,6 +608,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   )
 }

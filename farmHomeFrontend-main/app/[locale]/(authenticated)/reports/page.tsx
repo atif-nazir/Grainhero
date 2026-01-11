@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { config } from '@/config'
+import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 type ReportsOverview = {
   insurance: {
@@ -92,17 +93,21 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-400 animate-pulse" />
-          <p className="text-gray-500">Loading reports...</p>
+      <AnimatedBackground className="min-h-screen">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-400 animate-pulse" />
+            <p className="text-gray-500">Loading reports...</p>
+          </div>
         </div>
-      </div>
+      </AnimatedBackground>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -394,6 +399,8 @@ export default function ReportsPage() {
           </div>
         </TabsContent>
       </Tabs>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   )
 }

@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 interface MonthlyIntake {
   month: string
@@ -175,7 +176,8 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       {/* Header */}
       <div className="flex items-center justify-between space-y-2">
         <div>
@@ -599,6 +601,7 @@ export default function AnalyticsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </AnimatedBackground>
   )
 }

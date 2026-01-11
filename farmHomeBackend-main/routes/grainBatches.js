@@ -9,6 +9,7 @@ const {
 } = require("../middleware/permission");
 const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const { body, validationResult, param, query } = require("express-validator");
+const { BATCH_STATUSES } = require("../configs/enum");
 const QRCode = require("qrcode");
 const PDFKit = require("pdfkit");
 const multer = require("multer");
@@ -318,6 +319,7 @@ router.post(
         source_location,
         harvest_date,
         notes,
+        purchase_price_per_kg,
       } = req.body;
 
       // Check if silo exists and has capacity
@@ -333,6 +335,11 @@ router.post(
           requested: quantity_kg,
         });
       }
+
+      // Calculate total purchase value if purchase price is provided
+      const total_purchase_value = purchase_price_per_kg 
+        ? purchase_price_per_kg * quantity_kg 
+        : null;
 
       // Create batch
       const batch = new GrainBatch({
@@ -350,6 +357,8 @@ router.post(
         source_location,
         harvest_date: harvest_date ? new Date(harvest_date) : null,
         notes,
+        purchase_price_per_kg: purchase_price_per_kg || null,
+        total_purchase_value: total_purchase_value || null,
         created_by: req.user._id,
       });
 
@@ -640,6 +649,58 @@ router.put(
 
 /**
  * @swagger
+ * /grain-batches/{id}/buyers:
+ *   get:
+ *     summary: Get available buyers for dispatch
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get(
+  "/:id/buyers",
+  [
+    auth,
+    requirePermission("batch.dispatch"),
+    requireTenantAccess,
+    param("id").isMongoId().withMessage("Valid batch ID is required"),
+  ],
+  async (req, res) => {
+    try {
+      const Buyer = require("../models/Buyer");
+      const tenantId = req.user.tenant_id || req.user.owned_tenant_id || req.user._id;
+      const adminId = req.user.admin_id || req.user._id;
+
+      // Get all active buyers for this tenant/admin
+      const buyers = await Buyer.find({
+        tenant_id: tenantId,
+        admin_id: adminId,
+        status: "active",
+      })
+        .select("_id name company_name contact_person location buyer_type rating")
+        .sort({ name: 1 })
+        .lean();
+
+      res.json({
+        buyers: buyers.map(buyer => ({
+          _id: buyer._id,
+          name: buyer.name,
+          company_name: buyer.company_name,
+          contact: buyer.contact_person,
+          location: buyer.location,
+          buyer_type: buyer.buyer_type,
+          rating: buyer.rating,
+        })),
+        total: buyers.length,
+      });
+    } catch (error) {
+      console.error("Get buyers for dispatch error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /grain-batches/{id}/dispatch:
  *   post:
  *     summary: Dispatch batch to buyer
@@ -656,16 +717,21 @@ router.post(
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
       body("buyer_id").isMongoId().withMessage("Valid buyer ID is required"),
-      body("dispatch_details.vehicle_number")
-        .notEmpty()
-        .withMessage("Vehicle number is required"),
-      body("dispatch_details.driver_name")
-        .notEmpty()
-        .withMessage("Driver name is required"),
-      body("price_per_kg")
+      body("sell_price_per_kg")
+        .isFloat({ min: 0 })
+        .withMessage("Sell price per kg is required and must be positive"),
+      body("dispatched_quantity_kg")
         .optional()
-        .isNumeric()
-        .withMessage("Price per kg must be a number"),
+        .isFloat({ min: 0.1 })
+        .withMessage("Dispatched quantity must be positive"),
+      body("dispatch_details.vehicle_number")
+        .optional()
+        .notEmpty()
+        .withMessage("Vehicle number is required if dispatch details provided"),
+      body("dispatch_details.driver_name")
+        .optional()
+        .notEmpty()
+        .withMessage("Driver name is required if dispatch details provided"),
     ],
   ],
   async (req, res) => {
@@ -684,34 +750,93 @@ router.post(
         return res.status(404).json({ error: "Batch not found" });
       }
 
-      if (batch.status !== "stored") {
-        return res
-          .status(400)
-          .json({ error: "Only stored batches can be dispatched" });
+      // Check if batch can be dispatched
+      const availableQuantity = batch.quantity_kg - (batch.dispatched_quantity_kg || 0);
+      if (availableQuantity <= 0) {
+        return res.status(400).json({ error: "Batch is already fully dispatched" });
       }
 
-      // Dispatch batch
-      await batch.dispatch(req.body.buyer_id, req.body.dispatch_details);
+      const dispatchedQuantity = req.body.dispatched_quantity_kg || availableQuantity;
       
-      // Update price per kg if provided
-      if (req.body.price_per_kg !== undefined) {
-        batch.purchase_price_per_kg = parseFloat(req.body.price_per_kg);
-        batch.total_purchase_value = batch.quantity_kg * batch.purchase_price_per_kg;
-        await batch.save();
+      // Validate dispatch quantity
+      if (dispatchedQuantity > availableQuantity) {
+        return res.status(400).json({ 
+          error: `Cannot dispatch more than available quantity. Available: ${availableQuantity} kg` 
+        });
       }
 
-      // Update silo occupancy
+      const sellPricePerKg = parseFloat(req.body.sell_price_per_kg);
+      const buyerId = req.body.buyer_id;
+
+      // Dispatch batch (handles partial dispatch)
+      await batch.dispatch(
+        buyerId,
+        req.body.dispatch_details || {},
+        sellPricePerKg,
+        dispatchedQuantity
+      );
+
+      // If partial dispatch, create a new batch for remaining quantity
+      let remainingBatch = null;
+      const remainingQuantity = batch.quantity_kg - batch.dispatched_quantity_kg;
+      
+      if (remainingQuantity > 0 && batch.dispatched_quantity_kg < batch.quantity_kg) {
+        // Create new batch for remaining quantity
+        const remainingBatchId = `${batch.batch_id}-R${Date.now()}`;
+        remainingBatch = new GrainBatch({
+          batch_id: remainingBatchId,
+          admin_id: batch.admin_id,
+          silo_id: batch.silo_id,
+          grain_type: batch.grain_type,
+          quantity_kg: remainingQuantity,
+          variety: batch.variety,
+          grade: batch.grade,
+          moisture_content: batch.moisture_content,
+          protein_content: batch.protein_content,
+          farmer_name: batch.farmer_name,
+          farmer_contact: batch.farmer_contact,
+          source_location: batch.source_location,
+          harvest_date: batch.harvest_date,
+          intake_date: batch.intake_date,
+          purchase_price_per_kg: batch.purchase_price_per_kg,
+          total_purchase_value: batch.purchase_price_per_kg ? 
+            batch.purchase_price_per_kg * remainingQuantity : null,
+          notes: `${batch.notes || ''} - Remaining from ${batch.batch_id}`.trim(),
+          status: BATCH_STATUSES.STORED,
+          created_by: req.user._id,
+        });
+        remainingBatch.generateQRCode();
+        await remainingBatch.save();
+      }
+
+      // Update silo occupancy - only remove dispatched quantity
       const silo = await Silo.findById(batch.silo_id);
       if (silo) {
-        await silo.removeBatch(batch.quantity_kg);
+        await silo.removeBatch(dispatchedQuantity);
       }
 
+      // Reload batch to get updated values
+      await batch.populate('buyer_id', 'name company_name contact_person');
+      
       res.json({
         message: "Batch dispatched successfully",
-        batch,
+        batch: {
+          ...batch.toObject(),
+          dispatched_quantity: batch.dispatched_quantity_kg,
+          remaining_quantity: remainingQuantity,
+          revenue: batch.revenue,
+          profit: batch.profit,
+        },
+        remainingBatch: remainingBatch ? {
+          batch_id: remainingBatch.batch_id,
+          quantity_kg: remainingBatch.quantity_kg,
+        } : null,
       });
     } catch (error) {
       console.error("Dispatch batch error:", error);
+      if (error.message.includes('exceeds available')) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -754,12 +879,13 @@ router.post(
       body("buyer_name").notEmpty().withMessage("Buyer name is required"),
       body("buyer_contact").notEmpty().withMessage("Buyer contact is required"),
       body("quantity_dispatched")
-        .isNumeric()
-        .withMessage("Quantity must be a number"),
-      body("price_per_kg")
         .optional()
         .isNumeric()
-        .withMessage("Price per kg must be a number"),
+        .withMessage("Quantity must be a number"),
+      body("sell_price_per_kg")
+        .optional()
+        .isNumeric()
+        .withMessage("Sell price per kg must be a number"),
     ],
   ],
   async (req, res) => {
@@ -778,10 +904,22 @@ router.post(
         return res.status(404).json({ error: "Batch not found" });
       }
 
-      if (batch.status === "dispatched" || batch.status === "sold") {
+      // Check available quantity
+      const availableQuantity = batch.quantity_kg - (batch.dispatched_quantity_kg || 0);
+      if (availableQuantity <= 0) {
         return res
           .status(400)
-          .json({ error: "Batch is already dispatched or sold" });
+          .json({ error: "Batch is already fully dispatched" });
+      }
+      
+      const dispatchedQuantity = req.body.quantity_dispatched 
+        ? parseFloat(req.body.quantity_dispatched) 
+        : availableQuantity;
+      
+      if (dispatchedQuantity > availableQuantity) {
+        return res.status(400).json({ 
+          error: `Cannot dispatch more than available quantity. Available: ${availableQuantity} kg` 
+        });
       }
 
       // Buyer upsert logic: unify with manual buyer creation
@@ -833,35 +971,39 @@ router.post(
         new: true,
         setDefaultsOnInsert: true,
       });
-      // Update batch with dispatch information
-      batch.status = "dispatched";
-      batch.buyer_id = buyer._id;
-      batch.dispatch_details = {
+      
+      // Use dispatch method to handle revenue calculation
+      const sellPricePerKg = req.body.sell_price_per_kg 
+        ? parseFloat(req.body.sell_price_per_kg) 
+        : null;
+      
+      const dispatchDetails = {
         buyer_name: buyer.name,
         buyer_contact: buyer.contact_person.phone,
-        quantity: parseFloat(req.body.quantity_dispatched),
+        quantity: dispatchedQuantity,
         dispatch_date: req.body.dispatch_date || new Date().toISOString(),
         notes: req.body.notes || "",
       };
-      batch.actual_dispatch_date = new Date();
       
-      // Update price per kg if provided
-      if (req.body.price_per_kg !== undefined) {
-        batch.purchase_price_per_kg = parseFloat(req.body.price_per_kg);
-        batch.total_purchase_value = batch.quantity_kg * batch.purchase_price_per_kg;
+      // Dispatch batch using the model method (handles revenue calculation)
+      if (sellPricePerKg) {
+        await batch.dispatch(buyer._id, dispatchDetails, sellPricePerKg, dispatchedQuantity);
+      } else {
+        // If no sell price, just update dispatch info without revenue calculation
+        batch.buyer_id = buyer._id;
+        batch.dispatch_details = dispatchDetails;
+        batch.actual_dispatch_date = new Date();
+        batch.dispatched_quantity_kg = (batch.dispatched_quantity_kg || 0) + dispatchedQuantity;
+        if (batch.dispatched_quantity_kg >= batch.quantity_kg) {
+          batch.status = BATCH_STATUSES.DISPATCHED;
+        }
+        await batch.save();
       }
 
-      await batch.save();
-
-      // Update silo occupancy
+      // Update silo occupancy - only remove dispatched quantity
       const silo = await Silo.findById(batch.silo_id);
       if (silo) {
-        const dispatchedQuantity = parseFloat(req.body.quantity_dispatched);
-        silo.current_occupancy_kg = Math.max(
-          0,
-          silo.current_occupancy_kg - dispatchedQuantity
-        );
-        await silo.save();
+        await silo.removeBatch(dispatchedQuantity);
       }
 
       res.json({

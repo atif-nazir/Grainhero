@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { config } from "@/config"
+import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 type BuyerRecord = {
   _id: string
@@ -419,7 +420,9 @@ export default function BuyersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Buyers Management</h1>
@@ -1028,6 +1031,8 @@ export default function BuyersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   )
 }

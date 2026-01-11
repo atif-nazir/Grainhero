@@ -361,7 +361,8 @@ router.get(
         ? Math.round((dispatchedBatches.length / totalBatches) * 100)
         : 0;
 
-    // Calculate monthly revenue
+    // Calculate monthly revenue from dispatched batches
+    // Revenue = sell_price_per_kg * dispatched_quantity_kg (or use batch.revenue if already calculated)
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -369,30 +370,48 @@ router.get(
     const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
     const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
     
+    // Get all batches with dispatch activity in current month
     const currentMonthDispatched = grainBatches.filter(batch => {
-      const batchDate = batch.actual_dispatch_date || batch.updated_at || batch.created_at;
-      const batchMonth = new Date(batchDate).getMonth();
-      const batchYear = new Date(batchDate).getFullYear();
-      return batch.status?.toLowerCase() === "dispatched" && 
+      if (!batch.actual_dispatch_date) return false;
+      const batchDate = new Date(batch.actual_dispatch_date);
+      const batchMonth = batchDate.getMonth();
+      const batchYear = batchDate.getFullYear();
+      // Include batches that have been dispatched (fully or partially) this month
+      return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) && 
              batchMonth === currentMonth && 
              batchYear === currentYear;
     });
     
+    // Get all batches with dispatch activity in last month
     const lastMonthDispatched = grainBatches.filter(batch => {
-      const batchDate = batch.actual_dispatch_date || batch.updated_at || batch.created_at;
-      const batchMonth = new Date(batchDate).getMonth();
-      const batchYear = new Date(batchDate).getFullYear();
-      return batch.status?.toLowerCase() === "dispatched" && 
+      if (!batch.actual_dispatch_date) return false;
+      const batchDate = new Date(batch.actual_dispatch_date);
+      const batchMonth = batchDate.getMonth();
+      const batchYear = batchDate.getFullYear();
+      return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) && 
              batchMonth === lastMonth && 
              batchYear === lastYear;
     });
     
+    // Calculate revenue: use batch.revenue if available, otherwise calculate from sell_price_per_kg * dispatched_quantity_kg
     const currentMonthRevenue = currentMonthDispatched.reduce((sum, batch) => {
-      return sum + ((batch.quantity_kg || 0) * (batch.purchase_price_per_kg || 0));
+      // If revenue is already calculated, use it
+      if (batch.revenue && batch.revenue > 0) {
+        return sum + batch.revenue;
+      }
+      // Otherwise calculate from sell_price_per_kg and dispatched_quantity_kg
+      const dispatchedQty = batch.dispatched_quantity_kg || batch.quantity_kg || 0;
+      const sellPrice = batch.sell_price_per_kg || 0;
+      return sum + (dispatchedQty * sellPrice);
     }, 0);
     
     const lastMonthRevenue = lastMonthDispatched.reduce((sum, batch) => {
-      return sum + ((batch.quantity_kg || 0) * (batch.purchase_price_per_kg || 0));
+      if (batch.revenue && batch.revenue > 0) {
+        return sum + batch.revenue;
+      }
+      const dispatchedQty = batch.dispatched_quantity_kg || batch.quantity_kg || 0;
+      const sellPrice = batch.sell_price_per_kg || 0;
+      return sum + (dispatchedQty * sellPrice);
     }, 0);
     
     const revenueGrowthPercentage = lastMonthRevenue > 0 

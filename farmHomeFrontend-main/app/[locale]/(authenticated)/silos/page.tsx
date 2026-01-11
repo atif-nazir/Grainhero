@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye } from 'lucide-react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
+import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 interface Silo {
   _id: string
@@ -320,7 +321,9 @@ export default function SilosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1006,6 +1009,8 @@ export default function SilosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   )
 }

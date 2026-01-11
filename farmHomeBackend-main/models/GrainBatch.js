@@ -127,6 +127,20 @@ const grainBatchSchema = new mongoose.Schema({
   insurance_value: Number,
   purchase_price_per_kg: Number,
   total_purchase_value: Number,
+  sell_price_per_kg: Number,
+  dispatched_quantity_kg: {
+    type: Number,
+    default: 0,
+    min: [0, "Dispatched quantity cannot be negative"]
+  },
+  revenue: {
+    type: Number,
+    default: 0
+  },
+  profit: {
+    type: Number,
+    default: 0
+  },
 
   // Buyer and dispatch information
   buyer_id: {
@@ -261,11 +275,54 @@ grainBatchSchema.methods.updateRiskScore = function (newScore, confidence) {
   return this.save();
 };
 
-// Method to dispatch batch
-grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails) {
-  this.status = BATCH_STATUSES.DISPATCHED;
-  this.buyer_id = buyerId;
-  this.dispatch_details = dispatchDetails;
+// Method to dispatch batch (supports partial dispatch)
+grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails, sellPricePerKg, dispatchedQuantityKg) {
+  const quantityToDispatch = dispatchedQuantityKg || this.quantity_kg;
+  
+  // Validate dispatch quantity
+  if (quantityToDispatch > this.quantity_kg - this.dispatched_quantity_kg) {
+    throw new Error('Dispatched quantity exceeds available quantity');
+  }
+  
+  // Update dispatched quantity
+  this.dispatched_quantity_kg = (this.dispatched_quantity_kg || 0) + quantityToDispatch;
+  
+  // If all quantity is dispatched, mark as fully dispatched
+  if (this.dispatched_quantity_kg >= this.quantity_kg) {
+    this.status = BATCH_STATUSES.DISPATCHED;
+  } else {
+    // Partial dispatch - keep status as stored or processing
+    this.status = this.status === BATCH_STATUSES.STORED ? BATCH_STATUSES.STORED : this.status;
+  }
+  
+  // Set buyer and dispatch details (only if not already set)
+  if (!this.buyer_id) {
+    this.buyer_id = buyerId;
+  }
+  if (dispatchDetails) {
+    this.dispatch_details = { ...this.dispatch_details, ...dispatchDetails };
+  }
+  
+  // Calculate revenue and profit for this dispatch
+  if (sellPricePerKg && this.purchase_price_per_kg) {
+    const dispatchRevenue = sellPricePerKg * quantityToDispatch;
+    const dispatchCost = this.purchase_price_per_kg * quantityToDispatch;
+    const dispatchProfit = dispatchRevenue - dispatchCost;
+    
+    // Update sell price (weighted average if multiple dispatches)
+    if (this.sell_price_per_kg) {
+      const totalDispatched = this.dispatched_quantity_kg;
+      const previousRevenue = this.sell_price_per_kg * (totalDispatched - quantityToDispatch);
+      this.sell_price_per_kg = (previousRevenue + dispatchRevenue) / totalDispatched;
+    } else {
+      this.sell_price_per_kg = sellPricePerKg;
+    }
+    
+    // Accumulate revenue and profit
+    this.revenue = (this.revenue || 0) + dispatchRevenue;
+    this.profit = (this.profit || 0) + dispatchProfit;
+  }
+  
   this.actual_dispatch_date = new Date();
   return this.save();
 };

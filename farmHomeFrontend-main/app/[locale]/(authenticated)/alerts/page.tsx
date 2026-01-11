@@ -7,6 +7,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useTranslations } from 'next-intl';
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { AnimatedBackground } from "@/components/animations/MotionGraphics";
 
 // User type
 interface User {
@@ -257,7 +258,9 @@ export default function AlertsPage() {
   
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       {/* Row 1: Heading/subtitle and Add Alert button */}
       <div className="flex items-center justify-between">
         <div>
@@ -351,6 +354,8 @@ export default function AlertsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   );
 } 
