@@ -109,7 +109,7 @@ export default function LocationAutocomplete({ value, onChange, label = "Locatio
         onBlur={handleBlur}
         required={required}
         autoComplete="off"
-        placeholder="Type an address, business, or landmark..."
+        placeholder="Enter address, business, or landmark..."
       />
       {showDropdown && (
         <ul className="absolute z-10 bg-white border rounded shadow w-full mt-1 max-h-60 overflow-auto p-0">

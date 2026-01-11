@@ -47,6 +47,8 @@ interface GrainBatch {
     dispatch_date: string
     notes?: string
   }
+  purchase_price_per_kg?: number
+  total_purchase_value?: number
 }
 
 interface Silo {
@@ -97,6 +99,7 @@ export default function GrainBatchesPage() {
     buyer_contact: '',
     quantity_dispatched: '',
     dispatch_date: '',
+    price_per_kg: '',
     notes: ''
   })
 
@@ -282,7 +285,8 @@ export default function GrainBatchesPage() {
       // Convert numeric fields to numbers
       const dataToSend = {
         ...dispatchData,
-        quantity_dispatched: Number(dispatchData.quantity_dispatched)
+        quantity_dispatched: Number(dispatchData.quantity_dispatched),
+        price_per_kg: dispatchData.price_per_kg ? Number(dispatchData.price_per_kg) : undefined
       }
       const res = await api.post(`/api/grain-batches/${selectedBatch._id}/dispatch-simple`, dataToSend)
       if (res.ok) {
@@ -298,6 +302,7 @@ export default function GrainBatchesPage() {
           buyer_contact: '',
           quantity_dispatched: '',
           dispatch_date: '',
+          price_per_kg: '',
           notes: ''
         })
         await fetchBatches()
@@ -318,6 +323,7 @@ export default function GrainBatchesPage() {
       buyer_contact: '',
       quantity_dispatched: batch.quantity_kg.toString(),
       dispatch_date: new Date().toISOString().split('T')[0],
+      price_per_kg: '',
       notes: ''
     })
     setIsDispatchDialogOpen(true)
@@ -1425,7 +1431,7 @@ export default function GrainBatchesPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="quantity_dispatched">Quantity Dispatched (kg) *</Label>
                         <Input
@@ -1448,6 +1454,18 @@ export default function GrainBatchesPage() {
                           type="date"
                           value={dispatchData.dispatch_date}
                           onChange={(e) => setDispatchData({ ...dispatchData, dispatch_date: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="price_per_kg">Price Per Kg ($)</Label>
+                        <Input
+                          id="price_per_kg"
+                          type="number"
+                          step="0.01"
+                          value={dispatchData.price_per_kg}
+                          onChange={(e) => setDispatchData({ ...dispatchData, price_per_kg: e.target.value })}
+                          placeholder="Enter price per kg"
                           className="mt-1"
                         />
                       </div>

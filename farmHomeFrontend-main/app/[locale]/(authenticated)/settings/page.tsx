@@ -330,6 +330,7 @@ export default function SettingsPage() {
                     id="name"
                     value={settings.name}
                     onChange={(e) => updateSettings('name', 'name', e.target.value)}
+                    placeholder="Enter organization name"
                   />
                 </div>
                 <div className="space-y-2">
@@ -339,6 +340,7 @@ export default function SettingsPage() {
                     type="email"
                     value={settings.email}
                     onChange={(e) => updateSettings('email', 'email', e.target.value)}
+                    placeholder="Enter contact email"
                   />
                 </div>
                 <div className="space-y-2">
@@ -347,6 +349,7 @@ export default function SettingsPage() {
                     id="phone"
                     value={settings.phone}
                     onChange={(e) => updateSettings('phone', 'phone', e.target.value)}
+                    placeholder="Enter phone number"
                   />
                 </div>
                 <div className="space-y-2">
@@ -383,6 +386,7 @@ export default function SettingsPage() {
                     id="city"
                     value={settings.location.city}
                     onChange={(e) => updateSettings('location', 'city', e.target.value)}
+                    placeholder="Enter city"
                   />
                 </div>
                 <div className="space-y-2">
@@ -391,6 +395,7 @@ export default function SettingsPage() {
                     id="country"
                     value={settings.location.country}
                     onChange={(e) => updateSettings('location', 'country', e.target.value)}
+                    placeholder="Enter country"
                   />
                 </div>
               </div>

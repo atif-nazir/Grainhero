@@ -81,12 +81,7 @@ export function formatQuality(value: number): string {
   return formatPercentage(value, 'whole');
 }
 
-/**
- * Formats storage utilization (typically 1 decimal place)
- */
-export function formatStorage(value: number): string {
-  return formatPercentage(value, 'one');
-}
+
 
 /**
  * Formats trend percentages (typically 2 decimal places)

@@ -316,7 +316,7 @@ export default function SignUpPage() {
                   <Input
                     id="name"
                     type="text"
-                    placeholder="Full Name (First and Last)"
+                    placeholder="Enter your full name"
                     value={formData.name}
                     onChange={(e) => handleChange("name", e.target.value)}
                     className={`pr-10 ${fieldValidations.name.touched && !fieldValidations.name.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.name.touched && fieldValidations.name.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
@@ -347,7 +347,7 @@ export default function SignUpPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="john.doe@example.com"
+                    placeholder="Enter your email address"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
                     className={`pr-10 ${fieldValidations.email.touched && !fieldValidations.email.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.email.touched && fieldValidations.email.isValid ? 'border-green-500 focus:border-green-500' : ''} ${invitationData ? 'bg-gray-50' : ''}`}
@@ -379,7 +379,7 @@ export default function SignUpPage() {
                   <Input
                     id="phone"
                     type="tel"
-                    placeholder="+1 (555) 123-4567"
+                    placeholder="Enter your phone number"
                     value={formData.phone}
                     onChange={(e) => handleChange("phone", e.target.value)}
                     className={`pr-10 ${fieldValidations.phone.touched && !fieldValidations.phone.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.phone.touched && fieldValidations.phone.isValid ? 'border-green-500 focus:border-green-500' : ''}`}

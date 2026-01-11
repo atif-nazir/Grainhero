@@ -208,7 +208,7 @@ export function ChatbotPopup() {
               <>
                 <input
                   type="text"
-                  placeholder="Search grain batch by ID, type, or silo..."
+                  placeholder="Enter batch ID, grain type, or silo to search..."
                   value={batchSearch}
                   onChange={e => setBatchSearch(e.target.value)}
                   className="w-full mb-2 px-2 py-1 border rounded"
@@ -309,7 +309,7 @@ export function ChatbotPopup() {
                     handleSendMessage();
                   }
                 }}
-                placeholder="Ask about grain storage, spoilage predictions, or risk analysis..."
+                placeholder="Type your question about grain storage, spoilage, or risk analysis..."
                 className="flex-1 bg-gray-50 border-0 text-gray-900 placeholder-gray-400 focus:ring-0 focus:outline-none"
                 disabled={!selectedBatch || isLoading}
               />

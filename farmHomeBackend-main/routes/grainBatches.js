@@ -662,6 +662,10 @@ router.post(
       body("dispatch_details.driver_name")
         .notEmpty()
         .withMessage("Driver name is required"),
+      body("price_per_kg")
+        .optional()
+        .isNumeric()
+        .withMessage("Price per kg must be a number"),
     ],
   ],
   async (req, res) => {
@@ -688,6 +692,13 @@ router.post(
 
       // Dispatch batch
       await batch.dispatch(req.body.buyer_id, req.body.dispatch_details);
+      
+      // Update price per kg if provided
+      if (req.body.price_per_kg !== undefined) {
+        batch.purchase_price_per_kg = parseFloat(req.body.price_per_kg);
+        batch.total_purchase_value = batch.quantity_kg * batch.purchase_price_per_kg;
+        await batch.save();
+      }
 
       // Update silo occupancy
       const silo = await Silo.findById(batch.silo_id);
@@ -745,6 +756,10 @@ router.post(
       body("quantity_dispatched")
         .isNumeric()
         .withMessage("Quantity must be a number"),
+      body("price_per_kg")
+        .optional()
+        .isNumeric()
+        .withMessage("Price per kg must be a number"),
     ],
   ],
   async (req, res) => {
@@ -829,6 +844,12 @@ router.post(
         notes: req.body.notes || "",
       };
       batch.actual_dispatch_date = new Date();
+      
+      // Update price per kg if provided
+      if (req.body.price_per_kg !== undefined) {
+        batch.purchase_price_per_kg = parseFloat(req.body.price_per_kg);
+        batch.total_purchase_value = batch.quantity_kg * batch.purchase_price_per_kg;
+      }
 
       await batch.save();
 

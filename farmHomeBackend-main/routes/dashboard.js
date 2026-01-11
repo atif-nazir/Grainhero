@@ -5,6 +5,7 @@ const {
   requirePermission,
   requireTenantAccess,
 } = require("../middleware/permission");
+const { requireWarehouseAccess } = require('../middleware/warehouseAccess');
 const { body } = require("express-validator");
 const GrainBatch = require("../models/GrainBatch");
 const Silo = require("../models/Silo");
@@ -97,58 +98,33 @@ function getStorageStatus(capacity, currentQuantity) {
  *                       type: array
  *                       items:
  *                         type: object
- *                         properties:
- *                           tagId:
- *                             type: string
- *                           reason:
- *                             type: string
- *                     breeding:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           tagId:
- *                             type: string
- *                           reason:
- *                             type: string
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden
  */
-// Test endpoint to verify connection
-router.get("/dashboard/test", (req, res) => {
-  res.json({
-    message: "Dashboard API is working!",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Import cache middleware
-const { createCacheMiddleware } = require('../middleware/cache');
-const { requireWarehouseAccess } = require('../middleware/warehouseAccess');
-
-// Cache dashboard for 30 seconds (frequently accessed, but needs to be relatively fresh)
-router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(30 * 1000), async (req, res) => {
-  try {
-    const scopeConditions = [];
-    if (req.user?.tenant_id) {
-      scopeConditions.push({ tenant_id: req.user.tenant_id });
-    }
-    if (req.user?.owned_tenant_id) {
-      scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
-    }
-    if (req.user?._id) {
-      scopeConditions.push({ admin_id: req.user._id });
-      scopeConditions.push({ created_by: req.user._id });
-    }
-    
-    // Add warehouse filter for managers and technicians
-    if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
-      scopeConditions.push(req.warehouseFilter);
-    }
-
-    const applyScope = (extra = {}) => {
+router.get(
+  "/dashboard",
+  [auth, requirePermission("dashboard.view"), requireTenantAccess, requireWarehouseAccess()],
+  async (req, res) => {
+    try {
+      const { language = "en" } = req.query;
+      
+      // Scope conditions for multi-tenancy
+      const scopeConditions = [];
+      if (req.user?.tenant_id) {
+        scopeConditions.push({ tenant_id: req.user.tenant_id });
+      }
+      if (req.user?.owned_tenant_id) {
+        scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
+      }
+      if (req.user?._id) {
+        scopeConditions.push({ admin_id: req.user._id });
+        scopeConditions.push({ created_by: req.user._id });
+      }
+      
+      // Add warehouse filter for managers and technicians
+      if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
+        scopeConditions.push(req.warehouseFilter);
+      }
+      
+      const applyScope = (extra = {}) => {
       if (!scopeConditions.length) {
         return extra;
       }
@@ -385,6 +361,44 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
         ? Math.round((dispatchedBatches.length / totalBatches) * 100)
         : 0;
 
+    // Calculate monthly revenue
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+    const currentMonthDispatched = grainBatches.filter(batch => {
+      const batchDate = batch.actual_dispatch_date || batch.updated_at || batch.created_at;
+      const batchMonth = new Date(batchDate).getMonth();
+      const batchYear = new Date(batchDate).getFullYear();
+      return batch.status?.toLowerCase() === "dispatched" && 
+             batchMonth === currentMonth && 
+             batchYear === currentYear;
+    });
+    
+    const lastMonthDispatched = grainBatches.filter(batch => {
+      const batchDate = batch.actual_dispatch_date || batch.updated_at || batch.created_at;
+      const batchMonth = new Date(batchDate).getMonth();
+      const batchYear = new Date(batchDate).getFullYear();
+      return batch.status?.toLowerCase() === "dispatched" && 
+             batchMonth === lastMonth && 
+             batchYear === lastYear;
+    });
+    
+    const currentMonthRevenue = currentMonthDispatched.reduce((sum, batch) => {
+      return sum + ((batch.quantity_kg || 0) * (batch.purchase_price_per_kg || 0));
+    }, 0);
+    
+    const lastMonthRevenue = lastMonthDispatched.reduce((sum, batch) => {
+      return sum + ((batch.quantity_kg || 0) * (batch.purchase_price_per_kg || 0));
+    }, 0);
+    
+    const revenueGrowthPercentage = lastMonthRevenue > 0 
+      ? Math.round(((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100) 
+      : currentMonthRevenue > 0 ? 100 : 0;
+
     const avgRiskScore =
       totalBatches > 0
         ? grainBatches.reduce(
@@ -403,9 +417,10 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
           value: totalBatches,
         },
         {
-          title: "Storage Utilization",
-          value: `${storageUtilization}%`,
+          title: "Monthly Revenue",
+          value: `$${currentMonthRevenue.toLocaleString()}`,
         },
+
         {
           title: "Recent Incidents (last month)",
           value: recentIncidents,
@@ -449,6 +464,9 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
         avgPricePerKg: Number(avgPrice.toFixed(2)),
         dispatchRate,
         qualityScore,
+        monthlyRevenue: currentMonthRevenue,
+        monthlyRevenueGrowth: revenueGrowthPercentage,
+        lastMonthRevenue: lastMonthRevenue,
       },
     });
   } catch (err) {
@@ -838,7 +856,7 @@ router.get(
         doc.fontSize(12);
         doc.text(`Total Batches: ${reportData.summary.total_batches}`);
         doc.text(`Total Silos: ${reportData.summary.total_silos}`);
-        doc.text(`Storage Utilization: ${reportData.summary.avg_utilization}%`);
+
         doc.text(`High Risk Batches: ${reportData.summary.high_risk_batches}`);
         doc.text(`Active Alerts: ${reportData.summary.active_alerts}`);
         doc.moveDown();

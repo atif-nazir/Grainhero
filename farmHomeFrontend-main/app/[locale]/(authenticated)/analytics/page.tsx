@@ -118,10 +118,10 @@ export default function AnalyticsPage() {
         trend: last && last.total >= avg ? "up" : "down"
       },
       {
-        metric: "Storage Utilization",
-        predicted: storageEfficiency,
-        confidence: 90,
-        trend: storageEfficiency >= 80 ? "up" : "down"
+        metric: "Quality Score",
+        predicted: qualityScore,
+        confidence: 88,
+        trend: qualityScore >= 4 ? "up" : "down"
       },
       {
         metric: "Quality Score",

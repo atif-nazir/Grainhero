@@ -490,7 +490,7 @@ export default function PlanManagementPage() {
           <div className="flex items-center space-x-4 mb-6">
             <div className="relative flex-1">
               <Input
-                placeholder="Search by plan name, tenant, or status..."
+                placeholder="Enter plan name, tenant, or status to search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"

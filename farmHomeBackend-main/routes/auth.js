@@ -78,6 +78,7 @@ async function uploadFile(req) {
 router.post("/signup", async (req, res) => {
   const { name, email, phone, password, confirm_password, invitation_token } =
     req.body;
+  let invitationData = null;
 
   console.log("=== SIGNUP DEBUG ===");
   console.log("Request body:", {
@@ -143,14 +144,42 @@ router.post("/signup", async (req, res) => {
         
         // Query for existing user considering email and phone (if provided)
         let existingUser = null;
-        if (phone) {
-          existingUser = await User.findOne({ $or: [{ email }, { phone }] });
-        } else {
-          // If phone is not provided, only check for email
-          existingUser = await User.findOne({ email });
+        
+        // Check for invitation token first
+        if (invitation_token) {
+          console.log("Looking for invitation with token:", invitation_token);
+          
+          // Look for user with invitation token that hasn't expired
+          invitationData = await User.findOne({
+            invitationToken: invitation_token,
+            invitationExpires: { $gt: Date.now() },
+          }).select("+invitationToken +invitationRole");
+          
+          console.log("Valid invitation found:", invitationData ? "YES" : "NO");
+          if (invitationData) {
+            console.log("Valid invitation details:", {
+              email: invitationData.email,
+              role: invitationData.role,
+              invitationRole: invitationData.invitationRole,
+              expires: invitationData.invitationExpires,
+            });
+            
+            // Use the invitation user as the existing user
+            existingUser = invitationData;
+          }
         }
         
-        if (existingUser) {
+        // If no invitation was found, check for existing users with email/phone
+        if (!invitationData) {
+          if (phone) {
+            existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+          } else {
+            // If phone is not provided, only check for email
+            existingUser = await User.findOne({ email });
+          }
+        }
+        
+        if (existingUser && !invitationData) {
           console.log("Existing user found with details:", {
             id: existingUser._id,
             role: existingUser.role,
@@ -254,6 +283,11 @@ router.post("/signup", async (req, res) => {
           }
         }
         
+        // If invitation was found, use that user data
+        if (invitationData) {
+          existingUser = invitationData;
+        }
+        
         // Determine role based on signup context
         const userCount = await User.countDocuments();
         const isFirstUser = userCount === 0;
@@ -301,7 +335,6 @@ router.post("/signup", async (req, res) => {
     };
 
     // Handle invitation token if present
-    let invitationData = null;
     if (invitation_token) {
       console.log("Looking for invitation with token:", invitation_token);
       console.log("Current time:", Date.now());
@@ -474,7 +507,8 @@ router.post("/signup", async (req, res) => {
       invitationData.name = name;
       invitationData.phone = phone || invitationData.phone; // Keep existing phone if not provided
       invitationData.password = password;
-      invitationData.role = userRole;
+      // Update role from pending to the invited role
+      invitationData.role = invitationData.invitationRole || "technician";
       invitationData.invitationToken = undefined;
       invitationData.invitationExpires = undefined;
       invitationData.emailVerified = true;

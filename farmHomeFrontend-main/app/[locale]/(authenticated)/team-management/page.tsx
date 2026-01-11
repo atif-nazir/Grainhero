@@ -330,7 +330,7 @@ export default function TeamManagementPage() {
                                     <Input
                                         id="invite-email"
                                         type="email"
-                                        placeholder="colleague@example.com"
+                                        placeholder="Enter colleague's email address"
                                         value={inviteForm.email}
                                         onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
                                         required
@@ -342,7 +342,7 @@ export default function TeamManagementPage() {
                                     <Input
                                         id="invite-name"
                                         type="text"
-                                        placeholder="John Doe"
+                                        placeholder="Enter colleague's name"
                                         value={inviteForm.name}
                                         onChange={(e) => setInviteForm(prev => ({ ...prev, name: e.target.value }))}
                                     />
@@ -458,7 +458,7 @@ export default function TeamManagementPage() {
                         <div className="relative">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by name, email, or phone..."
+                                placeholder="Enter name, email, or phone to search..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-8"

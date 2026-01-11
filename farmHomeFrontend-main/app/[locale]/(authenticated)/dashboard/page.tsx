@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   AlertCircle,
   Package,
@@ -110,6 +111,9 @@ interface DashboardBusiness {
   avgPricePerKg: number
   dispatchRate: number
   qualityScore: number
+  monthlyRevenue?: number
+  monthlyRevenueGrowth?: number
+  lastMonthRevenue?: number
 }
 
 interface DashboardSuggestion {
@@ -175,7 +179,7 @@ export default function DashboardPage() {
 
   const metricIconMap: Record<string, { icon: IconType; color: string }> = {
     "Total Grain Batches": { icon: Package, color: "blue" },
-    "Storage Utilization": { icon: Warehouse, color: "green" },
+
     "Recent Incidents (last month)": { icon: AlertTriangle, color: "yellow" },
     "Active Users": { icon: Users, color: "purple" },
     "Active Alerts": { icon: AlertTriangle, color: "red" },
@@ -302,112 +306,95 @@ export default function DashboardPage() {
               <Card className="col-span-4">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Warehouse className="h-5 w-5" />
-                    Storage Overview
+                    <Activity className="h-5 w-5" />
+                    Recent Activity
                   </CardTitle>
-                  <CardDescription>Current storage capacity and utilization</CardDescription>
+                  <CardDescription>Your recent grain management activity</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {dashboard?.capacityStats ? (
-                    <div className="space-y-6">
-                      {/* Main Stats Grid */}
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Total Capacity</p>
-                          <p className="text-2xl font-bold">{dashboard.capacityStats.totalCapacity.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">kg</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Current Usage</p>
-                          <p className="text-2xl font-bold">{dashboard.capacityStats.totalCurrentQuantity.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">kg</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Available</p>
-                          <p className="text-2xl font-bold">{(dashboard.capacityStats.totalCapacity - dashboard.capacityStats.totalCurrentQuantity).toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">kg</p>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Today's Intake</p>
+                        <p className="text-2xl font-bold">{dashboard?.capacityStats?.totalCurrentQuantity ? dashboard.capacityStats.totalCurrentQuantity.toLocaleString() : 0}</p>
+                        <p className="text-xs text-muted-foreground">kg</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Active Batches</p>
+                        <p className="text-2xl font-bold">{dashboard?.recentBatches?.length ? dashboard.recentBatches.length : 0}</p>
+                        <p className="text-xs text-muted-foreground"></p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Active Alerts</p>
+                        <p className="text-2xl font-bold">{dashboard?.alerts?.length ? dashboard.alerts.length : 0}</p>
+                        <p className="text-xs text-muted-foreground"></p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">Operations Completed</span>
+                        <span className="text-sm font-bold">{dashboard?.recentBatches?.length ? Math.min(100, Math.floor((dashboard.recentBatches.filter(b => b.status === 'stored').length / Math.max(1, dashboard.recentBatches.length)) * 100)) + '%' : '0%'}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
+                        <div
+                          className="h-4 rounded-full transition-all duration-500 bg-blue-500"
+                          style={{ width: `${dashboard?.recentBatches?.length ? Math.min(100, Math.floor((dashboard.recentBatches.filter(b => b.status === 'stored').length / dashboard.recentBatches.length) * 100)) : 0}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Avg. Daily Intake</p>
+                          <p className="text-sm font-semibold">{dashboard?.analytics?.monthlyIntake?.length ? Math.floor(dashboard.analytics.monthlyIntake.reduce((sum, month) => sum + month.total, 0) / dashboard.analytics.monthlyIntake.length).toLocaleString() : 0} kg</p>
                         </div>
                       </div>
-
-                      {/* Utilization Progress */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">Utilization</span>
-                          <span className="text-sm font-bold">{dashboard.capacityStats.utilizationPercentage.toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
-                          {/* Dynamic width requires inline style for percentage values - browser extension warning can be ignored */}
-                          <div
-                            className={`h-4 rounded-full transition-all duration-500 ${dashboard.capacityStats.utilizationPercentage > 80 ? 'bg-red-500' :
-                              dashboard.capacityStats.utilizationPercentage > 60 ? 'bg-yellow-500' :
-                                'bg-green-500'
-                              }`}
-                            style={{ width: `${Math.min(dashboard.capacityStats.utilizationPercentage, 100)}%` }}
-                          ></div>
-                        </div>
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>0%</span>
-                          <span>100%</span>
-                        </div>
-                      </div>
-
-                      {/* Quick Stats */}
-                      <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-green-600" />
-                          <div>
-                            <p className="text-xs text-muted-foreground">Avg. Utilization</p>
-                            <p className="text-sm font-semibold">{dashboard.capacityStats.utilizationPercentage.toFixed(1)}%</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-4 w-4 text-blue-600" />
-                          <div>
-                            <p className="text-xs text-muted-foreground">Storage Health</p>
-                            <p className="text-sm font-semibold">
-                              {dashboard.capacityStats.utilizationPercentage > 80 ? 'High' :
-                                dashboard.capacityStats.utilizationPercentage > 60 ? 'Medium' : 'Optimal'}
-                            </p>
-                          </div>
+                      <div className="flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Efficiency</p>
+                          <p className="text-sm font-semibold">
+                            {dashboard?.business?.qualityScore ? Math.round(dashboard.business.qualityScore * 20) + '%' : '0%'}
+                          </p>
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No storage data available.</p>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
 
-              {/* Storage Distribution chart */}
               <Card className="col-span-3">
                 <CardHeader>
-                  <CardTitle>Storage Distribution</CardTitle>
-                  <CardDescription>Real-time storage status across all silos</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Monthly Revenue
+                  </CardTitle>
+                  <CardDescription>Current month financial performance</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {dashboard?.storageDistribution?.length ? (
-                    <div className="space-y-4">
-                      <AnimatedPieChart
-                        data={dashboard.storageDistribution.map(d => ({ name: d.status, value: d.count }))}
-                        title="Silo Storage Status"
-                      />
-                      {/* Legend with better spacing to avoid overlap */}
-                      <div className="space-y-2 pt-4 border-t">
-                        {dashboard.storageDistribution.map((item, index) => (
-                          <div key={index} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-500' : index === 1 ? 'bg-amber-500' : 'bg-green-500'
-                                  }`}
-                              />
-                              <span className="font-medium">{item.status}</span>
-                            </div>
-                            <span className="text-muted-foreground">{item.count} silos</span>
-                          </div>
-                        ))}
+                  <div className="space-y-6">
+                    <div className="text-center py-4">
+                      <div className="text-3xl font-bold text-green-600">${dashboard?.business?.monthlyRevenue?.toLocaleString() || '0'}</div>
+                      <p className="text-sm text-muted-foreground mt-1">Total Revenue</p>
+                    </div>
+                    <div className="pt-4 border-t">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">Growth vs Last Month</span>
+                        <span className={`text-sm font-semibold ${dashboard?.business?.monthlyRevenueGrowth ? (dashboard.business.monthlyRevenueGrowth >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-600'}`}>
+                          {dashboard?.business?.monthlyRevenueGrowth ? (dashboard.business.monthlyRevenueGrowth >= 0 ? '+' : '') + dashboard.business.monthlyRevenueGrowth + '%' : '0%'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-500 ${dashboard?.business?.monthlyRevenueGrowth ? (dashboard.business.monthlyRevenueGrowth >= 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-500'}`}
+                          style={{ width: `${Math.min(100, Math.abs(dashboard?.business?.monthlyRevenueGrowth || 0))}%` }}
+                        ></div>
                       </div>
                     </div>
-                  ) : <div>No silo data</div>}
+                  </div>
                 </CardContent>
               </Card>
 
