@@ -59,6 +59,8 @@ unsigned long lastMQTTReconnectAttempt = 0;
 
 const unsigned long LID_OPEN_DELAY_MS = 3000;
 const unsigned long LID_CLOSE_DELAY_MS = 3000;
+const unsigned long MIN_FAN_ON_MS = 5UL * 60UL * 1000UL;
+const unsigned long MIN_FAN_OFF_MS = 5UL * 60UL * 1000UL;
 
 // Override expires after 10 minutes (you can change)
 const unsigned long HUMAN_OVERRIDE_TIMEOUT = 10UL * 60UL * 1000UL;
@@ -83,6 +85,7 @@ LidFanState currentState = STATE_IDLE_CLOSED;
 unsigned long lidLastOpenedAt = 0;
 unsigned long fanLastStartedAt = 0;
 unsigned long lastDecisionChangeAt = 0;
+unsigned long fanLastStoppedAt = 0;
 // ---------------------------------------
 
 // ---------- HUMAN OVERRIDE CONFIG ----------
@@ -175,6 +178,10 @@ const float MAX_SAFE_OUTSIDE_HUMIDITY = 80.0;
 
 bool mlRequestedFan = false; // ML decision placeholder
 int targetFanSpeed = 60;     // default fan speed
+bool guard_lid_closed = false;
+bool guard_dew_point_risk = false;
+bool guard_ambient_rh = false;
+float dew_point_gap = 0.0;
 
 bool lastFanDecision = false; // debounce memory
 // --------------------------------------------------
@@ -822,6 +829,7 @@ void initializePWM() {
 void setPWMSpeed(int speedPercent) {
   // ---------- FAN–LID SAFETY INTERLOCK ----------
   if (!lidIsOpen) {
+    guard_lid_closed = true;
     pwmSpeed = 0;
     pwmDutyCycle = 0.0;
     pwm.write(pwmDutyCycle);
@@ -829,6 +837,7 @@ void setPWMSpeed(int speedPercent) {
     return;
   }
   // ---------------------------------------------
+  guard_lid_closed = false;
 
   // Clamp input
   speedPercent = constrain(speedPercent, 0, 100);
@@ -873,12 +882,25 @@ void moveServoCommand(bool open) {
 bool environmentAllowsVentilation() {
   if (isRaining)
     return false;
-  if (outsideHumidity > MAX_SAFE_OUTSIDE_HUMIDITY)
+  if (outsideHumidity > MAX_SAFE_OUTSIDE_HUMIDITY) {
+    guard_ambient_rh = true;
     return false;
+  } else {
+    guard_ambient_rh = false;
+  }
   if (currentData.temperature > 60.0)
     return false;
   if (currentData.tvoc_approx > 1000.0)
     return false;
+  if (!isnan(currentData.dew_point)) {
+    dew_point_gap = currentData.temperature - currentData.dew_point;
+    if (dew_point_gap < 1.0) {
+      guard_dew_point_risk = true;
+      return false;
+    } else {
+      guard_dew_point_risk = false;
+    }
+  }
   return true;
 }
 
@@ -917,24 +939,28 @@ void processLidFanStateMachine() {
 
   case STATE_IDLE_CLOSED:
     if (wantFan) {
-      moveServoCommand(true);
-      lidLastOpenedAt = now;
-      currentState = STATE_OPENING_LID;
+      if (fanLastStoppedAt == 0 || now - fanLastStoppedAt >= MIN_FAN_OFF_MS) {
+        moveServoCommand(true);
+        lidLastOpenedAt = now;
+        currentState = STATE_OPENING_LID;
+      }
     }
     break;
 
   case STATE_OPENING_LID:
     if (now - lidLastOpenedAt >= LID_OPEN_DELAY_MS) {
       currentState = STATE_FAN_RUNNING;
+      fanLastStartedAt = now;
     }
     break;
 
   case STATE_FAN_RUNNING:
     setPWMSpeed(targetFanSpeed);
     if (!wantFan) {
-      fanLastStartedAt = now;
-      setPWMSpeed(0);
-      currentState = STATE_STOPPING_FAN;
+      if (fanLastStartedAt == 0 || now - fanLastStartedAt >= MIN_FAN_ON_MS) {
+        setPWMSpeed(0);
+        currentState = STATE_STOPPING_FAN;
+      }
     }
     break;
 
@@ -942,6 +968,7 @@ void processLidFanStateMachine() {
     if (now - fanLastStartedAt >= LID_CLOSE_DELAY_MS) {
       moveServoCommand(false);
       currentState = STATE_IDLE_CLOSED;
+      fanLastStoppedAt = now;
     }
     break;
   }
@@ -1205,6 +1232,11 @@ void publishSerialTelemetry() {
   doc["lidState"] = lidIsOpen ? "open" : "closed";
   doc["mlDecision"] = mlRequestedFan ? "fan_on" : "idle";
   doc["timestamp"] = currentData.timestamp;
+  doc["dewPointGap"] = dew_point_gap;
+  JsonObject gr = doc.createNestedObject("guardrails");
+  gr["ambient_rh"] = guard_ambient_rh;
+  gr["dew_point_risk"] = guard_dew_point_risk;
+  gr["lid_closed"] = guard_lid_closed;
   String out;
   serializeJson(doc, out);
   Serial.println(out);
@@ -1315,6 +1347,13 @@ void publishToFirebaseREST() {
 
   jsonDoc["control_mode"] = (controlMode == AUTO) ? "AUTO" : "MANUAL";
   jsonDoc["human_override"] = humanOverrideActive;
+  jsonDoc["dew_point"] = currentData.dew_point;
+  jsonDoc["dew_point_gap"] = dew_point_gap;
+  JsonObject guard = jsonDoc.createNestedObject("guardrails");
+  guard["ambient_rh"] = guard_ambient_rh;
+  guard["dew_point_risk"] = guard_dew_point_risk;
+  guard["lid_closed"] = guard_lid_closed;
+  guard["venting_blocked"] = (guard_ambient_rh || guard_dew_point_risk || (!lidIsOpen));
 
   // DHT11 data
   JsonObject dht1 = jsonDoc.createNestedObject("dht1");
@@ -1422,6 +1461,8 @@ client.setInsecure();
           ingestReadings["tvoc"] = currentData.tvoc_approx;
           ingestReadings["pwm_speed"] = pwmSpeed;
           ingestReadings["servo_state"] = servoState;
+          ingestReadings["dew_point"] = currentData.dew_point;
+          ingestReadings["dew_point_gap"] = dew_point_gap;
           String payload;
           serializeJson(ingestDoc, payload);
           int httpResponseCode = http.POST(payload);

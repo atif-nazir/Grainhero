@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -49,12 +49,67 @@ export default function ActuatorsPage() {
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
   const [singleDeviceId, setSingleDeviceId] = useState<string>(process.env.NEXT_PUBLIC_DEVICE_ID || '')
+  const socketRef = useRef<import('socket.io-client').Socket | null>(null)
 
   useEffect(() => {
     loadDevices()
     const i = setInterval(loadDevices, 2000)
     return () => clearInterval(i)
   }, [])
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const mod = await import('socket.io-client')
+        const socket = mod.io(backendUrl, { transports: ['websocket'], path: '/socket.io' })
+        socketRef.current = socket
+        socket.on('connect', () => {
+          if (!mounted) return
+          toast.success(`Realtime connected: ${socket.id}`)
+        })
+        socket.on('actuator_status', (msg: { data: Record<string, unknown> }) => {
+          if (!mounted) return
+          try {
+            const d = (msg?.data as Record<string, unknown>) || {}
+            setDevices(prev => prev.map(dev => {
+              const actId = (d as Record<string, unknown>)?.['actuatorId']
+              if (actId && (dev._id === actId || dev.device_id === actId)) {
+                return { ...dev, status: 'online', last_activity: new Date().toISOString() }
+              }
+              return dev
+            }))
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'unknown'
+            toast.error(`Realtime actuator parse error: ${msg}`)
+          }
+        })
+        socket.on('connect_error', (err: Error) => {
+          if (!mounted) return
+          toast.error(`Realtime error: ${err.message}`)
+          // Fetch backend diagnostics for clearer messaging
+          const id = singleDeviceId || devices[0]?._id || ''
+          if (id) {
+            fetch(`${backendUrl}/api/iot/diagnostics-public/${id}`).then(r => r.json()).then(d => {
+              if (d && d.mqtt_connected === false) toast.error('Backend MQTT disconnected (check broker URL/env)')
+              if (d && d.firebase_enabled === false) toast.error('Backend Firebase disabled or misconfigured (.env)')
+            }).catch(() => {})
+          }
+        })
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'unknown'
+        toast.error(`Realtime init failed: ${msg}`)
+      }
+    })()
+    return () => {
+      mounted = false
+      try {
+        socketRef.current?.off('actuator_status')
+        socketRef.current?.disconnect()
+      } catch {}
+      socketRef.current = null
+    }
+  }, [backendUrl])
 
   const loadDevices = async () => {
     try {
@@ -97,6 +152,11 @@ export default function ActuatorsPage() {
       } else {
         const errText = await response.text().catch(() => '')
         toast.error(`Control failed (${response.status}): ${errText || 'unknown error'}`)
+        // Try diagnostics to explain failure
+        fetch(`${backendUrl}/api/iot/diagnostics-public/${deviceId}`).then(r => r.json()).then(d => {
+          if (d && d.mqtt_connected === false) toast.error('MQTT broker unreachable from backend')
+          if (d && d.firebase_enabled === false) toast.error('Firebase realtime disabled/missing FIREBASE_* envs')
+        }).catch(() => {})
       }
     } catch (error) {
       console.error('Error controlling device:', error)

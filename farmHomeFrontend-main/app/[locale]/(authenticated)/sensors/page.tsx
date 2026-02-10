@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,8 @@ import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
 import { toast } from 'sonner'
 import { useLanguage } from '@/app/[locale]/providers'
+import type { Socket } from 'socket.io-client'
+let ioClient: typeof import('socket.io-client').io | null = null
 
 interface SensorDevice {
   _id: string
@@ -61,6 +63,8 @@ export default function SensorsPage() {
   }>>([])
   const [siloId, setSiloId] = useState<string>('')
   const backendUrl = (typeof window !== 'undefined' ? (window as typeof window & Record<string, unknown>).__BACKEND_URL : undefined) || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  const socketRef = useRef<Socket | null>(null)
+  const [realtimeConnected, setRealtimeConnected] = useState(false)
 
   // Initialize with fixed device id if provided
   useEffect(() => {
@@ -73,6 +77,20 @@ export default function SensorsPage() {
   // Load sensors from backend
   useEffect(() => {
     let mounted = true
+    const checkDiagnostics = async () => {
+      try {
+        if (!siloId) return
+        const res = await fetch(`${backendUrl}/api/iot/diagnostics-public/${siloId}`)
+        const data = await res.json().catch(() => ({}))
+        if (!mounted) return
+        if (data && data.mqtt_connected === false) {
+          toast.error('MQTT not connected on backend')
+        }
+        if (data && data.firebase_enabled === false) {
+          toast.error('Firebase realtime disabled or misconfigured')
+        }
+      } catch {}
+    }
     ;(async () => {
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
@@ -121,6 +139,7 @@ export default function SensorsPage() {
           if (!siloId) {
             if (mapped.length > 0) {
               setSiloId(mapped[0].device_id)
+              setTimeout(checkDiagnostics, 500)
             }
           }
         } else {
@@ -134,6 +153,7 @@ export default function SensorsPage() {
         setLoading(false)
       }
     })()
+    const diagTimer = setInterval(checkDiagnostics, 10000)
     const interval = setInterval(async () => {
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
@@ -182,8 +202,96 @@ export default function SensorsPage() {
     }, 2000)
     return () => { mounted = false
       clearInterval(interval)
+      clearInterval(diagTimer)
     }
   }, [])
+
+  // Realtime: Socket.IO subscription for immediate updates
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!siloId) return
+        if (!ioClient) {
+          const mod = await import('socket.io-client')
+          ioClient = mod.io
+        }
+        const socket = ioClient!(backendUrl, { transports: ['websocket'], path: '/socket.io' })
+        socketRef.current = socket
+        socket.on('connect', () => {
+          if (!active) return
+          setRealtimeConnected(true)
+          toast.success(`Realtime connected: ${socket.id}`)
+        })
+        socket.on('connect_error', (err: Error) => {
+          if (!active) return
+          setRealtimeConnected(false)
+          toast.error(`Realtime error: ${err.message}`)
+          try {
+            fetch(`${backendUrl}/api/iot/diagnostics-public/${siloId}`).then(r => r.json()).then(d => {
+              if (d && d.mqtt_connected === false) {
+                toast.error('Backend MQTT disconnected (broker unreachable)')
+              }
+              if (d && d.firebase_enabled === false) {
+                toast.error('Backend Firebase disabled or misconfigured (.env)')
+              }
+            }).catch(() => {})
+          } catch {}
+        })
+        socket.on('sensor_reading', (msg: { type: string, data: Record<string, unknown>, timestamp: string | number }) => {
+          if (!active) return
+          try {
+            const d = msg?.data as Record<string, unknown>
+            const deviceId = (typeof d?.device_id === 'string' ? d.device_id : '') || ''
+            if (!deviceId) return
+            const maybeObjId = (d?.['device_id'] as { _id?: string } | undefined)?.['_id']
+            if (deviceId !== siloId && maybeObjId !== siloId) return
+            const temperature = ((d?.['temperature'] as { value?: number } | undefined)?.value) ?? ((d?.['ambient'] as { temperature?: { value?: number } } | undefined)?.temperature?.value) ?? 0
+            const humidity = ((d?.['humidity'] as { value?: number } | undefined)?.value) ?? ((d?.['ambient'] as { humidity?: { value?: number } } | undefined)?.humidity?.value) ?? 0
+            const tvocRaw = ((d?.['voc'] as { value?: number } | undefined)?.value) ?? 0
+            const fanState = ((d?.['actuation_state'] as { fan_status?: string } | undefined)?.fan_status) ?? (((d?.['pwm_speed'] as number | undefined) && Number(d?.['pwm_speed']) > 0) ? 'on' : 'off')
+            const lidState = ((d?.['actuation_state'] as { lid_status?: string } | undefined)?.lid_status) ?? ((d?.['servo_state'] ? 'open' : 'closed'))
+            const mlDecision = ((d?.['derived_metrics'] as { fan_recommendation?: string } | undefined)?.fan_recommendation === 'run') ? 'fan_on' : (((d?.['derived_metrics'] as { fan_recommendation?: string } | undefined)?.fan_recommendation === 'stop') ? 'idle' : (humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle')
+            const humanOverride = !!(d?.['metadata'] as { human_override?: boolean } | undefined)?.human_override
+            const guardrails: string[] = []
+            if (temperature > 60) guardrails.push('high_temperature')
+            if (tvocRaw > 1000) guardrails.push('high_tvoc')
+            const ts = Number(d?.['timestamp'] as number | string | undefined) || Date.now()
+            setTelemetry({
+              temperature: Number(temperature),
+              humidity: Number(humidity),
+              tvoc: Number(tvocRaw),
+              fanState,
+              lidState,
+              mlDecision,
+              humanOverride,
+              guardrails,
+              timestamp: ts
+            })
+            setTelemetryHistory(prev => {
+              const next = [...prev, { timestamp: ts, mlDecision, fanState, lidState }]
+              return next.slice(-30)
+            })
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'unknown'
+            toast.error(`Realtime parse error: ${msg}`)
+          }
+        })
+      } catch (e: unknown) {
+        setRealtimeConnected(false)
+        const msg = e instanceof Error ? e.message : 'unknown'
+        toast.error(`Realtime init failed: ${msg}`)
+      }
+    })()
+    return () => {
+      active = false
+      try {
+        socketRef.current?.off('sensor_reading')
+        socketRef.current?.disconnect()
+      } catch {}
+      socketRef.current = null
+    }
+  }, [siloId, backendUrl])
 
   useEffect(() => {
     let mounted = true
@@ -202,16 +310,16 @@ export default function SensorsPage() {
             const next = [...prev, { timestamp: data.timestamp, mlDecision: data.mlDecision, fanState: data.fanState, lidState: data.lidState }]
             return next.slice(-20)
           })
-          if (!telemetry) toast.success(`Connected to ${siloId}`)
+          if (!telemetry && !realtimeConnected) toast.success(`Connected (polling) to ${siloId}`)
         } else {
           setTelemetry(null)
           const msg = await res.text().catch(() => '')
-          toast.error(`Telemetry error (${res.status}): ${msg || 'unavailable'}`)
+          toast.error(`Telemetry error (${res.status}): ${msg || 'unavailable'} [route: /api/iot/silos/${siloId}/telemetry]`)
         }
       } catch {
         if (!mounted) return
         setTelemetry(null)
-        toast.error('Network error while reading telemetry')
+        toast.error(`Network error while reading telemetry [origin: ${backendUrl}]`)
       }
     }
     fetchTelemetry()

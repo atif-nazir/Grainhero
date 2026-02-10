@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { toast } from "sonner"
 import { 
   AnimatedBackground, 
   AnimatedText,
@@ -465,10 +466,17 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000
     }
   }
 
-  // Auto-refresh every 5 minutes
+  // Auto-refresh
   useEffect(() => {
-    fetchEnvironmentalData()
-    const interval = setInterval(fetchEnvironmentalData, 5 * 60 * 1000)
+    ;(async () => { await fetchEnvironmentalData(); toast.success('Environmental data loaded') })()
+    const interval = setInterval(async () => {
+      try {
+        await fetchEnvironmentalData()
+        toast.success('Environmental data refreshed')
+      } catch {
+        toast.error('Environmental refresh failed')
+      }
+    }, 15000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
