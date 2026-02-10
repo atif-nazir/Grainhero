@@ -64,21 +64,21 @@ router.post("/", async (req, res) => {
         name: "Grain Starter",
         description:
           "Perfect for small grain operations and individual farmers.",
-        price: 9900, // $99.00 in cents
+       
         interval: "month",
       },
       intermediate: {
         name: "Grain Professional",
         description:
           "Advanced features for growing grain operations and cooperatives.",
-        price: 29900, // $299.00 in cents
+       
         interval: "month",
       },
       pro: {
         name: "Grain Enterprise",
         description:
           "Complete solution for large grain operations and trading companies.",
-        price: 99900, // $999.00 in cents
+        
         interval: "month",
       },
     };
