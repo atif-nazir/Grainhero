@@ -176,6 +176,8 @@ const [rainfallHistory, setRainfallHistory] = useState<RainfallMetric[]>([])
 const [airflowHistory, setAirflowHistory] = useState<AirflowMetric[]>([])
 const [historyIsFallback, setHistoryIsFallback] = useState(false)
 const [forecastSeries, setForecastSeries] = useState<WeatherData[]>([])
+const [retrainLoading, setRetrainLoading] = useState(false)
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
 
   // Helper function to fetch forecast data
   const fetchForecastData = async (lat: number, lon: number) => {
@@ -300,13 +302,83 @@ const [forecastSeries, setForecastSeries] = useState<WeatherData[]>([])
         
         setLastUpdated(new Date())
       } else {
-        setError('No locations with environmental data found')
+        try {
+          const defaultLat = 31.5204
+          const defaultLon = 74.3587
+          const impactRes = await fetch(`/api/environmental/impact/${defaultLat}/${defaultLon}`)
+          const impactJson = await impactRes.json()
+          if (impactJson.success) {
+            setEnvironmentalData({
+              weather: impactJson.data.weather,
+              airQuality: impactJson.data.airQuality,
+              forecast: [],
+              timestamp: new Date().toISOString(),
+              location: { lat: defaultLat, lon: defaultLon },
+              impact_assessment: impactJson.data.impact_assessment,
+              aqi_level: impactJson.data.aqi_level
+            })
+            const thresholdResponse = await fetch(`/api/environmental/thresholds/${defaultLat}/${defaultLon}`)
+            const thresholdResult = await thresholdResponse.json()
+            if (thresholdResult.success) {
+              setThresholds(thresholdResult.data)
+            }
+            const forecastRes = await fetch(`/api/environmental/forecast/${defaultLat}/${defaultLon}`)
+            const forecastJson = await forecastRes.json()
+            if (forecastJson.success) {
+              setEnvironmentalData(prev => prev ? { ...prev, forecast: forecastJson.data } : null)
+            }
+            setMyLocations([{
+              city: 'Default Location',
+              latitude: defaultLat,
+              longitude: defaultLon,
+              address: 'Demo location',
+              silo_count: 0,
+              silos: []
+            }])
+            const defaultLocation: LocationData = {
+              city: 'Default Location',
+              latitude: defaultLat,
+              longitude: defaultLon,
+              address: 'Demo location',
+              silo_count: 0,
+              silos: [],
+            }
+            setSelectedLocation(defaultLocation)
+            setLastUpdated(new Date())
+            setError(null)
+          } else {
+            setError('No locations with environmental data found')
+          }
+        } catch {
+          setError('No locations with environmental data found')
+        }
       }
     } catch (err) {
       setError('Network error: Unable to fetch environmental data')
       console.error('Error fetching environmental data:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const retrainModel = async () => {
+    try {
+      setRetrainLoading(true)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      const res = await fetch(`${backendUrl}/api/ai-spoilage/retrain`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      })
+      if (!res.ok) {
+        setRetrainLoading(false)
+        return
+      }
+      setRetrainLoading(false)
+    } catch {
+      setRetrainLoading(false)
     }
   }
 
@@ -655,6 +727,15 @@ const [forecastSeries, setForecastSeries] = useState<WeatherData[]>([])
             >
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
+            </Button>
+            <Button 
+              onClick={retrainModel}
+              className="bg-blue-600 hover:bg-blue-700"
+              size="sm"
+              disabled={retrainLoading}
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              {retrainLoading ? 'Retraining…' : 'Retrain ML Model'}
             </Button>
           </div>
         </motion.div>

@@ -10,14 +10,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
   AlertCircle,
   Package,
   TrendingUp,
   Users,
   Activity,
-  Warehouse,
   DollarSign,
   AlertTriangle,
   Shield,
@@ -315,7 +313,7 @@ export default function DashboardPage() {
                   <div className="space-y-6">
                     <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Today's Intake</p>
+                        <p className="text-xs text-muted-foreground">Today&apos;s Intake</p>
                         <p className="text-2xl font-bold">{dashboard?.capacityStats?.totalCurrentQuantity ? dashboard.capacityStats.totalCurrentQuantity.toLocaleString() : 0}</p>
                         <p className="text-xs text-muted-foreground">kg</p>
                       </div>

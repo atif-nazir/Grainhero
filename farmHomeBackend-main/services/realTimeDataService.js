@@ -101,7 +101,7 @@ class RealTimeDataService extends EventEmitter {
 
             // Process immediately if queue is not busy
             if (!this.isProcessing) {
-                this.processQueue();
+                this.startQueueProcessor();
             }
 
             // Broadcast to subscribed clients
@@ -125,7 +125,7 @@ class RealTimeDataService extends EventEmitter {
             });
 
             if (!this.isProcessing) {
-                this.processQueue();
+                this.startQueueProcessor();
             }
 
             // Broadcast actuator status change
@@ -166,6 +166,13 @@ class RealTimeDataService extends EventEmitter {
         
         // Schedule next processing cycle
         setTimeout(() => this.startQueueProcessor(), 100);
+    }
+
+    /**
+     * Backward-compatible wrapper
+     */
+    processQueue() {
+        this.startQueueProcessor();
     }
 
     /**

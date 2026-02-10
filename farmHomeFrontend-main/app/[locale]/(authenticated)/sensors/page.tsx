@@ -11,6 +11,7 @@ import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XC
 //import { api } from '@/lib/api'
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 import { ActuatorQuickActions } from '@/components/actuator-quick-actions'
+import { toast } from 'sonner'
 import { useLanguage } from '@/app/[locale]/providers'
 
 interface SensorDevice {
@@ -52,8 +53,22 @@ export default function SensorsPage() {
     guardrails: string[]
     timestamp: number
   }>(null)
+  const [telemetryHistory, setTelemetryHistory] = useState<Array<{
+    timestamp: number
+    mlDecision: string
+    fanState: string
+    lidState: string
+  }>>([])
   const [siloId, setSiloId] = useState<string>('')
   const backendUrl = (typeof window !== 'undefined' ? (window as typeof window & Record<string, unknown>).__BACKEND_URL : undefined) || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+
+  // Initialize with fixed device id if provided
+  useEffect(() => {
+    const fixedId = process.env.NEXT_PUBLIC_DEVICE_ID
+    if (fixedId) {
+      setSiloId(prev => prev || fixedId)
+    }
+  }, [])
 
   // Load sensors from backend
   useEffect(() => {
@@ -103,8 +118,10 @@ export default function SensorsPage() {
             health_metrics: s.health_metrics || { uptime_percentage: 99, error_count: 0, last_heartbeat: new Date().toISOString() }
           }))
           setSensors(mapped)
-          if (!siloId && mapped.length > 0) {
-            setSiloId(mapped[0].device_id)
+          if (!siloId) {
+            if (mapped.length > 0) {
+              setSiloId(mapped[0].device_id)
+            }
           }
         } else {
           setSensors([])
@@ -117,7 +134,55 @@ export default function SensorsPage() {
         setLoading(false)
       }
     })()
-    return () => { mounted = false }
+    const interval = setInterval(async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const res = await fetch(`${backendUrl}/api/sensors?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        if (!mounted) return
+        if (res.ok) {
+          const data = await res.json()
+          interface RawSensorData {
+            _id?: string;
+            device_id?: string;
+            device_name?: string;
+            status?: string;
+            health_status?: string;
+            sensor_types?: string[];
+            battery_level?: number;
+            signal_strength?: number;
+            device_metrics?: {
+              battery_level?: number;
+              signal_strength?: number;
+            };
+            silo_id?: {
+              name?: string;
+              _id?: string;
+            };
+            health_metrics?: {
+              uptime_percentage?: number;
+              error_count?: number;
+              last_heartbeat?: string;
+            };
+          }
+          const mapped: SensorDevice[] = (data.sensors || []).map((s: RawSensorData) => ({
+            _id: s._id || '',
+            device_id: s.device_id || s._id || '',
+            device_name: s.device_name || 'Unnamed Device',
+            status: s.health_status === 'healthy' ? 'active' : (s.health_status || s.status || 'active'),
+            sensor_types: s.sensor_types || [],
+            battery_level: s.battery_level || s.device_metrics?.battery_level || 100,
+            signal_strength: s.signal_strength || s.device_metrics?.signal_strength || -50,
+            silo_id: s.silo_id ? { name: s.silo_id.name || 'Silo', silo_id: s.silo_id._id || '' } : { name: '-', silo_id: '' },
+            last_reading: s.health_metrics?.last_heartbeat || new Date().toISOString(),
+            health_metrics: s.health_metrics || { uptime_percentage: 99, error_count: 0, last_heartbeat: new Date().toISOString() }
+          }))
+          setSensors(mapped)
+        }
+      } catch {}
+    }, 2000)
+    return () => { mounted = false
+      clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {
@@ -133,12 +198,20 @@ export default function SensorsPage() {
         if (res.ok) {
           const data = await res.json()
           setTelemetry(data)
+          setTelemetryHistory(prev => {
+            const next = [...prev, { timestamp: data.timestamp, mlDecision: data.mlDecision, fanState: data.fanState, lidState: data.lidState }]
+            return next.slice(-20)
+          })
+          if (!telemetry) toast.success(`Connected to ${siloId}`)
         } else {
           setTelemetry(null)
+          const msg = await res.text().catch(() => '')
+          toast.error(`Telemetry error (${res.status}): ${msg || 'unavailable'}`)
         }
       } catch {
         if (!mounted) return
         setTelemetry(null)
+        toast.error('Network error while reading telemetry')
       }
     }
     fetchTelemetry()
@@ -207,10 +280,38 @@ export default function SensorsPage() {
             Monitor and manage IoT sensor devices for environmental tracking
           </p>
         </div>
+      <div className="flex items-center gap-3">
+        {sensors.length > 0 ? (
+          <Select value={siloId} onValueChange={setSiloId}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select device" />
+            </SelectTrigger>
+            <SelectContent>
+              {sensors.map(s => (
+                <SelectItem key={s.device_id} value={s.device_id}>
+                  {s.device_name} ({s.device_id})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={siloId}
+            onChange={e => setSiloId(e.target.value)}
+            placeholder="Enter device ID"
+            className="w-[220px]"
+          />
+        )}
+        {!!siloId && (
+          <Badge variant="outline">
+            {siloId}
+          </Badge>
+        )}
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
           Add New Sensor
         </Button>
+      </div>
       </div>
 
       <Card>
@@ -315,6 +416,49 @@ export default function SensorsPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Classification & Actions</CardTitle>
+          <CardDescription>
+            Per-device location and recent actions
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-muted-foreground">Sensor ID</div>
+              <div className="text-lg font-semibold">{siloId || '--'}</div>
+              <div className="text-xs uppercase text-muted-foreground mt-3">Location</div>
+              <div className="text-lg font-semibold">
+                {sensors.find(s => s.device_id === siloId)?.silo_id?.name || '--'}
+              </div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-muted-foreground">Current Classification</div>
+              <div className="text-lg font-semibold">{telemetry?.mlDecision || '--'}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Fan: {telemetry?.fanState?.toUpperCase() || '--'} • Lid: {telemetry?.lidState?.toUpperCase() || '--'}
+              </div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs uppercase text-muted-foreground">Recent Actions</div>
+              <div className="text-sm mt-2 space-y-1">
+                {telemetryHistory.length === 0 ? (
+                  <div className="text-muted-foreground">No recent actions</div>
+                ) : (
+                  telemetryHistory.slice().reverse().slice(0, 8).map(h => (
+                    <div key={h.timestamp} className="flex justify-between">
+                      <span>{new Date(h.timestamp).toLocaleTimeString()}</span>
+                      <span className="font-medium">{h.mlDecision}</span>
+                      <span className="text-muted-foreground">{h.fanState}/{h.lidState}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       <ActuatorQuickActions />
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

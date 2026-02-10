@@ -9,10 +9,13 @@ let listeners = []
 
 function init() {
   if (initialized) return
-  const url = process.env.FIREBASE_DATABASE_URL
+  let url = process.env.FIREBASE_DATABASE_URL
   const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
   const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
   if (!url) throw new Error('FIREBASE_DATABASE_URL missing')
+  if (!url.includes('://')) {
+    url = `https://${url}`
+  }
   let credential
   if (saJson) {
     credential = admin.credential.cert(JSON.parse(saJson))

@@ -34,7 +34,7 @@ String getDateTimeString() {
   return String(buf);
 }
 
-#define MQTT_BROKER "10.120.170.220" // Replace with your broker
+#define MQTT_BROKER "192.168.137.1" // Replace with your broker
 #define MQTT_PORT 1883
 #define MQTT_USERNAME "" // if needed
 #define MQTT_PASSWORD "" // if needed
@@ -50,6 +50,8 @@ bool servoInitialized = false;
 bool servoEnabled = false;
 unsigned long lastServoAction = 0;
 const unsigned long SERVO_COOLDOWN = 3000; // 3 seconds
+unsigned long lastMQTTReconnectAttempt = 0;
+
 
 // ================================
 // SERVO CONTROL STATE
@@ -183,7 +185,7 @@ bool lastServoSent = false;
 #define FIXED_DEVICE_ID "004B12387760"
 // --- GrainHero Patch: Dual-write to backend ---
 bool DUAL_WRITE_TO_BACKEND = true; // enable later for demo
-const char *BACKEND_BASE_URL = "http://192.168.100.21:5002/api/iot";
+const char *BACKEND_BASE_URL = "http://192.168.137.1:5000/api/iot";
 
 // Initialize sensors
 Adafruit_BME680 bme;
@@ -344,12 +346,14 @@ void setup() {
   // ---------- SERVO SAFE BOOT SEQUENCE ----------
   pinMode(SERVO_PIN, OUTPUT);
   lidServo.attach(SERVO_PIN, 500, 2400); // min/max pulse width
+  lidServo.write(SERVO_CLOSED_ANGLE);
+  
+  servoCurrentAngle = SERVO_CLOSED_ANGLE;
+lidIsOpen = false;
+servoInitialized = true;
 
   // Force CLOSED at safe start
-  moveServoCommand(false); // force CLOSED through unified control
-  delay(2500);             // allow servo to move
-
-  servoInitialized = true;
+  
   Serial.println(F("Servo boot sequence complete - Lid CLOSED"));
   // ------------------------------------------------
 
@@ -366,6 +370,15 @@ void setup() {
   setFixedDeviceID();
   // Initialize grain type for this silo/device
   currentData.grain_type = "Rice"; // Or whichever grain type you want
+  
+  // Display MAC address for reference
+  displayMACAddress();
+
+  // Initialize SD Card
+  initializeSDCard(); // SD disabled internally
+
+  // Initialize WiFi
+  initializeWiFi();
   if (DUAL_WRITE_TO_BACKEND && WiFi.status() == WL_CONNECTED) {
     Serial.println(F("Sending device metadata to backend..."));
 
@@ -403,51 +416,7 @@ void setup() {
 
   } // end device metadata block
 
-  // Display MAC address for reference
-  displayMACAddress();
-
-  // Initialize SD Card
-  initializeSDCard(); // SD disabled internally
-
-  // Initialize WiFi
-  initializeWiFi();
-  // --- NTP Time Setup ---
-  const char *ntpServer = "pool.ntp.org";
-  const long gmtOffset_sec = 5 * 3600; // Pakistan UTC+5
-  const int daylightOffset_sec = 0;    // No DST
-
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  // Wait for time to be set
-  struct tm timeinfo;
-  while (!getLocalTime(&timeinfo)) {
-    Serial.println(F("Waiting for NTP time..."));
-    delay(1000);
-  }
-  Serial.println(F("Time synchronized via NTP!"));
-
-  // Initialize Firebase client
-  initializeFirebaseClient();
-
-  // Initialize BME680
-  initializeBME680();
-
-  // Initialize DHT sensors
-  dht1.begin();
-  dht2.begin();
-
-  // Initialize analog pins
-  pinMode(SOIL_MOISTURE_PIN, INPUT);
-  pinMode(LDR_PIN, INPUT);
-
-  // Create CSV file
-  if (sdCardAvailable) {
-    createCSVFile();
-  } // intentionally commented out
-
-  // Establish baseline
-  establishBaseline();
-  if (DUAL_WRITE_TO_BACKEND && WiFi.status() == WL_CONNECTED) {
+if (DUAL_WRITE_TO_BACKEND && WiFi.status() == WL_CONNECTED) {
     Serial.println(F("Uploading ML baseline to backend..."));
 
     DynamicJsonDocument baselineDoc(256);
@@ -483,6 +452,49 @@ void setup() {
 
   } // end ML baseline block
 
+  // --- NTP Time Setup ---
+  const char *ntpServer = "pool.ntp.org";
+  const long gmtOffset_sec = 5 * 3600; // Pakistan UTC+5
+  const int daylightOffset_sec = 0;    // No DST
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  // Wait for time to be set
+  struct tm timeinfo;
+  int ntpAttempts = 0;
+while (!getLocalTime(&timeinfo) && ntpAttempts < 10) {
+  Serial.println(F("Waiting for NTP time..."));
+  delay(1000);
+  ntpAttempts++;
+}
+
+if (ntpAttempts >= 10) {
+  Serial.println(F("⚠️ NTP failed, continuing without sync"));
+}
+  Serial.println(F("Time synchronized via NTP!"));
+
+  // Initialize Firebase client
+  initializeFirebaseClient();
+
+  // Initialize BME680
+  initializeBME680();
+
+  // Initialize DHT sensors
+  dht1.begin();
+  dht2.begin();
+
+  // Initialize analog pins
+  pinMode(SOIL_MOISTURE_PIN, INPUT);
+  pinMode(LDR_PIN, INPUT);
+
+  // Create CSV file
+  if (sdCardAvailable) {
+    createCSVFile();
+  } // intentionally commented out
+
+  // Establish baseline
+  establishBaseline();
+  
   Serial.println(F("\n=== SYSTEM INITIALIZATION COMPLETE ==="));
   Serial.print(F("Device ID: "));
   Serial.println(currentData.deviceID);
@@ -701,14 +713,15 @@ void loop() {
   // ================================
   // 6️⃣ MQTT LOOP - handle incoming messages
   // ================================
-  if (wifiConnected) {
-    if (mqttClient.connected()) {
-      mqttClient.loop(); // process MQTT callbacks
-    } else {
-      Serial.println(F("MQTT disconnected, reconnecting..."));
-      initializeMQTT();
-    }
+  if (mqttClient.connected()) {
+  mqttClient.loop();
+} else {
+  if (millis() - lastMQTTReconnectAttempt > 5000) {
+    Serial.println(F("MQTT reconnect attempt..."));
+    initializeMQTT();
+    lastMQTTReconnectAttempt = millis();
   }
+}
 
   // ================================
   // ML DECISION INPUT (from backend)
@@ -939,23 +952,27 @@ void initializeSDCard() {
 
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
 
-  // SD logging disabled for demo stability
-  sdCardAvailable = false;
-  Serial.println("ℹ️ SD logging disabled (demo mode)");
-
-  uint8_t cardType = SD.cardType();
-  if (cardType == CARD_NONE) {
-    Serial.println(F("No SD card attached"));
+  if (!SD.begin(SD_CS)) {
+    Serial.println(F("❌ SD Card mount failed!"));
     sdCardAvailable = false;
     return;
   }
 
+  uint8_t cardType = SD.cardType();
+  if (cardType == CARD_NONE) {
+    Serial.println(F("❌ No SD card attached"));
+    sdCardAvailable = false;
+    return;
+  }
+
+  Serial.println(F("✅ SD Card initialized successfully"));
   sdCardAvailable = true;
 
   if (!SD.exists("/data")) {
     SD.mkdir("/data");
   }
 }
+
 
 void createCSVFile() {
   csvFileName = "/data/sensor_data_" + getTimestampString() + ".csv";
@@ -1030,10 +1047,12 @@ void initializeFirebaseClient() {
 
 void initializeBME680() {
   Serial.println(F("Initializing BME680..."));
-  if (!bme.begin()) {
+  Wire.begin(21, 22);
+
+  if (!bme.begin(0x77)) {
     Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
-    while (1)
-      ;
+    sdCardAvailable = false;  // optional
+return;                   // allow system to continue
   }
 
   bme.setTemperatureOversampling(BME680_OS_8X);
@@ -1338,6 +1357,9 @@ void publishToFirebaseREST() {
 
   Serial.print(F("Publishing to Firebase: "));
   Serial.println(fullURL);
+
+client.stop();
+client.setInsecure();
 
   // Make HTTP PUT request (overwrites data at this path)
   if (client.connect(FIREBASE_HOST, 443)) {

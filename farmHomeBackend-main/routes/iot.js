@@ -10,12 +10,20 @@ const firebaseRealtimeService = require('../services/firebaseRealtimeService');
 const fanControlService = require('../services/fanControlService');
 const admin = require('firebase-admin');
 let firebaseDb = null;
+// In-memory cache for latest telemetry per device_id when Firebase/DB unavailable
+const lastTelemetry = new Map();
 function ensureFirebase() {
   if (!admin.apps.length) {
-    const url = process.env.FIREBASE_DATABASE_URL;
+    let url = process.env.FIREBASE_DATABASE_URL;
     const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
     const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (!url) throw new Error('FIREBASE_DATABASE_URL missing');
+    if (!url) {
+      firebaseDb = null;
+      return;
+    }
+    if (!url.includes('://')) {
+      url = `https://${url}`;
+    }
     let credential;
     if (saJson) {
       credential = admin.credential.cert(JSON.parse(saJson));
@@ -42,11 +50,12 @@ try {
 
     console.log(`📡 Connecting to MQTT broker at: ${brokerUrl}`);
 
-    mqttClient = mqtt.connect(brokerUrl, {
-      username: process.env.MQTT_USERNAME || 'admin',
-      password: process.env.MQTT_PASSWORD || 'password',
-      reconnectPeriod: 5000
-    });
+    const opts = { reconnectPeriod: 5000 };
+    if (process.env.MQTT_USERNAME && process.env.MQTT_PASSWORD) {
+      opts.username = process.env.MQTT_USERNAME;
+      opts.password = process.env.MQTT_PASSWORD;
+    }
+    mqttClient = mqtt.connect(brokerUrl, opts);
 
     mqttClient.on('connect', () => {
       console.log('✅ Connected to MQTT broker');
@@ -161,14 +170,45 @@ router.post('/devices/:id/control', [
       console.warn('Database query failed:', dbError.message);
     }
 
-    // If not found in database, check mock devices
     if (!device) {
-      device = mockDevices.find(d => d._id === id);
     }
 
-    if (!device) {
-      return res.status(404).json({ error: 'Device not found' });
-    }
+  if (!device) {
+      // Allow direct control by device_id even if not in DB
+      const controlTopic = `grainhero/actuators/${id}/control`;
+      const pct = typeof value === 'number' ? Math.max(0, Math.min(100, Number(value))) : (action === 'turn_on' ? 80 : 0);
+      const pwm255 = Math.round(pct / 100 * 255);
+      const controlMessage = {
+        action,
+        value: pct,
+        pwm: pwm255,
+        pwm_speed: pct,
+        duration,
+        timestamp: new Date().toISOString()
+      };
+      if (mqttClient && mqttClient.connected) {
+        mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
+        console.log(`📡 MQTT request sent to ${controlTopic}`);
+      }
+      // Always mirror control intent to Firebase so ESP32 polling can act
+      try {
+        await firebaseRealtimeService.writeControlState(id, {
+          human_requested_fan: action === 'turn_on' ? true : (action === 'turn_off' ? false : undefined),
+          ml_requested_fan: false,
+          target_fan_speed: pct,
+          ml_decision: action === 'turn_on' ? 'fan_on' : (action === 'turn_off' ? 'idle' : 'manual_set')
+        });
+      } catch (e) {
+        console.warn('Firebase control mirror failed:', e.message);
+      }
+      return res.status(200).json({
+        message: 'Control request processed',
+        device_id: id,
+        action_performed: action,
+        new_value: value ?? null,
+        timestamp: new Date()
+      });
+  }
 
     let guardrailBlocked = false;
     let guardrailReason = '';
@@ -190,15 +230,19 @@ router.post('/devices/:id/control', [
     // Handle real device control via MQTT (REQUEST ONLY - authority is on ESP32 state machine)
     if (device.device_id && mqttClient && mqttClient.connected) {
       const controlTopic = `grainhero/actuators/${device.device_id}/control`;
+      const pct = typeof value === 'number' ? Math.max(0, Math.min(100, Number(value))) : (action === 'turn_on' ? 60 : 0);
+      const pwm255 = Math.round(pct / 100 * 255);
       const controlMessage = {
         action, // Arduino still expects these keys for backward compatibility
-        value,
+        value: pct,
+        pwm: pwm255,
+        pwm_speed: pct,
         duration,
         timestamp: new Date().toISOString(),
         user: req.user._id,
         // New explicit state requests
         human_requested_fan: action === 'turn_on' ? true : (action === 'turn_off' ? false : undefined),
-        target_fan_speed: value !== undefined ? value : (action === 'turn_on' ? 60 : 0)
+        target_fan_speed: pct
       };
 
       mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
@@ -289,56 +333,93 @@ router.get('/silos/:siloId/telemetry', [
 ], async (req, res) => {
   try {
     const { siloId } = req.params;
-    let device = null;
-    try {
-      device = await SensorDevice.findOne({ device_id: siloId, admin_id: req.user.admin_id });
-    } catch { }
-    if (!device) {
-      const silo = await Silo.findById(siloId);
-      if (!silo) {
-        return res.status(404).json({ error: 'Silo not found' });
-      }
-    }
+    // Accept direct device_id without requiring DB records
     ensureFirebase();
-    let snapshot;
+    if (!firebaseDb) {
+      const cached = lastTelemetry.get(siloId);
+      if (cached) {
+        return res.json(cached);
+      }
+      console.warn(`Telemetry unavailable: Firebase not initialized and no cache for ${siloId}`);
+      return res.status(503).json({ error: 'Silo offline' });
+    }
     try {
-      snapshot = await firebaseDb.ref(`sensor_data/${siloId}/latest`).get();
+      const snapshot = await firebaseDb.ref(`sensor_data/${siloId}/latest`).get();
+      if (!snapshot || snapshot.val() === null) {
+        const cached = lastTelemetry.get(siloId);
+        if (cached) {
+          return res.json(cached);
+        }
+        console.warn(`Telemetry missing: No Firebase value at sensor_data/${siloId}/latest`);
+        return res.status(503).json({ error: 'Silo offline' });
+      }
+      const payload = snapshot.val() || {};
+      const temperature = payload.temperature !== undefined ? Number(payload.temperature) : 0;
+      const humidity = payload.humidity !== undefined ? Number(payload.humidity) : 0;
+      const tvocRaw = payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0);
+      const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
+      const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
+      const mlDecision = payload.mlDecision || ((humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle');
+      const humanOverride = payload.humanOverride !== undefined ? !!payload.humanOverride : !!payload.human_override;
+      const guardrails = [];
+      if (temperature > 60) guardrails.push('high_temperature');
+      if (tvocRaw > 1000) guardrails.push('high_tvoc');
+      res.json({
+        temperature,
+        humidity,
+        tvoc: tvocRaw,
+        fanState,
+        lidState,
+        mlDecision,
+        humanOverride,
+        guardrails,
+        timestamp: payload.timestamp || Date.now()
+      });
     } catch (e) {
-      console.error('Firebase read error:', e.message);
+      console.error(`Firebase read error for ${siloId}: ${e.message}`);
+      const cached = lastTelemetry.get(siloId);
+      if (cached) {
+        return res.json(cached);
+      }
       return res.status(503).json({ error: 'Silo offline' });
     }
-    if (!snapshot || snapshot.val() === null) {
-      console.warn(`Firebase node missing for siloId ${siloId}`);
-      return res.status(503).json({ error: 'Silo offline' });
-    }
-    const payload = snapshot.val() || {};
-    const temperature = payload.temperature !== undefined ? Number(payload.temperature) : 0;
-    const humidity = payload.humidity !== undefined ? Number(payload.humidity) : 0;
-    const tvocRaw = payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0);
-    const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
-    const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
-    const mlDecision = payload.mlDecision || ((humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle');
-    const humanOverride = payload.humanOverride !== undefined ? !!payload.humanOverride : !!payload.human_override;
-    const guardrails = [];
-    if (temperature > 60) guardrails.push('high_temperature');
-    if (tvocRaw > 1000) guardrails.push('high_tvoc');
-    console.log(`Firebase read success for ${siloId}`);
-    res.json({
-      temperature,
-      humidity,
-      tvoc: tvocRaw,
-      fanState,
-      lidState,
-      mlDecision,
-      humanOverride,
-      guardrails,
-      timestamp: payload.timestamp || Date.now()
-    });
   } catch (error) {
+    console.error(`Telemetry route error for ${req.params?.siloId}: ${error.message}`);
     res.status(500).json({ error: 'Failed to fetch telemetry' });
   }
 });
 
+// Diagnostics: MQTT/Firebase status and last telemetry snapshot for a device
+router.get('/diagnostics/:deviceId', [
+  auth,
+  requirePermission('sensor.view'),
+  requireTenantAccess
+], async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    res.json({
+      mqtt_connected: !!(mqttClient && mqttClient.connected),
+      firebase_enabled: !!firebaseDb,
+      last_telemetry: lastTelemetry.get(deviceId) || null
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get diagnostics' });
+  }
+});
+
+// Public diagnostics (limited) — useful for quick connectivity checks without auth
+router.get('/diagnostics-public/:deviceId', async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    res.json({
+      mqtt_connected: !!(mqttClient && mqttClient.connected),
+      firebase_enabled: !!firebaseDb,
+      last_telemetry: lastTelemetry.get(deviceId) || null
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get diagnostics' });
+  }
+});
 // POST /iot/devices/:id/readings - Get device readings
 router.post('/devices/:id/readings', [
   auth,
@@ -419,9 +500,7 @@ router.post('/bulk-control', [
         console.warn('Database query failed:', dbError.message);
       }
 
-      // If not found in database, check mock devices
       if (!device) {
-        device = mockDevices.find(d => d._id === deviceId);
       }
 
       if (device && device.type === 'actuator') {
@@ -462,12 +541,12 @@ router.post('/bulk-control', [
             console.warn('Failed to save device state:', saveError.message);
           }
         } else {
-          // Update mock device status
-          device.status = action === 'turn_on' ? 'online' : 'offline';
-          device.current_value = action === 'turn_on' ? (value || 100) : 0;
-          device.last_activity = new Date();
-          device.human_requested_fan = action === 'turn_on';
-          device.target_fan_speed = action === 'turn_on' ? (value || 60) : 0;
+          results.push({
+            device_id: deviceId,
+            success: false,
+            error: 'Device not controllable'
+          });
+          continue;
         }
 
         results.push({
@@ -618,7 +697,57 @@ router.post('/mqtt-ingest', async (req, res) => {
     // Find the device in database
     const device = await SensorDevice.findOne({ device_id });
     if (!device) {
-      return res.status(404).json({ error: 'Device not found' });
+      const mongoose = require('mongoose');
+      const adminId = new mongoose.Types.ObjectId();
+      const siloId = new mongoose.Types.ObjectId();
+      const newDevice = new SensorDevice({
+        device_id,
+        device_name: `Auto-Registered ${device_id}`,
+        device_type: 'sensor',
+        category: 'environmental',
+        status: 'active',
+        communication_protocol: 'mqtt',
+        admin_id: adminId,
+        silo_id: siloId,
+        sensor_types: ['temperature', 'humidity', 'voc'],
+        data_transmission_interval: 10
+      });
+      await newDevice.save();
+      const normalized = { ...(readings || {}) };
+      const vocVal = normalized.tvoc ?? normalized.voc;
+      if (vocVal !== undefined && normalized.voc === undefined) {
+        normalized.voc = vocVal;
+      }
+      const sensorReading = new SensorReading({
+        device_id: newDevice._id,
+        tenant_id: adminId,
+        silo_id: siloId,
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+        temperature: normalized.temperature !== undefined ? { value: Number(normalized.temperature), unit: 'celsius' } : undefined,
+        humidity: normalized.humidity !== undefined ? { value: Number(normalized.humidity), unit: 'percent' } : undefined,
+        voc: normalized.voc !== undefined ? { value: Number(normalized.voc), unit: 'ppb' } : undefined,
+        device_metrics: {},
+        quality_indicators: { is_valid: true, confidence_score: 0.95, anomaly_detected: false }
+      });
+      await sensorReading.save();
+      const temperature = normalized.temperature ?? 0;
+      const humidity = normalized.humidity ?? 0;
+      const tvocRaw = normalized.voc ?? 0;
+      const fanState = normalized.pwm_speed && Number(normalized.pwm_speed) > 0 ? 'on' : 'off';
+      const lidState = normalized.servo_state ? 'open' : 'closed';
+      const mlDecision = (humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle';
+      lastTelemetry.set(device_id, {
+        temperature: Number(temperature),
+        humidity: Number(humidity),
+        tvoc: Number(tvocRaw),
+        fanState,
+        lidState,
+        mlDecision,
+        humanOverride: false,
+        guardrails: [],
+        timestamp: timestamp ? Number(timestamp) : Date.now()
+      });
+      return res.status(201).json({ message: 'Ingest stored and cached', device_id, reading_id: sensorReading._id });
     }
 
     // Normalize readings: tvoc -> voc, include actuator fields
@@ -682,6 +811,31 @@ if (mqttClient) {
         const deviceId = topic.split('/')[2];
         const payload = JSON.parse(message.toString());
 
+        // Cache last telemetry for direct serving
+        const temperature = payload.readings?.temperature ?? payload.temperature ?? 0;
+        const humidity = payload.readings?.humidity ?? payload.humidity ?? 0;
+        const tvocRaw = payload.readings?.tvoc ?? payload.tvoc ?? payload.voc ?? 0;
+        const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') :
+          ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
+        const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') :
+          ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
+        const mlDecision = payload.mlDecision || ((humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle');
+        const humanOverride = payload.humanOverride !== undefined ? !!payload.humanOverride : !!payload.human_override;
+        const guardrails = [];
+        if (temperature > 60) guardrails.push('high_temperature');
+        if (tvocRaw > 1000) guardrails.push('high_tvoc');
+        lastTelemetry.set(deviceId, {
+          temperature: Number(temperature),
+          humidity: Number(humidity),
+          tvoc: Number(tvocRaw),
+          fanState,
+          lidState,
+          mlDecision,
+          humanOverride,
+          guardrails,
+          timestamp: payload.timestamp || Date.now()
+        });
+
         // Find the device in database
         const device = await SensorDevice.findOne({ device_id: deviceId });
         if (!device) {
@@ -714,37 +868,57 @@ if (mqttClient) {
         await device.updateHeartbeat();
         await device.incrementReadingCount();
 
-        // Automated Fan Control Logic (IoT Spec)
-        if (device.device_type === 'sensor' && device.silo_id) {
-          try {
-            const recommendation = fanControlService.calculateFanRecommendation(sensorReading);
+      // Automated Fan Control Logic (IoT Spec)
+      if (device.device_type === 'sensor' && device.silo_id) {
+        try {
+          const recommendation = fanControlService.calculateFanRecommendation(sensorReading);
 
-            if (recommendation.should_change) {
-              console.log(`🤖 ML Recommendation for Silo ${device.silo_id}: ${recommendation.recommendation} (${recommendation.reason})`);
+          if (recommendation.should_change) {
+            console.log(`🤖 ML Recommendation for Silo ${device.silo_id}: ${recommendation.recommendation} (${recommendation.reason})`);
 
-              // Find associated fan for this silo
-              const Actuator = require('../models/Actuator');
-              const fan = await Actuator.findOne({ silo_id: device.silo_id, actuator_type: 'fan' });
+            // Find associated fan for this silo
+            const Actuator = require('../models/Actuator');
+            const fan = await Actuator.findOne({ silo_id: device.silo_id, actuator_type: 'fan' });
 
-              if (fan) {
-                if (recommendation.fan_state === 1) {
-                  await fan.startOperation('AI', 'ai_prediction', { reason: recommendation.reason });
-                } else {
-                  await fan.stopOperation();
-                }
+            if (fan) {
+              if (recommendation.fan_state === 1) {
+                await fan.startOperation('AI', 'ai_prediction', { reason: recommendation.reason });
+              } else {
+                await fan.stopOperation();
+              }
 
-                // Sync with Firebase
-                if (fan.actuator_id) {
-                  await firebaseRealtimeService.writeControlState(fan.actuator_id, fan);
-                }
+              // Sync with Firebase
+              if (fan.actuator_id) {
+                await firebaseRealtimeService.writeControlState(fan.actuator_id, fan);
+              }
 
-                // Internal state sync
+              // Internal state sync
+              fanControlService.updateFanState(device.silo_id, recommendation.fan_state, recommendation.reason);
+            } else {
+              // No actuator in DB — publish direct MQTT control to device_id
+              if (mqttClient && mqttClient.connected) {
+                const controlTopic = `grainhero/actuators/${device.device_id}/control`;
+                const action = recommendation.fan_state === 1 ? 'turn_on' : 'turn_off';
+                const pct = recommendation.fan_state === 1 ? 80 : 0;
+                const pwm255 = Math.round(pct / 100 * 255);
+                const controlMessage = {
+                  action,
+                  value: pct,
+                  pwm: pwm255,
+                  pwm_speed: pct,
+                  timestamp: new Date().toISOString(),
+                  source: 'ml_recommendation',
+                  reason: recommendation.reason
+                };
+                mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
                 fanControlService.updateFanState(device.silo_id, recommendation.fan_state, recommendation.reason);
+                console.log(`📡 ML MQTT control sent to ${controlTopic}`);
               }
             }
-          } catch (fanError) {
-            console.error('Fan recommendation error:', fanError.message);
           }
+        } catch (fanError) {
+          console.error('Fan recommendation error:', fanError.message);
+        }
         }
 
         console.log(`📥 Sensor data saved for device ${deviceId}`);

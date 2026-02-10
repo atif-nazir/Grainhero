@@ -273,6 +273,47 @@ router.get('/training-history', [
     }
 });
 
+router.post('/retrain', [
+    auth,
+    requirePermission('ai.manage'),
+    requireTenantAccess
+], async (req, res) => {
+    try {
+        const tenantId = req.user.tenant_id || req.user._id;
+        const trainingData = await trainingDataService.prepareTrainingData({ tenantId });
+        const exportedPath = await trainingDataService.exportToCSV(trainingData, path.join(__dirname, '../ml/combined_training_data.csv'));
+        const python = spawn('python', ['-c', `
+import sys, json
+sys.path.append('${path.join(__dirname, '../ml')}')
+from enhanced_train import SmartBinModelTrainer
+trainer = SmartBinModelTrainer()
+trainer.incremental_training('combined_training_data.csv')
+X_train, X_test, y_train, y_test, df = trainer.load_and_preprocess_data()
+best_params = trainer.hyperparameter_tuning(X_train, y_train, n_trials=10)
+metrics = trainer.train_model(X_train, X_test, y_train, y_test, best_params)
+trainer.save_model(metrics, best_params)
+print(json.dumps({"success": True, "metrics": metrics}))
+        `], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let output = '';
+        let error = '';
+        python.stdout.on('data', (d) => { output += d.toString(); });
+        python.stderr.on('data', (d) => { error += d.toString(); });
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    return res.json({ message: 'Model retrained', data_file: exportedPath, metrics: result.metrics });
+                } catch {
+                    return res.json({ message: 'Model retrained', data_file: exportedPath, raw_output: output });
+                }
+            }
+            return res.status(500).json({ error: 'Retrain failed', details: error || 'unknown' });
+        });
+    } catch (e) {
+        return res.status(500).json({ error: 'Failed to retrain model', details: e.message });
+    }
+});
+
 // GET /ai-spoilage/data-summary - Get data summary
 router.get('/data-summary', [
     auth,

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "sonner"
 import {
   Fan,
   Droplets,
@@ -47,15 +48,18 @@ export default function ActuatorsPage() {
   const [selectedDevices, setSelectedDevices] = useState<string[]>([])
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  const [singleDeviceId, setSingleDeviceId] = useState<string>(process.env.NEXT_PUBLIC_DEVICE_ID || '')
 
   useEffect(() => {
     loadDevices()
+    const i = setInterval(loadDevices, 2000)
+    return () => clearInterval(i)
   }, [])
 
   const loadDevices = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${backendUrl}/iot/devices`, {
+      const response = await fetch(`${backendUrl}/api/iot/devices`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -76,7 +80,7 @@ export default function ActuatorsPage() {
   const controlDevice = async (deviceId: string, action: string, value?: number) => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${backendUrl}/iot/devices/${deviceId}/control`, {
+      const response = await fetch(`${backendUrl}/api/iot/devices/${deviceId}/control`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,10 +92,15 @@ export default function ActuatorsPage() {
       if (response.ok) {
         const result = await response.json()
         console.log('Device control result:', result)
+        toast.success(`Sent ${action} to ${deviceId}${value !== undefined ? ` (${value}%)` : ''}`)
         loadDevices() // Refresh device list
+      } else {
+        const errText = await response.text().catch(() => '')
+        toast.error(`Control failed (${response.status}): ${errText || 'unknown error'}`)
       }
     } catch (error) {
       console.error('Error controlling device:', error)
+      toast.error(`Control error: ${(error as Error).message}`)
     }
   }
 
@@ -100,7 +109,7 @@ export default function ActuatorsPage() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${backendUrl}/iot/bulk-control`, {
+      const response = await fetch(`${backendUrl}/api/iot/bulk-control`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +136,7 @@ export default function ActuatorsPage() {
   const emergencyShutdown = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${backendUrl}/iot/emergency-shutdown`, {
+      const response = await fetch(`${backendUrl}/api/iot/emergency-shutdown`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -199,6 +208,48 @@ export default function ActuatorsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Direct single-device control when there are no DB devices */}
+      {devices.length === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Direct Control (Device ID)</CardTitle>
+            <CardDescription>Use fixed device ID to send real commands</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <input
+                className="border rounded px-3 py-2 w-64"
+                placeholder="Enter device ID"
+                value={singleDeviceId}
+                onChange={e => setSingleDeviceId(e.target.value)}
+              />
+              <Button disabled={!singleDeviceId} onClick={() => controlDevice(singleDeviceId, 'turn_on', 80)} className="bg-green-600 hover:bg-green-700">
+                <Power className="h-4 w-4 mr-2" />
+                Turn ON (80%)
+              </Button>
+              <Button disabled={!singleDeviceId} onClick={() => controlDevice(singleDeviceId, 'turn_off')} className="bg-red-600 hover:bg-red-700">
+                <XCircle className="h-4 w-4 mr-2" />
+                Turn OFF
+              </Button>
+            </div>
+            <div className="mt-4">
+              <div className="text-sm text-gray-600 mb-2">Set PWM</div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                defaultValue={0}
+                onMouseUp={(e) => {
+                  const v = Number((e.target as HTMLInputElement).value)
+                  controlDevice(singleDeviceId, 'set_value', v)
+                }}
+                className="w-64"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -360,6 +411,20 @@ export default function ActuatorsPage() {
                           <div className="flex items-center justify-between text-sm">
                             <span className="font-medium text-gray-500">Target Speed:</span>
                             <span className="font-bold text-blue-600">{device.target_fan_speed || 0}%</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              defaultValue={device.target_fan_speed || 0}
+                              onMouseUp={(e) => {
+                                const v = Number((e.target as HTMLInputElement).value)
+                                controlDevice(device._id, 'turn_on', v)
+                              }}
+                              className="w-full"
+                            />
+                            <Badge variant="outline">{device.target_fan_speed || 0}%</Badge>
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <span className="font-medium text-gray-500">Mode:</span>
