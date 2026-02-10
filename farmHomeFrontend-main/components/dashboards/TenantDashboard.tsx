@@ -21,6 +21,7 @@ import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { TeamInvitationForm } from "@/components/TeamInvitationForm"
 
 type DashboardResponse = {
   stats: Array<{ title: string; value: number | string }>
@@ -256,6 +257,8 @@ export function TenantDashboard() {
 
   return (
     <div className="space-y-8">
+
+
       {/* Tenant Overview Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* <Card>
@@ -301,7 +304,7 @@ export function TenantDashboard() {
           </CardContent>
         </Card> */}
 
-              </div>
+      </div>
 
       {/* Critical Alerts - Only show if there are actual critical issues */}
       {tenantStats.criticalIssues > 0 && systemAlerts.filter(alert => alert.type === "critical").length > 0 && (

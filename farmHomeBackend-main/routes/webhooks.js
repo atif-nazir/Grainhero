@@ -286,7 +286,7 @@ router.post("/", (request, response) => {
                 const userData = {
                   email: customer.email,
                   name: customer.name || "Admin User",
-                  role: "admin", // Set as admin immediately for paid users
+                  role: "pending", // Keep as pending until they complete signup
                   hasAccess: plan.id, // Keep checkout plan ID for hasAccess
                   subscription_plan: planKey, // Use plan key for subscription_plan (basic, standard, professional, enterprise)
                   customerId: customerId,
@@ -589,8 +589,11 @@ router.post("/", (request, response) => {
               });
               const billingPeriod = "/month"; // Monthly subscription
 
+              // Generate signup completion link
+              const signupLink = `${process.env.FRONT_END_URL}/auth/signup?payment=success&email=${encodeURIComponent(customer.email)}`;
+              
               const emailContent = `
-Dear ${user.name || "Valued Customer"},
+Dear ${customer.name || "Valued Customer"},
 
 Thank you for your successful payment! Your GrainHero subscription has been activated.
 
@@ -600,17 +603,22 @@ Payment Details:
 - Transaction ID: ${transactionId}
 - Date: ${paymentDate}
 
-Your account is now active and ready to use. You can:
+To complete your account setup, please click the link below:
 
-1. Complete your account setup at ${
-                process.env.FRONT_END_URL
-              }/auth/signup?payment=success&email=${encodeURIComponent(
-                user.email
-              )}
-2. Login to your dashboard at ${process.env.FRONT_END_URL}/auth/login
-3. Start managing your grain storage with AI-powered insights
-4. Invite team members to collaborate
-5. Access 24/7 customer support
+🔗 Complete Your Account Setup: ${signupLink}
+
+This will take you to our signup page where you can:
+- Set your full name
+- Create a secure password
+- Add your phone number (optional)
+- Complete your admin account registration
+
+After completing signup, you can:
+
+1. Login to your dashboard at ${process.env.FRONT_END_URL}/auth/login
+2. Start managing your grain storage with AI-powered insights
+3. Invite team members to collaborate
+4. Access 24/7 customer support
 
 Welcome to GrainHero!
 

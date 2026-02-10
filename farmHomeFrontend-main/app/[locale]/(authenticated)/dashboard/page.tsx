@@ -213,10 +213,11 @@ export default function DashboardPage() {
     }
   }
 
-  // Render role-specific dashboard
-  const renderDashboard = () => {
+  // Render role-specific dashboard content
+  const renderRoleSpecificDashboard = () => {
     switch (userRole) {
       case "super_admin":
+        // This is handled by main render, but for safety
         return <SuperAdminDashboard />
       case "admin":
         return <TenantDashboard />
@@ -225,14 +226,8 @@ export default function DashboardPage() {
       case "technician":
         return <TechnicianDashboard />
       default:
-        return (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Unknown user role. Please contact your administrator.
-            </AlertDescription>
-          </Alert>
-        )
+        // Basic fallback or nothing, let the generic dashboard show
+        return null
     }
   }
 
@@ -263,10 +258,10 @@ export default function DashboardPage() {
     <AnimatedBackground className="min-h-screen">
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         {userRole === "super_admin" ? (
-          // For super admin, show the dedicated super admin dashboard
+          // For super admin, show the dedicated super admin dashboard ONLY
           <SuperAdminDashboard />
         ) : (
-          // For other users, show the standard dashboard UI
+          // For other users, show BOTH the role-specific dashboard AND the standard dashboard UI
           <>
             <div className="flex items-center justify-between space-y-2">
               <div>
@@ -278,9 +273,11 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-  
+
+            {/* Generic Dashboard UI */}
+
             {/* Animated Key Metrics Cards (using real dashboard API) */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mt-8">
               {dashboard?.stats?.map((stat, i) => {
                 const config = metricIconMap[stat.title] || { icon: Activity, color: "blue" }
                 const valueNode =
@@ -298,8 +295,8 @@ export default function DashboardPage() {
                 )
               })}
             </div>
-  
-            <Tabs defaultValue="overview" className="space-y-4">
+
+            <Tabs defaultValue="overview" className="space-y-4 mt-6">
               <TabsList className={`w-full grid ${(userRole === "admin") ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 <TabsTrigger value="overview" className="w-full">Overview</TabsTrigger>
                 <TabsTrigger value="analytics" className="w-full">Analytics</TabsTrigger>
@@ -308,7 +305,7 @@ export default function DashboardPage() {
                   <TabsTrigger value="business" className="w-full">Business</TabsTrigger>
                 )}
               </TabsList>
-  
+
               <TabsContent value="overview" className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-12">
                   <Card className="col-span-6">
@@ -338,7 +335,7 @@ export default function DashboardPage() {
                             <p className="text-xs text-muted-foreground"></p>
                           </div>
                         </div>
-  
+
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
                             <span className="text-sm font-medium">Operations Completed</span>
@@ -351,7 +348,7 @@ export default function DashboardPage() {
                             ></div>
                           </div>
                         </div>
-  
+
                         <div className="grid grid-cols-2 gap-4 pt-2 border-t">
                           <div className="flex items-center gap-2">
                             <TrendingUp className="h-4 w-4 text-green-600" />
@@ -373,7 +370,7 @@ export default function DashboardPage() {
                       </div>
                     </CardContent>
                   </Card>
-  
+
                   <Card className="col-span-6">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
@@ -406,7 +403,7 @@ export default function DashboardPage() {
                     </CardContent>
                   </Card>
                 </div>
-  
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center">
@@ -441,7 +438,7 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               </TabsContent>
-  
+
               <TabsContent value="analytics" className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <AnimatedPieChart
@@ -451,7 +448,7 @@ export default function DashboardPage() {
                     })) || [])}
                     title="Grain Distribution"
                   />
-              
+
                   <AnimatedBarChart
                     data={(dashboard?.analytics?.qualityMetrics?.map(metric => ({
                       name: metric.quality,
@@ -460,7 +457,7 @@ export default function DashboardPage() {
                     title="Quality Distribution"
                   />
                 </div>
-              
+
                 <AnimatedAreaChart
                   data={(dashboard?.analytics?.monthlyIntake?.map(month => ({
                     name: month.month,
@@ -469,7 +466,7 @@ export default function DashboardPage() {
                   title="Monthly Grain Intake Trends"
                 />
               </TabsContent>
-  
+
               <TabsContent value="monitoring" className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-xl font-semibold">IoT Sensors (Live)</h3>
@@ -519,7 +516,7 @@ export default function DashboardPage() {
                   </div>
                 )}
               </TabsContent>
-  
+
               {(userRole === "admin") && (
                 <TabsContent value="business" className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -533,7 +530,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground">Engaged buyers this month</p>
                       </CardContent>
                     </Card>
-  
+
                     <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Avg. Price/kg</CardTitle>
@@ -544,7 +541,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground">Based on recent batches</p>
                       </CardContent>
                     </Card>
-  
+
                     <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Profit</CardTitle>
@@ -555,7 +552,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground">This month's profit</p>
                       </CardContent>
                     </Card>
-  
+
                     <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Average Selling Price</CardTitle>
@@ -567,7 +564,7 @@ export default function DashboardPage() {
                       </CardContent>
                     </Card>
                   </div>
-  
+
                   <AnimatedLineChart
                     data={(dashboard?.analytics?.monthlyIntake?.map(month => ({
                       name: month.month,
@@ -578,6 +575,11 @@ export default function DashboardPage() {
                 </TabsContent>
               )}
             </Tabs>
+
+            {/* Role Specific Dashboard Section */}
+            <div className="my-8">
+              {renderRoleSpecificDashboard()}
+            </div>
           </>
         )}
       </div>
