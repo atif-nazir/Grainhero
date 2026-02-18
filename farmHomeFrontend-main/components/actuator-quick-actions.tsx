@@ -17,8 +17,9 @@ import {
   Zap,
 } from "lucide-react";
 
-const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+import { config } from "@/config";
+
+const backendUrl = config.backendUrl;
 
 type ShortcutKey = "fan" | "light" | "alarm";
 
@@ -41,7 +42,7 @@ interface ShortcutDefinition {
   icon: React.ReactNode;
   actions: Array<{
     label: string;
-    action: "turn_on" | "turn_off" | "set_value";
+    action: "turn_on" | "turn_off" | "set_value" | "alarm_on" | "alarm_off";
     variant?: "default" | "secondary" | "outline";
     value?: number;
     tone: "primary" | "danger" | "neutral";
@@ -53,7 +54,7 @@ const shortcutDefinitions: ShortcutDefinition[] = [
     key: "fan",
     title: "Ventilation Fans",
     description: "Purge moist air or halt aeration.",
-    categories: ["ventilation", "fan"],
+    categories: ["ventilation", "fan", "sensor", "environmental"],
     icon: <Fan className="h-5 w-5 text-blue-600" />,
     actions: [
       { label: "Start Fans", action: "turn_on", variant: "default", tone: "primary" },
@@ -65,7 +66,7 @@ const shortcutDefinitions: ShortcutDefinition[] = [
     key: "light",
     title: "Silo Lights",
     description: "Inspection & tamper detection lights.",
-    categories: ["lighting", "environmental"],
+    categories: ["lighting", "environmental", "sensor"],
     icon: <Lightbulb className="h-5 w-5 text-amber-500" />,
     actions: [
       { label: "Lights On", action: "turn_on", variant: "default", tone: "primary" },
@@ -80,9 +81,8 @@ const shortcutDefinitions: ShortcutDefinition[] = [
     categories: ["alert", "alarm"],
     icon: <Siren className="h-5 w-5 text-red-600" />,
     actions: [
-      { label: "Trigger Alarm", action: "turn_on", variant: "default", tone: "danger" },
-      { label: "Test Ping", action: "set_value", value: 50, variant: "secondary", tone: "neutral" },
-      { label: "Silence", action: "turn_off", variant: "outline", tone: "primary" },
+      { label: "Trigger Alarm", action: "alarm_on", variant: "default", tone: "danger" },
+      { label: "Silence", action: "alarm_off", variant: "outline", tone: "primary" },
     ],
   },
 ];
@@ -117,7 +117,7 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
     try {
       setLoading(true);
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`${backendUrl}/api/iot/devices?type=actuator`, {
+      const response = await fetch(`${backendUrl}/api/iot/devices`, {
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -147,11 +147,11 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
 
   const controlDevice = async (
     shortcut: ShortcutKey,
-    action: "turn_on" | "turn_off" | "set_value",
+    action: "turn_on" | "turn_off" | "set_value" | "alarm_on" | "alarm_off",
     value?: number,
   ) => {
     const device = actuators[shortcut];
-    if (!device) return;
+    const deviceId = device?._id || device?.name || process.env.NEXT_PUBLIC_DEVICE_ID || '004B12387760';
     try {
       setActionLoading((prev) => ({ ...prev, [shortcut]: true }));
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -159,12 +159,11 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
       if (value !== undefined) {
         requestBody.value = value;
       }
-      
-      const resp = await fetch(`${backendUrl}/api/iot/devices/${device._id}/control`, {
+
+      const resp = await fetch(`${backendUrl}/api/iot/devices/${deviceId}/control-public`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody),
       });
@@ -240,8 +239,8 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
                       btn.tone === "danger"
                         ? "bg-red-600 hover:bg-red-700"
                         : btn.tone === "primary"
-                        ? undefined
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          ? undefined
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }
                     onClick={() => controlDevice(shortcut.key, btn.action, btn.value)}
                   >

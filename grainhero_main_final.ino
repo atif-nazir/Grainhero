@@ -14,7 +14,6 @@
 #include <math.h>
 #include <time.h> //RTC - REAL TIME CLOCK
 
-
 #ifndef ENABLE_FIREBASE
 #define ENABLE_FIREBASE false
 #endif
@@ -51,7 +50,6 @@ bool servoEnabled = false;
 unsigned long lastServoAction = 0;
 const unsigned long SERVO_COOLDOWN = 3000; // 3 seconds
 unsigned long lastMQTTReconnectAttempt = 0;
-
 
 // ================================
 // SERVO CONTROL STATE
@@ -144,6 +142,7 @@ int pwmSpeed = 0;         // 0 to 100 (for Firebase)
 
 // LED Indicator
 #define LED_PIN 2
+#define BUZZER_PIN 4
 
 // Servo object
 // Servo myServo; // intentionally commented out
@@ -223,6 +222,7 @@ bool servoState = false; // Controls servo (open/close lid)
 bool led2State = false;  // Controls LED 2
 bool led3State = false;  // Controls LED 3
 bool led4State = false;  // Controls LED 4 (GPIO 25)
+bool alarmState = false; // Controls Buzzer
 
 // ---------- ACTUATOR TIMING SAFETY ----------
 const unsigned long MIN_LID_OPEN_TIME_MS = 10UL * 1000UL; // 10 seconds
@@ -339,6 +339,7 @@ void setup() {
   pinMode(LED2_PIN, OUTPUT);
   pinMode(LED3_PIN, OUTPUT);
   pinMode(LED4_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
 
   // Turn off all outputs initially
   digitalWrite(LED_PIN, LOW);
@@ -346,6 +347,7 @@ void setup() {
   digitalWrite(LED2_PIN, LOW);
   digitalWrite(LED3_PIN, LOW);
   digitalWrite(LED4_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
 
   // Initialize PWM on GPIO 26
   initializePWM();
@@ -354,13 +356,13 @@ void setup() {
   pinMode(SERVO_PIN, OUTPUT);
   lidServo.attach(SERVO_PIN, 500, 2400); // min/max pulse width
   lidServo.write(SERVO_CLOSED_ANGLE);
-  
+
   servoCurrentAngle = SERVO_CLOSED_ANGLE;
-lidIsOpen = false;
-servoInitialized = true;
+  lidIsOpen = false;
+  servoInitialized = true;
 
   // Force CLOSED at safe start
-  
+
   Serial.println(F("Servo boot sequence complete - Lid CLOSED"));
   // ------------------------------------------------
 
@@ -377,7 +379,7 @@ servoInitialized = true;
   setFixedDeviceID();
   // Initialize grain type for this silo/device
   currentData.grain_type = "Rice"; // Or whichever grain type you want
-  
+
   // Display MAC address for reference
   displayMACAddress();
 
@@ -423,7 +425,7 @@ servoInitialized = true;
 
   } // end device metadata block
 
-if (DUAL_WRITE_TO_BACKEND && WiFi.status() == WL_CONNECTED) {
+  if (DUAL_WRITE_TO_BACKEND && WiFi.status() == WL_CONNECTED) {
     Serial.println(F("Uploading ML baseline to backend..."));
 
     DynamicJsonDocument baselineDoc(256);
@@ -469,15 +471,15 @@ if (DUAL_WRITE_TO_BACKEND && WiFi.status() == WL_CONNECTED) {
   // Wait for time to be set
   struct tm timeinfo;
   int ntpAttempts = 0;
-while (!getLocalTime(&timeinfo) && ntpAttempts < 10) {
-  Serial.println(F("Waiting for NTP time..."));
-  delay(1000);
-  ntpAttempts++;
-}
+  while (!getLocalTime(&timeinfo) && ntpAttempts < 10) {
+    Serial.println(F("Waiting for NTP time..."));
+    delay(1000);
+    ntpAttempts++;
+  }
 
-if (ntpAttempts >= 10) {
-  Serial.println(F("⚠️ NTP failed, continuing without sync"));
-}
+  if (ntpAttempts >= 10) {
+    Serial.println(F("⚠️ NTP failed, continuing without sync"));
+  }
   Serial.println(F("Time synchronized via NTP!"));
 
   // Initialize Firebase client
@@ -501,7 +503,7 @@ if (ntpAttempts >= 10) {
 
   // Establish baseline
   establishBaseline();
-  
+
   Serial.println(F("\n=== SYSTEM INITIALIZATION COMPLETE ==="));
   Serial.print(F("Device ID: "));
   Serial.println(currentData.deviceID);
@@ -627,19 +629,46 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
       Serial.println(F("🔄 Returned to AUTO mode"));
     }
 
-    else {
+    else if (action == "alarm_on") {
+      alarmState = true;
+      digitalWrite(BUZZER_PIN, HIGH);
+      Serial.println(F("🚨 ALARM ON"));
+    } else if (action == "alarm_off") {
+      alarmState = false;
+      digitalWrite(BUZZER_PIN, LOW);
+      Serial.println(F("🔕 ALARM OFF"));
+    } else {
       Serial.print(F("Unknown MQTT action: "));
       Serial.println(action);
     }
   }
 
   // --- Optional LED control ---
-  if (doc.containsKey("led2"))
-    digitalWrite(LED2_PIN, doc["led2"] ? HIGH : LOW);
-  if (doc.containsKey("led3"))
-    digitalWrite(LED3_PIN, doc["led3"] ? HIGH : LOW);
-  if (doc.containsKey("led4"))
-    digitalWrite(LED4_PIN, doc["led4"] ? HIGH : LOW);
+  if (doc.containsKey("led2")) {
+    led2State = doc["led2"] ? true : false;
+    digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
+    Serial.print(F("💡 LED2 → "));
+    Serial.println(led2State ? "ON" : "OFF");
+  }
+  if (doc.containsKey("led3")) {
+    led3State = doc["led3"] ? true : false;
+    digitalWrite(LED3_PIN, led3State ? HIGH : LOW);
+    Serial.print(F("💡 LED3 → "));
+    Serial.println(led3State ? "ON" : "OFF");
+  }
+  if (doc.containsKey("led4")) {
+    led4State = doc["led4"] ? true : false;
+    digitalWrite(LED4_PIN, led4State ? HIGH : LOW);
+    Serial.print(F("💡 LED4 → "));
+    Serial.println(led4State ? "ON" : "OFF");
+  }
+
+  // --- Fan speed from MQTT value field ---
+  if (doc.containsKey("target_fan_speed")) {
+    targetFanSpeed = doc["target_fan_speed"] | 60;
+  } else if (doc.containsKey("pwm_speed")) {
+    targetFanSpeed = doc["pwm_speed"] | 60;
+  }
 }
 
 float calculateDewPoint(float temperature, float humidity) {
@@ -721,14 +750,14 @@ void loop() {
   // 6️⃣ MQTT LOOP - handle incoming messages
   // ================================
   if (mqttClient.connected()) {
-  mqttClient.loop();
-} else {
-  if (millis() - lastMQTTReconnectAttempt > 5000) {
-    Serial.println(F("MQTT reconnect attempt..."));
-    initializeMQTT();
-    lastMQTTReconnectAttempt = millis();
+    mqttClient.loop();
+  } else {
+    if (millis() - lastMQTTReconnectAttempt > 5000) {
+      Serial.println(F("MQTT reconnect attempt..."));
+      initializeMQTT();
+      lastMQTTReconnectAttempt = millis();
+    }
   }
-}
 
   // ================================
   // ML DECISION INPUT (from backend)
@@ -1000,7 +1029,6 @@ void initializeSDCard() {
   }
 }
 
-
 void createCSVFile() {
   csvFileName = "/data/sensor_data_" + getTimestampString() + ".csv";
 
@@ -1078,8 +1106,8 @@ void initializeBME680() {
 
   if (!bme.begin(0x77)) {
     Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
-    sdCardAvailable = false;  // optional
-return;                   // allow system to continue
+    sdCardAvailable = false; // optional
+    return;                  // allow system to continue
   }
 
   bme.setTemperatureOversampling(BME680_OS_8X);
@@ -1207,6 +1235,7 @@ void publishToMQTT() {
 
   // Metadata
   doc["device_id"] = currentData.deviceID;
+  doc["alarm_state"] = alarmState ? "on" : "off";
   doc["battery_level"] = 98;
   doc["signal_strength"] = -60;
   doc["timestamp"] = currentData.dateTime;
@@ -1353,7 +1382,8 @@ void publishToFirebaseREST() {
   guard["ambient_rh"] = guard_ambient_rh;
   guard["dew_point_risk"] = guard_dew_point_risk;
   guard["lid_closed"] = guard_lid_closed;
-  guard["venting_blocked"] = (guard_ambient_rh || guard_dew_point_risk || (!lidIsOpen));
+  guard["venting_blocked"] =
+      (guard_ambient_rh || guard_dew_point_risk || (!lidIsOpen));
 
   // DHT11 data
   JsonObject dht1 = jsonDoc.createNestedObject("dht1");
@@ -1378,6 +1408,7 @@ void publishToFirebaseREST() {
 
   // Control states - pwm_speed instead of relay_state
   jsonDoc["servo_state"] = servoState;
+  jsonDoc["alarm_state"] = alarmState ? "on" : "off";
   jsonDoc["pwm_speed"] = pwmSpeed; // 0-100% instead of relay_state
   jsonDoc["led2_state"] = led2State;
   jsonDoc["led3_state"] = led3State;
@@ -1397,8 +1428,8 @@ void publishToFirebaseREST() {
   Serial.print(F("Publishing to Firebase: "));
   Serial.println(fullURL);
 
-client.stop();
-client.setInsecure();
+  client.stop();
+  client.setInsecure();
 
   // Make HTTP PUT request (overwrites data at this path)
   if (client.connect(FIREBASE_HOST, 443)) {
@@ -1461,6 +1492,7 @@ client.setInsecure();
           ingestReadings["tvoc"] = currentData.tvoc_approx;
           ingestReadings["pwm_speed"] = pwmSpeed;
           ingestReadings["servo_state"] = servoState;
+          ingestReadings["alarm_state"] = alarmState ? "on" : "off";
           ingestReadings["dew_point"] = currentData.dew_point;
           ingestReadings["dew_point_gap"] = dew_point_gap;
           String payload;

@@ -11,7 +11,7 @@ import {
   Users,
   BarChart3,
   FileText,
-  Bell,
+  Cloud,
   Smartphone,
   Settings,
   LogOut,
@@ -21,7 +21,6 @@ import {
   ChevronRight,
   Sparkles,
   QrCode,
-  TrendingUp,
   CreditCard,
   Building2,
   Crown,
@@ -32,9 +31,8 @@ import {
   Activity,
   DollarSign,
   Brain,
-  Cloud,
   Zap,
-} from "lucide-react"
+  } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { LanguageSelector } from "@/components/language-selector"
@@ -98,7 +96,7 @@ const iotMonitoringNav = [
     label: "Sensors",
     href: "/sensors",
     icon: Smartphone,
-    roles: ["super_admin", "admin", "technician"],
+    roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
   {
@@ -138,49 +136,11 @@ const aiAnalyticsNav = [
     badge: "AI"
   },
   {
-    name: "ai-spoilage",
-    href: "/ai-spoilage",
-    icon: OctagonAlert,
-    roles: ["super_admin", "admin", "manager", "technician"],
-    badge: "AI"
-  },
-  {
-    name: "risk-assessment",
-    label: "Risk Assessment",
-    href: "/risk-assessment",
-    icon: BarChart3,
-    roles: ["super_admin", "admin", "manager"],
-    badge: "AI"
-  },
-  {
-    name: "spoilage-analysis",
-    label: "Spoilage Analysis",
-    href: "/spoilage-analysis",
-    icon: TrendingUp,
-    roles: ["super_admin", "admin", "manager"],
-    badge: "AI"
-  },
-  {
     name: "model-performance",
     href: "/model-performance",
     icon: Brain,
     roles: ["super_admin", "admin", "manager"],
     badge: "ML"
-  },
-  {
-    name: "data-management",
-    href: "/data-management",
-    icon: Database,
-    roles: ["super_admin", "admin", "manager"],
-    badge: "ML"
-  },
-  {
-    name: "environmental-data",
-    label: "Environmental Data",
-    href: "/environmental-data",
-    icon: BarChart3,
-    roles: ["super_admin", "admin", "manager", "technician"],
-    badge: undefined
   },
   {
     name: "data-visualization",
@@ -221,7 +181,6 @@ const businessNav = [
 
 // System Administration
 const systemNav = [
-  { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 
@@ -293,18 +252,9 @@ const superAdminNav = [
   },
 ]
 
-const milestone2Navigation = [
-  { name: "analytics", href: "/analytics", icon: BarChart3, badge: "New" },
-  { name: "reports", href: "/reports", icon: FileText, badge: "New" },
-  { name: "notifications", href: "/notifications", icon: Bell, badge: "New" },
-  { name: "mobile", href: "/mobile", icon: Smartphone, badge: "New" },
-]
-
-
 export function Sidebar() {
   const pathname = usePathname()
   const t = useTranslations('Sidebar')
-  const [milestone2Expanded, setMilestone2Expanded] = useState(false)
   const [systemExpanded, setSystemExpanded] = useState(false)
   const [grainOpsExpanded, setGrainOpsExpanded] = useState(false)
   const [aiAnalyticsExpanded, setAiAnalyticsExpanded] = useState(false)
@@ -321,13 +271,12 @@ export function Sidebar() {
     return item.roles.includes(userRole);
   };
 
-  const showOnlySuperAdmin = userRole === "super_admin";
   const showOnlyAdmin = userRole === "admin" || userRole === "super_admin";
   const showOnlyManager = userRole === "manager" || userRole === "admin" || userRole === "super_admin";
 
   const visibleDashboardNav = dashboardNav.filter(hasAccess);
   const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : [];
-  const visibleIoTNav = showOnlyManager ? iotMonitoringNav.filter(hasAccess) : [];
+  const visibleIoTNav = iotMonitoringNav.filter(hasAccess);
   const visibleAINav = showOnlyManager ? aiAnalyticsNav.filter(hasAccess) : [];
   const visibleBusinessNav = showOnlyAdmin ? businessNav.filter(hasAccess) : [];
   const visibleSystemNav = showOnlyAdmin ? systemNav.filter(hasAccess) : [];
@@ -573,42 +522,7 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Milestone 2 Features */}
-          {!showOnlySuperAdmin && userRole !== "manager" && (
-            <div className="space-y-1">
-              <Button
-                variant="ghost"
-                className="w-full justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                onClick={() => setMilestone2Expanded(!milestone2Expanded)}
-              >
-                <span>Advanced Features</span>
-                {milestone2Expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              </Button>
-              {milestone2Expanded && (
-                <div className="space-y-1 pl-2">
-                  {milestone2Navigation.map((item) => {
-                    const isActive = pathname === `/${currentLanguage}${item.href}`;
-                    return (
-                      <Link key={item.name} href={`/${currentLanguage}${item.href}`}>
-                        <Button
-                          variant={isActive ? "secondary" : "ghost"}
-                          className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 border-blue-200")}
-                        >
-                          <item.icon className="mr-3 h-4 w-4" />
-                          <span className="flex-1 text-left">{t(`${item.name}`)}</span>
-                          {item.badge && (
-                            <Badge variant="secondary" className="ml-2 text-xs">
-                              {item.badge}
-                            </Badge>
-                          )}
-                        </Button>
-                      </Link>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Advanced Features removed */}
         </nav>
       </ScrollArea>
 

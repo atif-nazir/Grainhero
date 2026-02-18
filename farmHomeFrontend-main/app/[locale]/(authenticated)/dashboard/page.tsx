@@ -260,10 +260,10 @@ export default function DashboardPage() {
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">
+            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
               Welcome back, {user?.name || "User"}!
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground mt-1">
               Here&apos;s what&apos;s happening with your {userRole.replace('_', ' ')} dashboard today.
             </p>
           </div>

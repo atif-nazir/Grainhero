@@ -24,7 +24,9 @@ function init() {
   } else {
     throw new Error('Service account not configured')
   }
-  admin.initializeApp({ credential, databaseURL: url })
+  if (!admin.apps.length) {
+    admin.initializeApp({ credential, databaseURL: url })
+  }
   database = admin.database()
   initialized = true
 }
@@ -33,11 +35,14 @@ async function handleLatest(deviceId, snapshot, io) {
   try {
     const payload = snapshot.val() || {}
     const device = await SensorDevice.findOne({ device_id: deviceId })
-    if (!device) return
+    // Use DB record if available, otherwise fallback to raw deviceId
+    const effectiveDeviceId = device ? device._id : deviceId
+    const tenantId = device ? device.admin_id : null
+    const siloId = device ? device.silo_id : null
     const reading = {
-      device_id: device._id,
-      tenant_id: device.admin_id,
-      silo_id: device.silo_id,
+      device_id: effectiveDeviceId,
+      tenant_id: tenantId,
+      silo_id: siloId,
       timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date()
     }
     if (payload.temperature !== undefined) {
@@ -46,14 +51,17 @@ async function handleLatest(deviceId, snapshot, io) {
     if (payload.humidity !== undefined) {
       reading.humidity = { value: Number(payload.humidity), unit: 'percent' }
     }
-    if (payload.voc !== undefined) {
-      reading.voc = { value: Number(payload.voc), unit: 'ppb' }
+    if (payload.voc !== undefined || payload.tvoc !== undefined) {
+      reading.voc = { value: Number(payload.voc ?? payload.tvoc ?? 0), unit: 'ppb' }
     }
     if (payload.moisture !== undefined) {
       reading.moisture = { value: Number(payload.moisture), unit: 'percent' }
     }
     if (payload.light !== undefined) {
       reading.light = { value: Number(payload.light), unit: 'lux' }
+    }
+    if (payload.pressure !== undefined) {
+      reading.pressure = { value: Number(payload.pressure), unit: 'hPa' }
     }
     if (payload.ambient && typeof payload.ambient === 'object') {
       reading.ambient = {}
@@ -67,7 +75,20 @@ async function handleLatest(deviceId, snapshot, io) {
         reading.ambient.light = { value: Number(payload.ambient.light), unit: 'lux' }
       }
     }
-    await realTimeDataService.processSensorReading(reading)
+    // Add actuator states
+    reading.fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off')
+    reading.lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed')
+    reading.mlDecision = payload.mlDecision || 'idle'
+    reading.humanOverride = !!payload.humanOverride || !!payload.human_override
+    reading.pwm_speed = payload.pwm_speed
+    reading.servo_state = payload.servo_state
+
+    try {
+      await realTimeDataService.processSensorReading(reading)
+    } catch (procErr) {
+      // Don't let processing failures block event emission
+      console.warn('realTimeDataService.processSensorReading error:', procErr.message)
+    }
     if (io) {
       io.emit('sensor_reading', { type: 'sensor_reading', data: reading, timestamp: new Date() })
     }
@@ -114,18 +135,41 @@ function stop() {
 async function writeControlState(deviceId, state) {
   if (!initialized) init()
   try {
-    const ref = database.ref(`sensor_data/${deviceId}/latest`)
-    await ref.update({
-      humanRequestedFan: !!state.human_requested_fan,
-      mlRequestedFan: !!state.ml_requested_fan,
-      targetFanSpeed: state.target_fan_speed || 0,
-      mlDecision: state.ml_decision || 'idle',
+    const ref = database.ref(`control/${deviceId}`)
+    const updates = {
       lastControlUpdate: admin.database.ServerValue.TIMESTAMP
-    })
-    console.log(`✅ Firebase control state updated for ${deviceId}`)
+    }
+    // Only include fan-related keys if they were explicitly provided
+    if (state.human_requested_fan !== undefined) updates.humanRequestedFan = !!state.human_requested_fan
+    if (state.ml_requested_fan !== undefined) updates.mlRequestedFan = !!state.ml_requested_fan
+    if (state.target_fan_speed !== undefined) updates.targetFanSpeed = state.target_fan_speed || 0
+    if (state.ml_decision !== undefined) updates.mlDecision = state.ml_decision || 'idle'
+    // LED states (Arduino reads led2/led3/led4 booleans)
+    if (state.led2 !== undefined) updates.led2 = !!state.led2
+    if (state.led3 !== undefined) updates.led3 = !!state.led3
+    if (state.led4 !== undefined) updates.led4 = !!state.led4
+    // Alarm state
+    if (state.alarm !== undefined) updates.alarm = !!state.alarm
+    // Servo (lid)
+    if (state.servo !== undefined) updates.servo = !!state.servo
+
+    await ref.update(updates)
+    console.log(`✅ Firebase control state updated for ${deviceId}:`, JSON.stringify(updates))
   } catch (err) {
     console.error(`❌ Firebase write error for ${deviceId}:`, err.message)
   }
 }
 
-module.exports = { start, stop, writeControlState }
+async function readTelemetry(deviceId) {
+  if (!initialized) init()
+  try {
+    const ref = database.ref(`sensor_data/${deviceId}/latest`)
+    const snapshot = await ref.once('value')
+    return snapshot.val() || null
+  } catch (err) {
+    console.error(`Firebase readTelemetry error for ${deviceId}:`, err.message)
+    return null
+  }
+}
+
+module.exports = { start, stop, writeControlState, readTelemetry }

@@ -12,22 +12,22 @@ const SpoilagePrediction = require('../models/SpoilagePrediction');
 async function callSmartBinModel(inputData) {
     return new Promise((resolve, reject) => {
         const pythonScript = path.join(__dirname, '../ml/smartbin_predict.py');
-        
+
         const python = spawn('python', [pythonScript], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
-        
+
         let output = '';
         let error = '';
-        
+
         python.stdout.on('data', (data) => {
             output += data.toString();
         });
-        
+
         python.stderr.on('data', (data) => {
             error += data.toString();
         });
-        
+
         python.on('close', (code) => {
             if (code === 0) {
                 try {
@@ -58,7 +58,7 @@ async function callSmartBinModel(inputData) {
                 });
             }
         });
-        
+
         python.stdin.write(JSON.stringify(inputData));
         python.stdin.end();
     });
@@ -72,51 +72,51 @@ router.post('/predict', [
 ], async (req, res) => {
     try {
         const inputData = req.body;
-        
+
         // Call the SmartBin-RiceSpoilage ML model
         const prediction = await callSmartBinModel(inputData);
-        
+
         // Create prediction record
         const predictionRecord = {
             _id: new Date().getTime().toString(),
             prediction_id: `PRED-${Date.now()}`,
-            batch_id: { 
-                _id: inputData.batch_id || 'batch-' + Date.now(), 
-                batch_id: inputData.batch_id || 'BATCH' + Date.now(), 
-                grain_type: inputData.grain_type || 'Rice' 
+            batch_id: {
+                _id: inputData.batch_id || 'batch-' + Date.now(),
+                batch_id: inputData.batch_id || 'BATCH' + Date.now(),
+                grain_type: inputData.grain_type || 'Rice'
             },
-            silo_id: { 
-                _id: inputData.silo_id || 'silo-' + Date.now(), 
-                name: inputData.silo_name || 'Storage Silo' 
+            silo_id: {
+                _id: inputData.silo_id || 'silo-' + Date.now(),
+                name: inputData.silo_name || 'Storage Silo'
             },
             prediction_type: 'ml_prediction',
             risk_score: prediction.risk_score,
-            risk_level: prediction.risk_score > 80 ? 'critical' : 
-                       prediction.risk_score > 60 ? 'high' : 
-                       prediction.risk_score > 40 ? 'medium' : 'low',
+            risk_level: prediction.risk_score > 80 ? 'critical' :
+                prediction.risk_score > 60 ? 'high' :
+                    prediction.risk_score > 40 ? 'medium' : 'low',
             confidence_score: prediction.confidence,
             prediction_horizon: Math.ceil(prediction.time_to_spoilage_hours / 24),
             predicted_date: new Date(Date.now() + prediction.time_to_spoilage_hours * 60 * 60 * 1000),
             environmental_factors: {
-                temperature: { 
-                    current: inputData.temperature || 25, 
-                    trend: 'stable', 
-                    impact_score: 0.5 
+                temperature: {
+                    current: inputData.temperature || 25,
+                    trend: 'stable',
+                    impact_score: 0.5
                 },
-                humidity: { 
-                    current: inputData.humidity || 60, 
-                    trend: 'stable', 
-                    impact_score: 0.5 
+                humidity: {
+                    current: inputData.humidity || 60,
+                    trend: 'stable',
+                    impact_score: 0.5
                 },
-                co2: { 
-                    current: inputData.co2 || 500, 
-                    trend: 'stable', 
-                    impact_score: 0.3 
+                co2: {
+                    current: inputData.co2 || 500,
+                    trend: 'stable',
+                    impact_score: 0.3
                 },
-                moisture: { 
-                    current: inputData.grain_moisture || 15, 
-                    trend: 'stable', 
-                    impact_score: 0.6 
+                moisture: {
+                    current: inputData.grain_moisture || 15,
+                    trend: 'stable',
+                    impact_score: 0.6
                 }
             },
             grain_factors: {
@@ -138,13 +138,13 @@ router.post('/predict', [
             model_used: 'SmartBin-RiceSpoilage',
             tenant_id: req.user.tenant_id
         };
-        
+
         res.json({
             message: 'ML prediction completed',
             prediction: predictionRecord,
             ml_result: prediction
         });
-        
+
     } catch (error) {
         console.error('ML prediction error:', error);
         res.status(500).json({ error: 'ML prediction failed', details: error.message });
@@ -156,26 +156,26 @@ router.get('/predictions', async (req, res) => {
     try {
         const predictions = riceDataService.getPredictions();
         const { risk_level, status, page = 1, limit = 20 } = req.query;
-        
+
         let filteredPredictions = predictions;
-        
+
         // Filter by risk level
         if (risk_level) {
             filteredPredictions = filteredPredictions.filter(p => p.risk_level === risk_level);
         }
-        
+
         // Filter by status
         if (status) {
             filteredPredictions = filteredPredictions.filter(p => p.validation_status === status);
         }
-        
+
         // Pagination
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + parseInt(limit);
         const paginatedPredictions = filteredPredictions.slice(startIndex, endIndex);
-        
+
         console.log(`📊 Serving ${paginatedPredictions.length} predictions (${filteredPredictions.length} total)`);
-        
+
         res.json({
             predictions: paginatedPredictions,
             total: filteredPredictions.length,
@@ -207,7 +207,7 @@ router.get('/test', async (req, res) => {
         const predictions = riceDataService.getPredictions();
         const advisories = riceDataService.getAdvisories();
         const statistics = riceDataService.getStatistics();
-        
+
         res.json({
             message: 'Rice data service is working!',
             data_loaded: predictions.length > 0,
@@ -233,7 +233,7 @@ router.get('/model-performance', [
         const summary = performanceTracker.get_performance_summary();
         const insights = performanceTracker.get_training_insights();
         const recommendations = performanceTracker.get_recommendations();
-        
+
         res.json({
             performance_summary: summary,
             training_insights: insights,
@@ -261,7 +261,7 @@ router.get('/training-history', [
     try {
         const performanceTracker = require('../ml/model_performance');
         const history = performanceTracker.performance_history;
-        
+
         res.json({
             training_sessions: history.training_sessions || [],
             total_sessions: history.training_sessions?.length || 0,
@@ -323,9 +323,9 @@ router.get('/data-summary', [
     try {
         const { spawn } = require('child_process');
         const path = require('path');
-        
+
         const pythonScript = path.join(__dirname, '../ml/data_manager.py');
-        
+
         const python = spawn('python', ['-c', `
 import sys
 sys.path.append('${path.join(__dirname, '../ml')}')
@@ -337,18 +337,18 @@ print(json.dumps(summary))
         `], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
-        
+
         let output = '';
         let error = '';
-        
+
         python.stdout.on('data', (data) => {
             output += data.toString();
         });
-        
+
         python.stderr.on('data', (data) => {
             error += data.toString();
         });
-        
+
         python.on('close', (code) => {
             if (code === 0) {
                 try {
@@ -371,7 +371,7 @@ print(json.dumps(summary))
                 });
             }
         });
-        
+
     } catch (error) {
         console.error('Get data summary error:', error);
         res.status(500).json({ error: 'Failed to get data summary' });
@@ -386,35 +386,35 @@ router.post('/add-data', [
 ], async (req, res) => {
     try {
         const { records } = req.body;
-        
+
         if (!records || !Array.isArray(records)) {
             return res.status(400).json({ error: 'Records array is required' });
         }
-        
+
         // Validate record structure
-        const requiredFields = ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point', 
-                               'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence', 
-                               'Rainfall', 'Spoilage_Label'];
-        
+        const requiredFields = ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point',
+            'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence',
+            'Rainfall', 'Spoilage_Label'];
+
         for (const record of records) {
             const missingFields = requiredFields.filter(field => !(field in record));
             if (missingFields.length > 0) {
-                return res.status(400).json({ 
-                    error: `Missing required fields: ${missingFields.join(', ')}` 
+                return res.status(400).json({
+                    error: `Missing required fields: ${missingFields.join(', ')}`
                 });
             }
         }
-        
+
         const { spawn } = require('child_process');
         const path = require('path');
-        
+
         // Save records to temporary file
         const fs = require('fs');
         const tempFile = path.join(__dirname, '../ml/temp_data.json');
         fs.writeFileSync(tempFile, JSON.stringify(records));
-        
+
         const pythonScript = path.join(__dirname, '../ml/data_manager.py');
-        
+
         const python = spawn('python', ['-c', `
 import sys
 import json
@@ -431,24 +431,24 @@ print(json.dumps({'success': success, 'count': len(records)}))
         `], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
-        
+
         let output = '';
         let error = '';
-        
+
         python.stdout.on('data', (data) => {
             output += data.toString();
         });
-        
+
         python.stderr.on('data', (data) => {
             error += data.toString();
         });
-        
+
         python.on('close', (code) => {
             // Clean up temp file
             try {
                 fs.unlinkSync(tempFile);
-            } catch (e) {}
-            
+            } catch (e) { }
+
             if (code === 0) {
                 try {
                     const result = JSON.parse(output);
@@ -465,13 +465,13 @@ print(json.dumps({'success': success, 'count': len(records)}))
                     });
                 }
             } else {
-                res.status(500).json({ 
-                    error: 'Failed to add data', 
-                    details: error 
+                res.status(500).json({
+                    error: 'Failed to add data',
+                    details: error
                 });
             }
         });
-        
+
     } catch (error) {
         console.error('Add data error:', error);
         res.status(500).json({ error: 'Failed to add data' });
@@ -486,12 +486,12 @@ router.post('/generate-sample-data', [
 ], async (req, res) => {
     try {
         const { count = 10 } = req.body;
-        
+
         const { spawn } = require('child_process');
         const path = require('path');
-        
+
         const pythonScript = path.join(__dirname, '../ml/data_manager.py');
-        
+
         const python = spawn('python', ['-c', `
 import sys
 import json
@@ -504,18 +504,18 @@ print(json.dumps(sample_data))
         `], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
-        
+
         let output = '';
         let error = '';
-        
+
         python.stdout.on('data', (data) => {
             output += data.toString();
         });
-        
+
         python.stderr.on('data', (data) => {
             error += data.toString();
         });
-        
+
         python.on('close', (code) => {
             if (code === 0) {
                 try {
@@ -529,13 +529,13 @@ print(json.dumps(sample_data))
                     res.status(500).json({ error: 'Failed to parse sample data' });
                 }
             } else {
-                res.status(500).json({ 
-                    error: 'Failed to generate sample data', 
-                    details: error 
+                res.status(500).json({
+                    error: 'Failed to generate sample data',
+                    details: error
                 });
             }
         });
-        
+
     } catch (error) {
         console.error('Generate sample data error:', error);
         res.status(500).json({ error: 'Failed to generate sample data' });
@@ -547,26 +547,26 @@ router.get('/advisories', async (req, res) => {
     try {
         const advisories = riceDataService.getAdvisories();
         const { status, priority, page = 1, limit = 20 } = req.query;
-        
+
         let filteredAdvisories = advisories;
-        
+
         // Filter by status
         if (status) {
             filteredAdvisories = filteredAdvisories.filter(a => a.status === status);
         }
-        
+
         // Filter by priority
         if (priority) {
             filteredAdvisories = filteredAdvisories.filter(a => a.priority === priority);
         }
-        
+
         // Pagination
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + parseInt(limit);
         const paginatedAdvisories = filteredAdvisories.slice(startIndex, endIndex);
-        
+
         console.log(`📋 Serving ${paginatedAdvisories.length} advisories (${filteredAdvisories.length} total)`);
-        
+
         res.json({
             advisories: paginatedAdvisories,
             total: filteredAdvisories.length,
@@ -588,42 +588,42 @@ router.post('/retrain', [
 ], async (req, res) => {
     try {
         const { force_retrain = false, hyperparameter_tuning = true } = req.body;
-        
+
         console.log('🚀 Starting model retraining...');
-        
+
         // Import the enhanced trainer
         const { spawn } = require('child_process');
         const path = require('path');
-        
+
         const pythonScript = path.join(__dirname, '../ml/enhanced_train.py');
-        
+
         // Start the training process
         const python = spawn('python', [pythonScript], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
-        
+
         let output = '';
         let error = '';
-        
+
         python.stdout.on('data', (data) => {
             output += data.toString();
             console.log('Training output:', data.toString());
         });
-        
+
         python.stderr.on('data', (data) => {
             error += data.toString();
             console.error('Training error:', data.toString());
         });
-        
+
         python.on('close', async (code) => {
             if (code === 0) {
                 try {
                     // Load the performance tracker
                     const performanceTracker = require('../ml/model_performance');
-                    
+
                     // Parse training results from output
                     const metrics = parseTrainingOutput(output);
-                    
+
                     // Record the training session
                     const session = performanceTracker.record_training_session(
                         metrics,
@@ -631,14 +631,14 @@ router.post('/retrain', [
                         metrics.best_params || {},
                         metrics.improvement || {}
                     );
-                    
+
                     // Get performance summary
                     const summary = performanceTracker.get_performance_summary();
                     const insights = performanceTracker.get_training_insights();
                     const recommendations = performanceTracker.get_recommendations();
-                    
+
                     console.log('✅ Model retraining completed successfully');
-                    
+
                     res.json({
                         message: 'SmartBin-RiceSpoilage model retraining completed successfully',
                         model_type: 'SmartBin-RiceSpoilage',
@@ -651,7 +651,7 @@ router.post('/retrain', [
                         total_training_sessions: summary.total_training_sessions || 1,
                         best_performance: summary.best_performance || {}
                     });
-                    
+
                 } catch (parseError) {
                     console.error('Error parsing training results:', parseError);
                     res.json({
@@ -662,20 +662,20 @@ router.post('/retrain', [
                 }
             } else {
                 console.error('Training failed with code:', code);
-                res.status(500).json({ 
-                    error: 'Model retraining failed', 
+                res.status(500).json({
+                    error: 'Model retraining failed',
                     details: error,
                     exit_code: code
                 });
             }
         });
-        
+
         // Handle timeout
         setTimeout(() => {
             python.kill();
             res.status(408).json({ error: 'Training timeout' });
         }, 300000); // 5 minutes timeout
-        
+
     } catch (error) {
         console.error('Retrain model error:', error);
         res.status(500).json({ error: 'Model retraining failed', details: error.message });
@@ -689,7 +689,7 @@ function parseTrainingOutput(output) {
         const accuracyMatch = output.match(/Accuracy: ([\d.]+)/);
         const f1Match = output.match(/F1-Score: ([\d.]+)/);
         const cvMatch = output.match(/CV Score: ([\d.]+)/);
-        
+
         return {
             accuracy: accuracyMatch ? parseFloat(accuracyMatch[1]) : 0.87,
             f1_score: f1Match ? parseFloat(f1Match[1]) : 0.85,
@@ -723,51 +723,51 @@ router.post('/predictions', [
 ], async (req, res) => {
     try {
         const inputData = req.body;
-        
+
         // Call the SmartBin-RiceSpoilage ML model
         const prediction = await callSmartBinModel(inputData);
-        
+
         // Create prediction record
         const predictionRecord = {
             _id: `pred-${Date.now()}`,
             prediction_id: `PRED-${Date.now()}`,
-            batch_id: { 
-                _id: inputData.batch_id || `batch-${Date.now()}`, 
-                batch_id: inputData.batch_id || `BATCH${Date.now()}`, 
-                grain_type: 'Rice' 
+            batch_id: {
+                _id: inputData.batch_id || `batch-${Date.now()}`,
+                batch_id: inputData.batch_id || `BATCH${Date.now()}`,
+                grain_type: 'Rice'
             },
-            silo_id: { 
-                _id: inputData.silo_id || `silo-${Date.now()}`, 
-                name: inputData.silo_name || 'Rice Storage Silo' 
+            silo_id: {
+                _id: inputData.silo_id || `silo-${Date.now()}`,
+                name: inputData.silo_name || 'Rice Storage Silo'
             },
             prediction_type: 'ml_prediction',
             risk_score: prediction.risk_score,
-            risk_level: prediction.risk_score > 80 ? 'critical' : 
-                       prediction.risk_score > 60 ? 'high' : 
-                       prediction.risk_score > 40 ? 'medium' : 'low',
+            risk_level: prediction.risk_score > 80 ? 'critical' :
+                prediction.risk_score > 60 ? 'high' :
+                    prediction.risk_score > 40 ? 'medium' : 'low',
             confidence_score: prediction.confidence,
             prediction_horizon: Math.ceil(prediction.time_to_spoilage_hours / 24),
             predicted_date: new Date(Date.now() + prediction.time_to_spoilage_hours * 60 * 60 * 1000),
             environmental_factors: {
-                temperature: { 
-                    current: inputData.temperature || 25, 
-                    trend: 'stable', 
-                    impact_score: 0.5 
+                temperature: {
+                    current: inputData.temperature || 25,
+                    trend: 'stable',
+                    impact_score: 0.5
                 },
-                humidity: { 
-                    current: inputData.humidity || 60, 
-                    trend: 'stable', 
-                    impact_score: 0.5 
+                humidity: {
+                    current: inputData.humidity || 60,
+                    trend: 'stable',
+                    impact_score: 0.5
                 },
-                co2: { 
-                    current: inputData.co2 || 500, 
-                    trend: 'stable', 
-                    impact_score: 0.3 
+                co2: {
+                    current: inputData.co2 || 500,
+                    trend: 'stable',
+                    impact_score: 0.3
                 },
-                moisture: { 
-                    current: inputData.grain_moisture || 15, 
-                    trend: 'stable', 
-                    impact_score: 0.6 
+                moisture: {
+                    current: inputData.grain_moisture || 15,
+                    trend: 'stable',
+                    impact_score: 0.6
                 }
             },
             grain_factors: {
@@ -789,15 +789,15 @@ router.post('/predictions', [
             model_used: 'SmartBin-RiceSpoilage',
             tenant_id: req.user.tenant_id
         };
-        
+
         // Add to data service
         riceDataService.addPrediction(predictionRecord);
-        
+
         res.json({
             message: 'Prediction created successfully',
             prediction: predictionRecord
         });
-        
+
     } catch (error) {
         console.error('Create prediction error:', error);
         res.status(500).json({ error: 'Failed to create prediction' });
@@ -813,9 +813,9 @@ router.put('/predictions/:id', [
     try {
         const { id } = req.params;
         const updates = req.body;
-        
+
         riceDataService.updatePrediction(id, updates);
-        
+
         res.json({
             message: 'Prediction updated successfully'
         });
@@ -833,9 +833,9 @@ router.delete('/predictions/:id', [
 ], async (req, res) => {
     try {
         const { id } = req.params;
-        
+
         riceDataService.deletePrediction(id);
-        
+
         res.json({
             message: 'Prediction deleted successfully'
         });
@@ -853,9 +853,9 @@ router.delete('/advisories/:id', [
 ], async (req, res) => {
     try {
         const { id } = req.params;
-        
+
         riceDataService.deleteAdvisory(id);
-        
+
         res.json({
             message: 'Advisory deleted successfully'
         });
@@ -873,11 +873,11 @@ router.get('/training-data/export', [
     requireTenantAccess
 ], async (req, res) => {
     try {
-        const { 
-            siloId, 
-            startDate, 
-            endDate, 
-            onlyLabeled = 'true' 
+        const {
+            siloId,
+            startDate,
+            endDate,
+            onlyLabeled = 'true'
         } = req.query;
 
         const trainingData = await trainingDataService.prepareTrainingData({
@@ -1032,15 +1032,15 @@ router.post('/predictions/:id/validate', [
 ], async (req, res) => {
     try {
         const { id } = req.params;
-        const { 
-            spoilage_occurred, 
-            spoilage_type, 
-            spoilage_date, 
-            severity_level, 
-            validation_notes 
+        const {
+            spoilage_occurred,
+            spoilage_type,
+            spoilage_date,
+            severity_level,
+            validation_notes
         } = req.body;
 
-        const prediction = await SpoilagePrediction.findOne({ 
+        const prediction = await SpoilagePrediction.findOne({
             prediction_id: id,
             tenant_id: req.user.tenant_id
         });
@@ -1132,20 +1132,20 @@ router.get('/model-performance/validation', [
 
         // Calculate performance metrics
         const accuracy = (truePositives + trueNegatives) / total;
-        const precision = (truePositives + falsePositives) > 0 
-            ? truePositives / (truePositives + falsePositives) 
+        const precision = (truePositives + falsePositives) > 0
+            ? truePositives / (truePositives + falsePositives)
             : 0;
-        const recall = (truePositives + falseNegatives) > 0 
-            ? truePositives / (truePositives + falseNegatives) 
+        const recall = (truePositives + falseNegatives) > 0
+            ? truePositives / (truePositives + falseNegatives)
             : 0;
-        const f1Score = (precision + recall) > 0 
-            ? 2 * (precision * recall) / (precision + recall) 
+        const f1Score = (precision + recall) > 0
+            ? 2 * (precision * recall) / (precision + recall)
             : 0;
-        const falsePositiveRate = (falsePositives + trueNegatives) > 0 
-            ? falsePositives / (falsePositives + trueNegatives) 
+        const falsePositiveRate = (falsePositives + trueNegatives) > 0
+            ? falsePositives / (falsePositives + trueNegatives)
             : 0;
-        const falseNegativeRate = (falseNegatives + truePositives) > 0 
-            ? falseNegatives / (falseNegatives + truePositives) 
+        const falseNegativeRate = (falseNegatives + truePositives) > 0
+            ? falseNegatives / (falseNegatives + truePositives)
             : 0;
 
         // Risk level distribution
@@ -1248,5 +1248,222 @@ function generatePerformanceRecommendations(metrics) {
 
     return recommendations;
 }
+
+// ═══════════════════ PUBLIC ML ENDPOINTS (no auth) ═══════════════════
+
+// POST /ai-spoilage/predict-live - Run ML prediction using live Firebase sensor data
+router.post('/predict-live', async (req, res) => {
+    try {
+        const {
+            device_id = '004B12387760',
+            grain_type = 'Rice',
+            storage_days = 30,
+            grain_moisture,
+            // Optional overrides for any sensor value
+            temperature: tempOverride,
+            humidity: humOverride,
+        } = req.body;
+
+        // 1. Read live telemetry from Firebase
+        let liveData = {};
+        try {
+            const firebaseService = require('../services/firebaseRealtimeService');
+            const fbData = await firebaseService.readTelemetry(device_id);
+            if (fbData) liveData = fbData;
+        } catch (e) {
+            console.log('Firebase read failed, using request body values:', e.message);
+        }
+
+        // Derive values from live telemetry or request body
+        const temp = tempOverride ?? liveData.temperature ?? liveData.temp ?? 25;
+        const hum = humOverride ?? liveData.humidity ?? 60;
+        const dewPt = liveData.dew_point ?? liveData.dewPoint ?? (temp - ((100 - hum) / 5));
+        const pressure = liveData.pressure ?? 1013;
+        const light = liveData.light ?? liveData.ambient_light ?? 100;
+        const tvoc = liveData.tvoc ?? 0;
+
+        // Build ML input matching smartbin_predict.py feature order
+        const mlInput = {
+            temperature: temp,
+            humidity: hum,
+            storage_days: storage_days,
+            airflow: liveData.airflow ?? 1.0,
+            dew_point: dewPt,
+            ambient_light: light,
+            pest_presence: liveData.pest_presence ?? 0,
+            grain_moisture: grain_moisture ?? (hum > 70 ? 16 : 14),
+            rainfall: liveData.rainfall ?? 0,
+        };
+
+        // 2. Call ML model
+        const mlResult = await callSmartBinModel(mlInput);
+
+        // 3. Generate recommendations based on prediction
+        const recommendations = [];
+        if (temp > 30) recommendations.push('Activate ventilation fans to reduce temperature');
+        if (temp > 25) recommendations.push('Monitor temperature closely — approaching risk zone');
+        if (hum > 80) recommendations.push('URGENT: Humidity critical — activate dehumidification immediately');
+        if (hum > 70) recommendations.push('Increase airflow to reduce humidity levels');
+        if ((grain_moisture ?? 14) > 18) recommendations.push('Grain moisture too high — initiate drying cycle');
+        if (tvoc > 500) recommendations.push('Elevated VOC levels detected — inspect for mold/decay');
+        if (mlResult.risk_score >= 80) recommendations.push('CRITICAL: Immediate intervention required');
+        if (mlResult.risk_score >= 60) recommendations.push('Schedule grain quality inspection within 24 hours');
+        if (recommendations.length === 0) recommendations.push('All parameters within safe range — continue routine monitoring');
+
+        // 4. Build response
+        const response = {
+            prediction_id: `LIVE-${Date.now()}`,
+            device_id,
+            timestamp: new Date().toISOString(),
+            // ML results
+            classification: mlResult.prediction,       // 'Safe' | 'Risky' | 'Spoiled'
+            risk_score: mlResult.risk_score,
+            confidence: mlResult.confidence,
+            risk_level: mlResult.risk_score > 80 ? 'critical' :
+                mlResult.risk_score > 60 ? 'high' :
+                    mlResult.risk_score > 40 ? 'medium' : 'low',
+            time_to_spoilage_hours: mlResult.time_to_spoilage_hours,
+            days_until_spoilage: Math.round(mlResult.time_to_spoilage_hours / 24),
+            key_risk_factors: mlResult.key_risk_factors,
+            model_used: mlResult.model_used,
+            // Input features used
+            input_features: mlInput,
+            // Live sensor readings used
+            live_sensor_data: {
+                temperature: temp,
+                humidity: hum,
+                dew_point: dewPt,
+                tvoc,
+                pressure,
+                light,
+            },
+            // Actionable output
+            recommendations,
+            grain_type,
+            storage_days,
+        };
+
+        console.log(`🧠 Live ML prediction: ${mlResult.prediction} (risk=${mlResult.risk_score}%, conf=${(mlResult.confidence * 100).toFixed(1)}%) for device ${device_id}`);
+        res.json(response);
+
+    } catch (error) {
+        console.error('Live ML prediction error:', error);
+        res.status(500).json({ error: 'Live prediction failed', details: error.message });
+    }
+});
+
+// GET /ai-spoilage/predictions-public - Get predictions (no auth) + optional live prediction
+router.get('/predictions-public', async (req, res) => {
+    try {
+        const { device_id = '004B12387760', include_live = 'true' } = req.query;
+
+        // 1. Return stored predictions
+        let predictions = [];
+        try {
+            predictions = riceDataService.getPredictions();
+        } catch { /* ignore */ }
+
+        // 2. Optionally include a fresh live prediction
+        let livePrediction = null;
+        if (include_live === 'true') {
+            try {
+                // Read live telemetry from Firebase
+                let liveData = {};
+                try {
+                    const firebaseService = require('../services/firebaseRealtimeService');
+                    const fbData = await firebaseService.readTelemetry(device_id);
+                    if (fbData) liveData = fbData;
+                } catch { /* fallback below */ }
+
+                const temp = liveData.temperature ?? liveData.temp ?? 25;
+                const hum = liveData.humidity ?? 60;
+                const dewPt = liveData.dew_point ?? liveData.dewPoint ?? (temp - ((100 - hum) / 5));
+
+                const mlInput = {
+                    temperature: temp,
+                    humidity: hum,
+                    storage_days: 30,
+                    airflow: liveData.airflow ?? 1.0,
+                    dew_point: dewPt,
+                    ambient_light: liveData.light ?? 100,
+                    pest_presence: 0,
+                    grain_moisture: hum > 70 ? 16 : 14,
+                    rainfall: liveData.rainfall ?? 0,
+                };
+
+                const mlResult = await callSmartBinModel(mlInput);
+
+                livePrediction = {
+                    prediction_id: `LIVE-${Date.now()}`,
+                    device_id,
+                    classification: mlResult.prediction,
+                    risk_score: mlResult.risk_score,
+                    confidence: mlResult.confidence,
+                    risk_level: mlResult.risk_score > 80 ? 'critical' :
+                        mlResult.risk_score > 60 ? 'high' :
+                            mlResult.risk_score > 40 ? 'medium' : 'low',
+                    time_to_spoilage_hours: mlResult.time_to_spoilage_hours,
+                    days_until_spoilage: Math.round(mlResult.time_to_spoilage_hours / 24),
+                    key_risk_factors: mlResult.key_risk_factors,
+                    model_used: mlResult.model_used,
+                    input_features: mlInput,
+                    live_sensor_data: { temperature: temp, humidity: hum, dew_point: dewPt },
+                    grain_type: 'Rice',
+                    timestamp: new Date().toISOString(),
+                    is_live: true,
+                };
+            } catch (e) {
+                console.error('Live prediction generation failed:', e.message);
+            }
+        }
+
+        // 3. Get statistics
+        let statistics = {};
+        try { statistics = riceDataService.getStatistics(); } catch { /* ignore */ }
+
+        res.json({
+            predictions,
+            live_prediction: livePrediction,
+            statistics,
+            total: predictions.length,
+            timestamp: new Date().toISOString(),
+        });
+
+    } catch (error) {
+        console.error('Public predictions error:', error);
+        res.status(500).json({ error: 'Failed to get predictions', details: error.message });
+    }
+});
+
+// POST /ai-spoilage/retrain-public - Retrain model (no auth for testing)
+router.post('/retrain-public', async (req, res) => {
+    try {
+        console.log('🚀 Starting public model retraining...');
+        const pythonScript = path.join(__dirname, '../ml/enhanced_train.py');
+        const python = spawn('python', [pythonScript], { stdio: ['pipe', 'pipe', 'pipe'] });
+        let output = '';
+        let error = '';
+        python.stdout.on('data', (d) => { output += d.toString(); });
+        python.stderr.on('data', (d) => { error += d.toString(); });
+        python.on('close', (code) => {
+            if (code === 0) {
+                const metrics = parseTrainingOutput(output);
+                console.log('✅ Public model retrain completed');
+                res.json({
+                    message: 'Model retrained successfully',
+                    status: 'completed',
+                    performance_metrics: metrics,
+                    completion_time: new Date().toISOString(),
+                });
+            } else {
+                res.status(500).json({ error: 'Retrain failed', details: error || output });
+            }
+        });
+        setTimeout(() => { python.kill(); }, 300000);
+    } catch (error) {
+        console.error('Public retrain error:', error);
+        res.status(500).json({ error: 'Retrain failed', details: error.message });
+    }
+});
 
 module.exports = router;
