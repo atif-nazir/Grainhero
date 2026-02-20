@@ -1,0 +1,55 @@
+=== GrainHero Backend Startup Test ===
+
+1. Testing MongoDB connection...
+   Connection string: mongodb+srv://atifnazir005_db_user:***@cluster0.ycda7xy.mongodb.net/grainhero?retryWrites=true&w=majority
+   ✅ MongoDB connected successfully!
+
+2. Testing route imports...
+   ✅ auth
+   ✅ maintenance
+   ✅ incidents
+   ✅ products
+   ✅ orders
+   ✅ alerts
+   ✅ dashboard
+   ✅ quotes
+   ✅ webhooks
+   ✅ contact
+   ✅ payment-verification
+   ✅ grainBatches
+   ✅ sensors
+   ✅ ai
+   ✅ aiSpoilage
+   ✅ actuators
+   ✅ dualProbeMonitoring
+   ✅ deviceHealth
+📡 Connecting to MQTT broker at: mqtt://10.192.66.55:1883
+   ✅ iot
+   ✅ dataVisualization
+   ✅ silos
+   ✅ insurance
+   ✅ buyers
+   ✅ environmental
+   ✅ tenantManagement
+   ✅ planManagement
+   ✅ userManagement
+   ✅ warehouses
+   ✅ subscriptionAnalytics
+   ✅ create-checkout-session
+
+   Routes: 30/30 loaded successfully
+
+3. Testing service imports...
+   ✅ environmentalDataService
+   ✅ firebaseRealtimeService
+   ✅ limitWarningService
+
+   Services: 3/3 loaded successfully
+
+4. Testing swagger-jsdoc...
+   ✅ swagger-jsdoc loaded and spec generated
+
+=== Test Complete ===
+✅ Loaded 319 rice storage records
+✅ Loaded 319 rice storage records
+✅ Rice data service initialized successfully
