@@ -1,118 +1,255 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  BarChart3, 
-  Download, 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  BarChart3,
+  Download,
   Filter,
   Thermometer,
   Droplets,
   Wind,
   Gauge,
+  Activity,
+  Cpu,
+  RefreshCw,
+  Zap,
+  AlertTriangle,
+  CheckCircle2,
+  TrendingUp,
+  CloudRain,
+  Fan,
+  Eye,
+  Bug,
+  Sun,
+  Brain,
 } from 'lucide-react';
-import { 
+import {
   LineChart,
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   BarChart as RechartsBarChart,
   Bar,
+  Legend,
+  AreaChart,
+  Area,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
 } from 'recharts';
-import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData';
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
+/* ────────── Types ────────── */
+interface LiveTelemetry {
+  temperature: number;
+  humidity: number;
+  tvoc: number;
+  fanState: string;
+  lidState: string;
+  alarmState: string;
+  mlDecision: string;
+  humanOverride: boolean;
+  guardrails: string[];
+  pressure: number | null;
+  light: number | null;
+  dewPoint: number | null;
+  soilMoisture: number | null;
+  pestRiskScore: number | null;
+  riskIndex: number;
+  pwm_speed: number;
+  led2State: boolean;
+  led3State: boolean;
+  led4State: boolean;
+  timestamp: number;
+}
+
+interface HistoryPoint {
+  time: string;
+  fullTime: string;
+  temperature: number;
+  humidity: number;
+  tvoc: number;
+  riskIndex: number;
+  dewPoint: number | null;
+  fanOn: number;
+  pwm: number;
+}
+
+interface MlMetrics {
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1_score: number;
+}
+
+/* ────────── Helper: status badge ────────── */
+function StatusBadge({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      <span className="text-gray-500">{label}:</span>
+      <span
+        className={`px-2 py-0.5 rounded-full font-semibold ${color}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ────────── Main Page ────────── */
 export default function DataVisualizationPage() {
-  const [selectedRange, setSelectedRange] = useState<'24h' | '7d' | '30d'>('24h');
-  const points = selectedRange === '24h' ? 288 : selectedRange === '7d' ? 288 * 7 : 288 * 30;
-  const { data: envHistory } = useEnvironmentalHistory({ limit: points });
-  const [mlMetrics, setMlMetrics] = useState<null | {
-    accuracy: number
-    precision: number
-    recall: number
-    f1_score: number
-  }>(null);
+  const deviceId =
+    process.env.NEXT_PUBLIC_DEVICE_ID || '004B12387760';
+  const [selectedRange, setSelectedRange] = useState<
+    '5m' | '15m' | '1h' | '6h'
+  >('15m');
+  const [liveTelemetry, setLiveTelemetry] =
+    useState<LiveTelemetry | null>(null);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [mlMetrics, setMlMetrics] = useState<MlMetrics | null>(null);
   const [mlLoading, setMlLoading] = useState(false);
+  const [retrainStatus, setRetrainStatus] = useState<
+    'idle' | 'running' | 'done' | 'error'
+  >('idle');
+  const [retrainMsg, setRetrainMsg] = useState('');
+  const [errors, setErrors] = useState<string[]>([]);
+  const historyRef = useRef<HistoryPoint[]>([]);
 
-  const chartData = useMemo(() => {
-    return envHistory.map((record) => ({
-      timestamp: new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      temperature:
-        record.temperature?.value ??
-        record.environmental_context?.weather?.temperature ??
-        0,
-      humidity:
-        record.humidity?.value ??
-        record.environmental_context?.weather?.humidity ??
-        0,
-      airflow: record.derived_metrics?.airflow ?? 0,
-      rainfall: record.environmental_context?.weather?.precipitation ?? 0,
-      vocRelative: record.derived_metrics?.voc_relative ?? 0,
-    }));
-  }, [envHistory]);
+  /* Max points per range */
+  const maxPoints = useMemo(() => {
+    switch (selectedRange) {
+      case '5m':
+        return 100;
+      case '15m':
+        return 300;
+      case '1h':
+        return 1200;
+      case '6h':
+        return 7200;
+      default:
+        return 300;
+    }
+  }, [selectedRange]);
 
-  const siloAgg = useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; count: number; avgTemp: number; avgHumidity: number }
-    >();
-    envHistory.forEach((record) => {
-      const key = record.silo_id || 'Unknown';
-      const entry = map.get(key) || {
-        name: key,
-        count: 0,
-        avgTemp: 0,
-        avgHumidity: 0,
+  /* ── Poll live telemetry ── */
+  const pollTelemetry = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `${backendUrl}/api/iot/silos/${deviceId}/telemetry-public`
+      );
+      if (!res.ok) throw new Error(`Telemetry ${res.status}`);
+      const data: LiveTelemetry = await res.json();
+      setLiveTelemetry(data);
+
+      // Append to history
+      const point: HistoryPoint = {
+        time: new Date(data.timestamp).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        fullTime: new Date(data.timestamp).toLocaleString(),
+        temperature: data.temperature,
+        humidity: data.humidity,
+        tvoc: data.tvoc,
+        riskIndex: data.riskIndex,
+        dewPoint: data.dewPoint,
+        fanOn: data.fanState === 'on' ? 1 : 0,
+        pwm: data.pwm_speed,
       };
-      entry.count += 1;
-      entry.avgTemp +=
-        record.temperature?.value ??
-        record.environmental_context?.weather?.temperature ??
-        0;
-      entry.avgHumidity +=
-        record.humidity?.value ??
-        record.environmental_context?.weather?.humidity ??
-        0;
-      map.set(key, entry);
-    });
-    return Array.from(map.values()).map((entry) => ({
-      ...entry,
-      avgTemp: entry.count ? entry.avgTemp / entry.count : 0,
-      avgHumidity: entry.count ? entry.avgHumidity / entry.count : 0,
-    }));
-  }, [envHistory]);
-  
+
+      historyRef.current = [
+        ...historyRef.current.slice(-(maxPoints - 1)),
+        point,
+      ];
+      setHistory([...historyRef.current]);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Telemetry error';
+      setErrors((prev) => [...prev.slice(-4), msg]);
+    }
+  }, [deviceId, maxPoints]);
+
   useEffect(() => {
-    let isMounted = true;
+    pollTelemetry();
+    const i = setInterval(pollTelemetry, 3000);
+    return () => clearInterval(i);
+  }, [pollTelemetry]);
+
+  /* ── Fetch ML metrics ── */
+  useEffect(() => {
+    let mounted = true;
     const fetchMetrics = async () => {
       try {
         setMlLoading(true);
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-        const res = await fetch(`${backendUrl}/ai-spoilage/model-performance`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
-        if (!res.ok) {
-          setMlLoading(false);
-          return;
+        // Try public first, then authenticated
+        let res = await fetch(
+          `${backendUrl}/api/ai-spoilage/predictions-public?include_live=false`
+        );
+        if (res.ok) {
+          const json = await res.json();
+          if (json.model_performance && mounted) {
+            setMlMetrics({
+              accuracy: Number(json.model_performance.accuracy ?? 0),
+              precision: Number(
+                json.model_performance.precision ?? 0
+              ),
+              recall: Number(json.model_performance.recall ?? 0),
+              f1_score: Number(json.model_performance.f1_score ?? 0),
+            });
+            return;
+          }
         }
+        // Fallback: try model-performance endpoint
+        const token =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('token')
+            : null;
+        res = await fetch(
+          `${backendUrl}/api/ai-spoilage/model-performance`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token
+                ? { Authorization: `Bearer ${token}` }
+                : {}),
+            },
+          }
+        );
+        if (!res.ok) return;
         const json = await res.json();
         const latest = json?.performance_summary?.latest_metrics;
-        if (isMounted && latest && typeof latest === 'object') {
+        if (mounted && latest && typeof latest === 'object') {
           setMlMetrics({
             accuracy: Number(latest.accuracy ?? 0),
             precision: Number(latest.precision ?? 0),
@@ -121,285 +258,818 @@ export default function DataVisualizationPage() {
           });
         }
       } catch {
+        /* ignore */
       } finally {
-        if (isMounted) setMlLoading(false);
+        if (mounted) setMlLoading(false);
       }
     };
     fetchMetrics();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
   }, []);
 
+  /* ── Retrain model ── */
+  const handleRetrain = async () => {
+    try {
+      setRetrainStatus('running');
+      setRetrainMsg('Training in progress... This may take 1-3 minutes.');
+      const res = await fetch(
+        `${backendUrl}/api/ai-spoilage/retrain-public`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+      );
+      const json = await res.json();
+      if (res.ok) {
+        setRetrainStatus('done');
+        setRetrainMsg(
+          `✅ ${json.message || 'Model retrained successfully'}` +
+          (json.performance_metrics?.accuracy
+            ? ` — Accuracy: ${(json.performance_metrics.accuracy * 100).toFixed(1)}%`
+            : '')
+        );
+        if (json.performance_metrics) {
+          setMlMetrics({
+            accuracy: Number(json.performance_metrics.accuracy ?? 0),
+            precision: Number(json.performance_metrics.precision ?? 0),
+            recall: Number(json.performance_metrics.recall ?? 0),
+            f1_score: Number(json.performance_metrics.f1_score ?? 0),
+          });
+        }
+      } else {
+        setRetrainStatus('error');
+        setRetrainMsg(`❌ ${json.error || 'Retrain failed'}: ${json.details || ''}`);
+      }
+    } catch (e: unknown) {
+      setRetrainStatus('error');
+      setRetrainMsg(
+        `❌ Network error: ${e instanceof Error ? e.message : 'Unknown'}`
+      );
+    }
+  };
+
+  /* ── Derived stats ── */
+  const stats = useMemo(() => {
+    if (history.length === 0) return null;
+    const avg = (arr: number[]) =>
+      arr.reduce((s, v) => s + v, 0) / arr.length;
+    const temps = history.map((h) => h.temperature);
+    const hums = history.map((h) => h.humidity);
+    const tvocs = history.map((h) => h.tvoc);
+    const risks = history.map((h) => h.riskIndex);
+    return {
+      avgTemp: avg(temps),
+      avgHum: avg(hums),
+      avgTvoc: avg(tvocs),
+      avgRisk: avg(risks),
+      minTemp: Math.min(...temps),
+      maxTemp: Math.max(...temps),
+      minHum: Math.min(...hums),
+      maxHum: Math.max(...hums),
+      fanOnPct:
+        history.filter((h) => h.fanOn).length / history.length * 100,
+      count: history.length,
+    };
+  }, [history]);
+
+  /* ── Radar chart data ── */
+  const radarData = useMemo(() => {
+    if (!liveTelemetry) return [];
+    return [
+      {
+        metric: 'Temperature',
+        value: Math.min(100, (liveTelemetry.temperature / 50) * 100),
+        safe: 60,
+      },
+      {
+        metric: 'Humidity',
+        value: liveTelemetry.humidity,
+        safe: 65,
+      },
+      {
+        metric: 'VOC',
+        value: Math.min(100, (liveTelemetry.tvoc / 1000) * 100),
+        safe: 30,
+      },
+      {
+        metric: 'Risk',
+        value: liveTelemetry.riskIndex,
+        safe: 40,
+      },
+      {
+        metric: 'Dew Gap',
+        value: liveTelemetry.dewPoint
+          ? Math.min(
+            100,
+            Math.max(
+              0,
+              ((liveTelemetry.temperature - liveTelemetry.dewPoint) /
+                20) *
+              100
+            )
+          )
+          : 50,
+        safe: 60,
+      },
+    ];
+  }, [liveTelemetry]);
+
+  /* ── Risk colour helper ── */
+  const riskColor = (r: number) =>
+    r > 70
+      ? 'text-red-600'
+      : r > 40
+        ? 'text-amber-500'
+        : 'text-emerald-600';
+  const riskBg = (r: number) =>
+    r > 70
+      ? 'bg-red-50 border-red-200'
+      : r > 40
+        ? 'bg-amber-50 border-amber-200'
+        : 'bg-emerald-50 border-emerald-200';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
+      {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-gray-700" />
+            <BarChart3 className="h-7 w-7 text-indigo-600" />
             IoT Data Visualization
           </h1>
-          <p className="text-sm text-gray-600">
-            Real-time plots driven directly from 5-minute aggregated SensorReading records.
+          <p className="text-sm text-gray-500 mt-1">
+            Real-time plots from live Firebase sensor feed — Device{' '}
+            <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">
+              {deviceId}
+            </code>
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-gray-500" />
-          <Select value={selectedRange} onValueChange={(value: '24h' | '7d' | '30d') => setSelectedRange(value)}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Time range" />
+          <Filter className="h-4 w-4 text-gray-400" />
+          <Select
+            value={selectedRange}
+            onValueChange={(v: '5m' | '15m' | '1h' | '6h') =>
+              setSelectedRange(v)
+            }
+          >
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Time window" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="24h">Last 24h</SelectItem>
-              <SelectItem value="7d">Last 7d</SelectItem>
-              <SelectItem value="30d">Last 30d</SelectItem>
+              <SelectItem value="5m">Last 5 min</SelectItem>
+              <SelectItem value="15m">Last 15 min</SelectItem>
+              <SelectItem value="1h">Last 1 hour</SelectItem>
+              <SelectItem value="6h">Last 6 hours</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={pollTelemetry}
+            className="gap-1"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
         </div>
       </div>
 
+      {/* ── Live Telemetry Bar ── */}
+      {liveTelemetry && (
+        <Card
+          className={`border-l-4 ${liveTelemetry.riskIndex > 70
+              ? 'border-l-red-500 bg-red-50/30'
+              : liveTelemetry.riskIndex > 40
+                ? 'border-l-amber-500 bg-amber-50/30'
+                : 'border-l-green-500 bg-green-50/30'
+            }`}
+        >
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-green-700">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                Live Firebase Feed
+              </div>
+              <div className="flex items-center gap-5 text-sm flex-wrap">
+                <span className="flex items-center gap-1">
+                  <Thermometer className="h-3.5 w-3.5 text-red-500" />
+                  <strong>{liveTelemetry.temperature.toFixed(1)}°C</strong>
+                </span>
+                <span className="flex items-center gap-1">
+                  <Droplets className="h-3.5 w-3.5 text-blue-500" />
+                  <strong>{liveTelemetry.humidity.toFixed(1)}%</strong>
+                </span>
+                <span className="flex items-center gap-1">
+                  <Wind className="h-3.5 w-3.5 text-purple-500" />
+                  <strong>{liveTelemetry.tvoc} ppb</strong>
+                </span>
+                {liveTelemetry.dewPoint !== null && (
+                  <span className="flex items-center gap-1">
+                    <CloudRain className="h-3.5 w-3.5 text-cyan-500" />
+                    Dew: <strong>{liveTelemetry.dewPoint.toFixed(1)}°C</strong>
+                  </span>
+                )}
+                <StatusBadge
+                  label="Fan"
+                  value={liveTelemetry.fanState.toUpperCase()}
+                  color={
+                    liveTelemetry.fanState === 'on'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }
+                />
+                <StatusBadge
+                  label="Lid"
+                  value={liveTelemetry.lidState.toUpperCase()}
+                  color={
+                    liveTelemetry.lidState === 'open'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }
+                />
+                <StatusBadge
+                  label="ML"
+                  value={liveTelemetry.mlDecision}
+                  color="bg-indigo-100 text-indigo-700"
+                />
+                <span
+                  className={`font-bold ${riskColor(
+                    liveTelemetry.riskIndex
+                  )}`}
+                >
+                  Risk: {liveTelemetry.riskIndex}/100
+                </span>
+                {liveTelemetry.humanOverride && (
+                  <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                    HUMAN OVERRIDE
+                  </span>
+                )}
+                <span className="text-xs text-gray-400">
+                  {new Date(liveTelemetry.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!liveTelemetry && (
+        <Card className="border-l-4 border-l-gray-300 bg-gray-50/50">
+          <CardContent className="py-6 flex items-center justify-center gap-3">
+            <RefreshCw className="h-5 w-5 text-gray-400 animate-spin" />
+            <span className="text-gray-500">
+              Connecting to Firebase — waiting for sensor data...
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Summary Cards ── */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader>
+        <Card className={stats ? riskBg(stats.avgTemp > 35 ? 60 : 20) : ''}>
+          <CardHeader className="pb-2">
             <CardTitle className="text-xs uppercase text-gray-500 flex items-center gap-2">
-              <Thermometer className="h-4 w-4 text-gray-600" />
+              <Thermometer className="h-4 w-4 text-red-500" />
               Avg Temperature
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {chartData.length
-              ? `${(
-                  chartData.reduce((sum, item) => sum + item.temperature, 0) /
-                  chartData.length
-                ).toFixed(1)}°C`
-              : '--'}
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats ? `${stats.avgTemp.toFixed(1)}°C` : '—'}
+            </div>
+            {stats && (
+              <p className="text-xs text-gray-400 mt-1">
+                Range: {stats.minTemp.toFixed(1)}° – {stats.maxTemp.toFixed(1)}°
+              </p>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
+
+        <Card className={stats ? riskBg(stats.avgHum > 75 ? 60 : 20) : ''}>
+          <CardHeader className="pb-2">
             <CardTitle className="text-xs uppercase text-gray-500 flex items-center gap-2">
-              <Droplets className="h-4 w-4 text-cyan-600" />
+              <Droplets className="h-4 w-4 text-blue-500" />
               Avg Humidity
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {chartData.length
-              ? `${(
-                  chartData.reduce((sum, item) => sum + item.humidity, 0) /
-                  chartData.length
-                ).toFixed(1)}%`
-              : '--'}
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats ? `${stats.avgHum.toFixed(1)}%` : '—'}
+            </div>
+            {stats && (
+              <p className="text-xs text-gray-400 mt-1">
+                Range: {stats.minHum.toFixed(1)}% – {stats.maxHum.toFixed(1)}%
+              </p>
+            )}
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle className="text-xs uppercase text-gray-500 flex items-center gap-2">
-              <Wind className="h-4 w-4 text-blue-600" />
-              Avg Airflow
+              <Gauge className="h-4 w-4 text-purple-500" />
+              Avg VOC (TVOC)
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {chartData.length
-              ? `${(
-                  chartData.reduce((sum, item) => sum + item.airflow, 0) /
-                  chartData.length
-                ).toFixed(2)} m³/s`
-              : '--'}
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats ? `${stats.avgTvoc.toFixed(0)} ppb` : '—'}
+            </div>
+            {stats && (
+              <p className="text-xs text-gray-400 mt-1">
+                {stats.count} readings sampled
+              </p>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
+
+        <Card
+          className={
+            stats ? riskBg(stats.avgRisk) : ''
+          }
+        >
+          <CardHeader className="pb-2">
             <CardTitle className="text-xs uppercase text-gray-500 flex items-center gap-2">
-              <Gauge className="h-4 w-4 text-orange-600" />
-              Avg VOC Relative
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Avg Risk Index
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {chartData.length
-              ? `${(
-                  chartData.reduce((sum, item) => sum + item.vocRelative, 0) /
-                  chartData.length
-                ).toFixed(1)}%`
-              : '--'}
+          <CardContent>
+            <div
+              className={`text-2xl font-bold ${stats ? riskColor(stats.avgRisk) : ''
+                }`}
+            >
+              {stats ? `${stats.avgRisk.toFixed(0)}/100` : '—'}
+            </div>
+            {stats && (
+              <p className="text-xs text-gray-400 mt-1">
+                Fan duty: {stats.fanOnPct.toFixed(0)}% of time
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
-      
+
+      {/* ── ML Evaluation Metrics ── */}
       <Card>
         <CardHeader>
-          <CardTitle>ML Evaluation Metrics</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-indigo-500" />
+            ML Model Evaluation
+          </CardTitle>
+          <CardDescription>
+            SmartBin-RiceSpoilage XGBoost classifier performance metrics
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="border rounded-lg p-4">
-              <div className="text-xs uppercase text-gray-500">Accuracy</div>
-              <div className="text-2xl font-semibold">
-                {mlMetrics ? `${(mlMetrics.accuracy * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
+          <div className="grid gap-4 md:grid-cols-4 mb-4">
+            {[
+              {
+                label: 'Accuracy',
+                value: mlMetrics?.accuracy,
+                icon: <CheckCircle2 className="h-4 w-4 text-green-500" />,
+              },
+              {
+                label: 'Precision',
+                value: mlMetrics?.precision,
+                icon: <TrendingUp className="h-4 w-4 text-blue-500" />,
+              },
+              {
+                label: 'Recall',
+                value: mlMetrics?.recall,
+                icon: <Eye className="h-4 w-4 text-amber-500" />,
+              },
+              {
+                label: 'F1 Score',
+                value: mlMetrics?.f1_score,
+                icon: <Activity className="h-4 w-4 text-purple-500" />,
+              },
+            ].map(({ label, value, icon }) => (
+              <div
+                key={label}
+                className="border rounded-lg p-4 flex items-center gap-3"
+              >
+                {icon}
+                <div>
+                  <div className="text-xs uppercase text-gray-500">
+                    {label}
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {value !== undefined && value !== null
+                      ? `${(value * 100).toFixed(1)}%`
+                      : mlLoading
+                        ? '...'
+                        : '—'}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="border rounded-lg p-4">
-              <div className="text-xs uppercase text-gray-500">Precision</div>
-              <div className="text-2xl font-semibold">
-                {mlMetrics ? `${(mlMetrics.precision * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
-              </div>
-            </div>
-            <div className="border rounded-lg p-4">
-              <div className="text-xs uppercase text-gray-500">Recall</div>
-              <div className="text-2xl font-semibold">
-                {mlMetrics ? `${(mlMetrics.recall * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
-              </div>
-            </div>
-            <div className="border rounded-lg p-4">
-              <div className="text-xs uppercase text-gray-500">F1 Score</div>
-              <div className="text-2xl font-semibold">
-                {mlMetrics ? `${(mlMetrics.f1_score * 100).toFixed(1)}%` : mlLoading ? 'Loading...' : '--'}
-              </div>
-            </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              onClick={handleRetrain}
+              disabled={retrainStatus === 'running'}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
+            >
+              {retrainStatus === 'running' ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Cpu className="h-4 w-4" />
+              )}
+              {retrainStatus === 'running'
+                ? 'Retraining...'
+                : 'Retrain Model'}
+            </Button>
+            {retrainMsg && (
+              <span
+                className={`text-sm ${retrainStatus === 'error'
+                    ? 'text-red-600'
+                    : retrainStatus === 'done'
+                      ? 'text-green-600'
+                      : 'text-gray-500'
+                  }`}
+              >
+                {retrainMsg}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
 
+      {/* ── Main Charts ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Temperature & Humidity Trend</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Thermometer className="h-5 w-5 text-red-500" />
+            Temperature & Humidity Trend
+          </CardTitle>
+          <CardDescription>
+            {history.length} data points collected ({selectedRange} window)
+          </CardDescription>
         </CardHeader>
-        <CardContent className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="timestamp" minTickGap={32} />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="temperature"
-                stroke="#ef4444"
-                name="Temperature (°C)"
-                dot={false}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="humidity"
-                stroke="#0ea5e9"
-                name="Humidity (%)"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <CardContent className="h-80">
+          {history.length > 1 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={history}>
+                <defs>
+                  <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="humGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="time" minTickGap={40} fontSize={11} />
+                <YAxis yAxisId="left" fontSize={11} label={{ value: '°C', position: 'insideTopLeft', offset: -5 }} />
+                <YAxis yAxisId="right" orientation="right" fontSize={11} label={{ value: '%', position: 'insideTopRight', offset: -5 }} />
+                <Tooltip />
+                <Legend />
+                <Area
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="temperature"
+                  stroke="#ef4444"
+                  fill="url(#tempGrad)"
+                  name="Temperature (°C)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Area
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="humidity"
+                  stroke="#3b82f6"
+                  fill="url(#humGrad)"
+                  name="Humidity (%)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                {history.some((h) => h.dewPoint !== null) && (
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="dewPoint"
+                    stroke="#06b6d4"
+                    strokeDasharray="5 5"
+                    name="Dew Point (°C)"
+                    dot={false}
+                    strokeWidth={1.5}
+                  />
+                )}
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400">
+              <Activity className="h-6 w-6 mr-2 animate-pulse" />
+              Accumulating sensor readings... ({history.length} so far)
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
+        {/* ── VOC & Risk Chart ── */}
         <Card>
           <CardHeader>
-            <CardTitle>Rainfall vs Fan Strategy</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Gauge className="h-4 w-4 text-purple-500" />
+              VOC & Risk Index
+            </CardTitle>
           </CardHeader>
           <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <RechartsBarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="timestamp" minTickGap={24} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="rainfall" fill="#3b82f6" name="Rainfall (mm)" />
-                <Bar dataKey="airflow" fill="#a855f7" name="Airflow (m³/s)" />
-              </RechartsBarChart>
-            </ResponsiveContainer>
+            {history.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="time" minTickGap={32} fontSize={10} />
+                  <YAxis yAxisId="voc" fontSize={10} />
+                  <YAxis yAxisId="risk" orientation="right" domain={[0, 100]} fontSize={10} />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    yAxisId="voc"
+                    type="monotone"
+                    dataKey="tvoc"
+                    stroke="#a855f7"
+                    name="TVOC (ppb)"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                  <Line
+                    yAxisId="risk"
+                    type="monotone"
+                    dataKey="riskIndex"
+                    stroke="#f59e0b"
+                    name="Risk Index"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Waiting for data...
+              </div>
+            )}
           </CardContent>
         </Card>
 
+        {/* ── Fan & PWM Activity ── */}
         <Card>
           <CardHeader>
-            <CardTitle>Silo Conditions</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Fan className="h-4 w-4 text-blue-500" />
+              Fan Activity & PWM Speed
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {siloAgg.length === 0 && (
-              <p className="text-sm text-gray-500">No silo readings yet.</p>
-            )}
-            {siloAgg.map((silo) => (
-              <div
-                key={silo.name}
-                className="border rounded-lg p-4 flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-medium">{silo.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {silo.count} readings
-                  </div>
-                </div>
-                <div className="text-sm text-right">
-                  <div>{silo.avgTemp.toFixed(1)}°C</div>
-                  <div>{silo.avgHumidity.toFixed(1)}%</div>
-                </div>
+          <CardContent className="h-64">
+            {history.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart data={history}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="time" minTickGap={32} fontSize={10} />
+                  <YAxis fontSize={10} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar
+                    dataKey="pwm"
+                    fill="#6366f1"
+                    name="PWM Speed"
+                    opacity={0.7}
+                  />
+                  <Bar
+                    dataKey="fanOn"
+                    fill="#22c55e"
+                    name="Fan ON (1/0)"
+                    opacity={0.5}
+                  />
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Waiting for data...
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* ── Radar: Sensor Health ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Zap className="h-4 w-4 text-amber-500" />
+              Sensor Health Radar
+            </CardTitle>
+            <CardDescription>
+              Current values vs safe thresholds (normalized 0-100)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-72">
+            {radarData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="#e5e7eb" />
+                  <PolarAngleAxis dataKey="metric" fontSize={11} />
+                  <PolarRadiusAxis
+                    angle={30}
+                    domain={[0, 100]}
+                    fontSize={9}
+                  />
+                  <Radar
+                    name="Current"
+                    dataKey="value"
+                    stroke="#6366f1"
+                    fill="#6366f1"
+                    fillOpacity={0.3}
+                    strokeWidth={2}
+                  />
+                  <Radar
+                    name="Safe Threshold"
+                    dataKey="safe"
+                    stroke="#22c55e"
+                    fill="#22c55e"
+                    fillOpacity={0.1}
+                    strokeDasharray="5 5"
+                    strokeWidth={1.5}
+                  />
+                  <Legend />
+                  <Tooltip />
+                </RadarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Waiting for sensor data...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Live Silo Conditions ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Activity className="h-4 w-4 text-emerald-500" />
+              Live Silo Conditions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {liveTelemetry ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  {
+                    label: 'Temperature',
+                    val: `${liveTelemetry.temperature.toFixed(1)}°C`,
+                    icon: <Thermometer className="h-4 w-4 text-red-500" />,
+                    warn: liveTelemetry.temperature > 35,
+                  },
+                  {
+                    label: 'Humidity',
+                    val: `${liveTelemetry.humidity.toFixed(1)}%`,
+                    icon: <Droplets className="h-4 w-4 text-blue-500" />,
+                    warn: liveTelemetry.humidity > 75,
+                  },
+                  {
+                    label: 'TVOC',
+                    val: `${liveTelemetry.tvoc} ppb`,
+                    icon: <Wind className="h-4 w-4 text-purple-500" />,
+                    warn: liveTelemetry.tvoc > 500,
+                  },
+                  {
+                    label: 'Dew Point',
+                    val: liveTelemetry.dewPoint !== null ? `${liveTelemetry.dewPoint.toFixed(1)}°C` : 'N/A',
+                    icon: <CloudRain className="h-4 w-4 text-cyan-500" />,
+                    warn: false,
+                  },
+                  {
+                    label: 'PWM Speed',
+                    val: `${liveTelemetry.pwm_speed}`,
+                    icon: <Fan className="h-4 w-4 text-indigo-500" />,
+                    warn: false,
+                  },
+                  {
+                    label: 'Pressure',
+                    val: liveTelemetry.pressure !== null ? `${liveTelemetry.pressure} hPa` : 'N/A',
+                    icon: <Gauge className="h-4 w-4 text-gray-500" />,
+                    warn: false,
+                  },
+                  {
+                    label: 'Light',
+                    val: liveTelemetry.light !== null ? `${liveTelemetry.light} lux` : 'N/A',
+                    icon: <Sun className="h-4 w-4 text-amber-500" />,
+                    warn: false,
+                  },
+                  {
+                    label: 'Pest Score',
+                    val: liveTelemetry.pestRiskScore !== null ? `${liveTelemetry.pestRiskScore}` : 'N/A',
+                    icon: <Bug className="h-4 w-4 text-green-600" />,
+                    warn: (liveTelemetry.pestRiskScore ?? 0) > 5,
+                  },
+                ].map(({ label, val, icon, warn }) => (
+                  <div
+                    key={label}
+                    className={`border rounded-lg p-3 flex items-center gap-2 ${warn ? 'border-red-200 bg-red-50/40' : ''
+                      }`}
+                  >
+                    {icon}
+                    <div>
+                      <div className="text-xs text-gray-500">{label}</div>
+                      <div className={`font-semibold ${warn ? 'text-red-600' : ''}`}>
+                        {val}
+                      </div>
+                    </div>
+                    {warn && (
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-500 ml-auto" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 py-8 text-center">
+                Waiting for silo readings...
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Tabs: Dataset & Actions ── */}
       <Tabs defaultValue="dataset">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="dataset">Dataset Preview</TabsTrigger>
-          <TabsTrigger value="actions">Actions</TabsTrigger>
+          <TabsTrigger value="actions">Export & Actions</TabsTrigger>
+          <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
         </TabsList>
+
         <TabsContent value="dataset">
           <Card>
             <CardHeader>
-              <CardTitle>Latest Records</CardTitle>
+              <CardTitle>Latest Readings</CardTitle>
+              <CardDescription>
+                Most recent {Math.min(20, history.length)} telemetry snapshots
+              </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-xs uppercase text-gray-500 text-left">
+                  <tr className="text-xs uppercase text-gray-500 text-left border-b">
                     <th className="py-2 pr-4">Timestamp</th>
-                    <th className="py-2 pr-4">Temp</th>
-                    <th className="py-2 pr-4">Hum</th>
-                    <th className="py-2 pr-4">Moisture</th>
-                    <th className="py-2 pr-4">Airflow</th>
-                    <th className="py-2 pr-4">VOC_rel</th>
-                    <th className="py-2 pr-4">Rainfall</th>
+                    <th className="py-2 pr-4">Temp (°C)</th>
+                    <th className="py-2 pr-4">Hum (%)</th>
+                    <th className="py-2 pr-4">TVOC (ppb)</th>
+                    <th className="py-2 pr-4">Dew Pt</th>
+                    <th className="py-2 pr-4">Risk</th>
+                    <th className="py-2 pr-4">Fan</th>
+                    <th className="py-2 pr-4">PWM</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {envHistory.slice(-15).map((record) => (
-                    <tr key={record.timestamp} className="border-t">
-                      <td className="py-2 pr-4">
-                        {new Date(record.timestamp).toLocaleString()}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {record.temperature?.value ??
-                          record.environmental_context?.weather?.temperature ??
-                          '--'}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {record.humidity?.value ??
-                          record.environmental_context?.weather?.humidity ??
-                          '--'}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {record.moisture?.value ?? '--'}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {record.derived_metrics?.airflow?.toFixed(2) ?? '0'}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {record.derived_metrics?.voc_relative?.toFixed(1) ??
-                          '0'}
-                        %
-                      </td>
-                      <td className="py-2 pr-4">
-                        {record.environmental_context?.weather?.precipitation ??
-                          0}{' '}
-                        mm
-                      </td>
-                    </tr>
-                  ))}
-                  {envHistory.length === 0 && (
+                  {history
+                    .slice(-20)
+                    .reverse()
+                    .map((row, i) => (
+                      <tr key={i} className="border-t hover:bg-gray-50/50">
+                        <td className="py-2 pr-4 text-xs">{row.fullTime}</td>
+                        <td className="py-2 pr-4 font-medium">
+                          {row.temperature.toFixed(1)}
+                        </td>
+                        <td className="py-2 pr-4">{row.humidity.toFixed(1)}</td>
+                        <td className="py-2 pr-4">{row.tvoc}</td>
+                        <td className="py-2 pr-4">
+                          {row.dewPoint !== null
+                            ? row.dewPoint.toFixed(1)
+                            : '—'}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`font-semibold ${riskColor(
+                              row.riskIndex
+                            )}`}
+                          >
+                            {row.riskIndex}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4">
+                          {row.fanOn ? (
+                            <span className="text-green-600 font-medium">
+                              ON
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">OFF</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">{row.pwm}</td>
+                      </tr>
+                    ))}
+                  {history.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-6 text-center text-gray-500">
+                      <td
+                        colSpan={8}
+                        className="py-8 text-center text-gray-400"
+                      >
+                        <RefreshCw className="h-4 w-4 inline mr-2 animate-spin" />
                         Waiting for IoT readings...
                       </td>
                     </tr>
@@ -409,6 +1079,7 @@ export default function DataVisualizationPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="actions">
           <Card>
             <CardHeader>
@@ -420,30 +1091,122 @@ export default function DataVisualizationPage() {
                   try {
                     const token = localStorage.getItem('token');
                     const response = await fetch(
-                      `${backendUrl}/sensors/export/iot-csv`,
+                      `${backendUrl}/api/sensors/export/iot-csv`,
                       {
                         headers: {
-                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                          ...(token
+                            ? { Authorization: `Bearer ${token}` }
+                            : {}),
                         },
-                      },
+                      }
                     );
-                    if (!response.ok) throw new Error('Failed to export CSV');
+                    if (!response.ok) throw new Error('Export failed');
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `iot-readings-${new Date().toISOString().split('T')[0]}.csv`;
+                    a.download = `iot-readings-${new Date().toISOString().split('T')[0]
+                      }.csv`;
                     a.click();
                     window.URL.revokeObjectURL(url);
                   } catch {
-                    alert('Export failed');
+                    alert('CSV export failed. You may need to be logged in.');
                   }
                 }}
                 className="bg-gray-900 hover:bg-gray-800"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download CSV
+                Download CSV (MongoDB)
               </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Export the in-memory history as CSV
+                  if (history.length === 0) {
+                    alert('No data to export yet.');
+                    return;
+                  }
+                  const header =
+                    'Timestamp,Temperature,Humidity,TVOC,DewPoint,RiskIndex,FanOn,PWM\n';
+                  const rows = history
+                    .map(
+                      (h) =>
+                        `${h.fullTime},${h.temperature},${h.humidity},${h.tvoc},${h.dewPoint ?? ''},${h.riskIndex},${h.fanOn},${h.pwm}`
+                    )
+                    .join('\n');
+                  const blob = new Blob([header + rows], {
+                    type: 'text/csv',
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `live-readings-${new Date().toISOString().split('T')[0]
+                    }.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export Live Session CSV
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="diagnostics">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Diagnostics
+              </CardTitle>
+              <CardDescription>
+                Recent errors and connection status
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Firebase Status:</span>
+                {liveTelemetry ? (
+                  <span className="text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-4 w-4" /> Connected
+                  </span>
+                ) : (
+                  <span className="text-red-600 flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4" /> Disconnected
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Data Points:</span>
+                <span>{history.length}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Device ID:</span>
+                <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">
+                  {deviceId}
+                </code>
+              </div>
+              {errors.length > 0 ? (
+                <div className="mt-3 space-y-1">
+                  <span className="text-sm font-medium text-red-600">
+                    Recent Errors:
+                  </span>
+                  {errors.slice(-5).map((err, i) => (
+                    <div
+                      key={i}
+                      className="text-xs bg-red-50 text-red-700 border border-red-200 rounded px-3 py-1.5"
+                    >
+                      {err}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 mt-2">
+                  No errors recorded.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

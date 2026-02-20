@@ -85,7 +85,9 @@ interface UseEnvHistoryOptions {
 }
 
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__BACKEND_URL as string) ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
 
 // Simple in-memory cache for API responses (client-side)
 const responseCache = new Map<string, { data: unknown; timestamp: number }>();

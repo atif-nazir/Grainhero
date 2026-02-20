@@ -11,7 +11,7 @@ import {
   Users,
   BarChart3,
   FileText,
-  Bell,
+  Cloud,
   Smartphone,
   Settings,
   LogOut,
@@ -21,7 +21,6 @@ import {
   ChevronRight,
   Sparkles,
   QrCode,
-  TrendingUp,
   CreditCard,
   Building2,
   Crown,
@@ -32,7 +31,6 @@ import {
   Activity,
   DollarSign,
   Brain,
-  Cloud,
   Zap,
   ClipboardList,
 } from "lucide-react"
@@ -109,7 +107,7 @@ const iotMonitoringNav = [
     label: "Sensor & Actuator Setup",
     href: "/sensors",
     icon: Smartphone,
-    roles: ["super_admin", "admin", "technician"],
+    roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
   {
@@ -333,7 +331,6 @@ const superAdminNav: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const t = useTranslations('Sidebar')
-  const [milestone2Expanded, setMilestone2Expanded] = useState(false)
   const [systemExpanded, setSystemExpanded] = useState(false)
   const [grainOpsExpanded, setGrainOpsExpanded] = useState(false)
   const [aiAnalyticsExpanded, setAiAnalyticsExpanded] = useState(false)
