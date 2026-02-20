@@ -1,0 +1,24 @@
+﻿≡ƒôí Connecting to MQTT broker at: mqtt://10.192.66.55:1883
+Attempting to connect to MongoDB...
+Connection string: mongodb+srv://atifnazir005_db_user:***@cluster0.ycda7xy.mongodb.net/grainhero?retryWrites=true&w=majority
+
+≡ƒÜÇ Server running on port 5000
+API Documentation: http://localhost:5000/api/docs
+WebSocket Server: ws://localhost:5000
+Γ£à Loaded 319 rice storage records
+Γ£à Loaded 319 rice storage records
+Γ£à Rice data service initialized successfully
+MongoDB Connection Successfull
+Environmental data service started
+Limit warning scheduler started (daily checks)
+Limit warning scheduler started
+Firebase realtime service started
+Environmental data service initialized with device ID: new ObjectId('691aea6b25d97a28b3de9f17')
+Starting environmental data collection service...
+Scheduled 5min environmental data collection
+Scheduled 15min environmental data collection
+Scheduled 1hour environmental data collection
+Scheduled 6hour environmental data collection
+Environmental data service started successfully
+Checking 1 active subscriptions for limit warnings...
+Limit warning check completed. 0 warning emails sent.

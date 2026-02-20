@@ -235,13 +235,31 @@ async function getFilteredAlerts(role, userId) {
   return alerts;
 }
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+  const pathname = require('url').parse(request.url).pathname;
+
+  if (pathname.startsWith('/alert')) {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    // Let other handlers (like Socket.IO) handle it, or destroy if unwanted.
+    // Socket.IO attaches its own listeners, so we shouldn't destroy blindly.
+    // But since noServer: true removes the auto-listener, we are good.
+  }
+});
 
 wss.on("connection", async function connection(ws, req) {
+  ws.on("error", (err) => {
+    console.warn("WS client error:", err && (err.code || err.message));
+  });
   // Parse the URL to get role and userId
   const url = req.url;
   const match = url.match(/^\/alerts\/(admin|manager|assistant)\/(\w+)$/);
   if (!match) {
+    // console.warn(`WS connection with invalid path: ${url}`);
     ws.close();
     return;
   }
@@ -273,9 +291,13 @@ wss.on("connection", async function connection(ws, req) {
   });
 });
 
+wss.on("error", (err) => {
+  console.warn("WS server error:", err && (err.code || err.message));
+});
+
 // Start the server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`API Documentation: http://localhost:${PORT}/api/docs`);
   console.log(`WebSocket Server: ws://localhost:${PORT}`);

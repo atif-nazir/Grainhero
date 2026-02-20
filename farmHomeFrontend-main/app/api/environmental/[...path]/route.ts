@@ -26,13 +26,22 @@ export async function GET(request: NextRequest) {
       headers['Authorization'] = authHeader
     }
 
-    const response = await fetch(fullUrl, {
-      method: 'GET',
-      headers,
-    })
-
-    const data = await response.json()
-    return NextResponse.json(data, { status: response.status })
+    try {
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers,
+      })
+      const data = await response.json()
+      return NextResponse.json(data, { status: response.status })
+    } catch {
+      const altUrl = fullUrl.replace('http://localhost:5000', 'http://192.168.137.1:5000')
+      const response2 = await fetch(altUrl, {
+        method: 'GET',
+        headers,
+      })
+      const data2 = await response2.json()
+      return NextResponse.json(data2, { status: response2.status })
+    }
   } catch (error) {
     console.error('Environmental API proxy error:', error)
     return NextResponse.json(
