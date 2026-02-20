@@ -182,6 +182,7 @@ export default function DashboardPage() {
 
   const metricIconMap: Record<string, { icon: IconType; color: string }> = {
     "Grain Batches": { icon: Package, color: "blue" },
+    "Total Silos": { icon: Warehouse, color: "blue" },
     "Current Plan": { icon: Package, color: "green" },
     "Active Users": { icon: Users, color: "purple" },
     "Active Alerts": { icon: AlertTriangle, color: "red" },

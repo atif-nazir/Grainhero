@@ -5,6 +5,7 @@ const Buyer = require("../models/Buyer");
 const GrainBatch = require("../models/GrainBatch");
 const { BUYER_STATUSES } = require("../configs/enum");
 const { body, validationResult } = require("express-validator");
+const LoggingService = require("../services/loggingService");
 
 const resolveTenantId = (user) =>
   user?.tenant_id || user?.owned_tenant_id || user?._id;
@@ -281,6 +282,9 @@ router.post(
       });
 
       res.status(201).json({ buyer, isNew: true });
+
+      // Log buyer creation
+      LoggingService.logBuyerCreated(req.user, buyer, req.ip).catch(() => { });
     } catch (error) {
       console.error("Error creating buyer:", error);
       if (error.code === 11000) {
@@ -379,6 +383,9 @@ router.put(
       await buyer.save();
 
       res.json(buyer);
+
+      // Log buyer update
+      LoggingService.logBuyerUpdated(req.user, buyer, req.ip).catch(() => { });
     } catch (error) {
       console.error("Error updating buyer:", error);
       res.status(500).json({ message: "Failed to update buyer" });
@@ -407,6 +414,19 @@ router.delete("/:id", auth, async (req, res) => {
     await buyer.save();
 
     res.json({ message: "Buyer deleted successfully" });
+
+    // Log buyer deletion
+    LoggingService.log({
+      action: 'buyer_deleted',
+      category: 'buyer',
+      description: `Buyer "${buyer.name}" deleted`,
+      user: req.user,
+      entity_type: 'Buyer',
+      entity_id: buyer._id,
+      entity_ref: buyer.name,
+      severity: 'warning',
+      ip_address: req.ip
+    }).catch(() => { });
   } catch (error) {
     console.error("Error deleting buyer:", error);
     res.status(500).json({ message: "Failed to delete buyer" });

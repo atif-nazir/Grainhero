@@ -34,6 +34,7 @@ import {
   Brain,
   Cloud,
   Zap,
+  ClipboardList,
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
@@ -72,7 +73,7 @@ const grainOperationsNav = [
     label: "Grain Procurement & Intake",
     href: "/grain-batches",
     icon: Package,
-    roles: ["super_admin", "admin", "manager"],
+    roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
   {
@@ -91,15 +92,14 @@ const grainOperationsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
-  // COMMENTED OUT - Not in core 10 modules
-  // {
-  //   name: "traceability",
-  //   label: "Traceability",
-  //   href: "/traceability",
-  //   icon: QrCode,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: undefined
-  // },
+  {
+    name: "traceability",
+    label: "Traceability",
+    href: "/traceability",
+    icon: QrCode,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: undefined
+  },
 ]
 
 // IoT Monitoring & Control - CORE MODULES ONLY
@@ -228,6 +228,22 @@ const businessNav = [
     label: "Analytics Dashboard",
     href: "/analytics",
     icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+    badge: undefined
+  },
+  {
+    name: "activity-logs",
+    label: "Activity Logs",
+    href: "/activity-logs",
+    icon: ClipboardList,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: "NEW"
+  },
+  {
+    name: "insurance",
+    label: "Insurance & Loss Claims",
+    href: "/insurance",
+    icon: Shield,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
@@ -601,9 +617,18 @@ export function Sidebar() {
           role="button"
           tabIndex={0}
         >
-          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium text-blue-600">{user?.name?.[0] || "U"}</span>
-          </div>
+          {/* Avatar or fallback */}
+          {user?.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={user.name || "User"}
+              className="w-8 h-8 rounded-full object-cover border border-gray-200"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <span className="text-sm font-medium text-blue-600">{user?.name?.[0] || "U"}</span>
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">{user?.name || "User"}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role || "Role"}</p>

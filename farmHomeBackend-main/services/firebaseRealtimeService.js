@@ -125,4 +125,33 @@ async function writeControlState(deviceId, state) {
   }
 }
 
-module.exports = { start, stop, writeControlState }
+async function getLatestReadings() {
+  if (!initialized) {
+    if (process.env.FIREBASE_ENABLED !== 'true') return {}
+    init()
+  }
+  try {
+    const snapshot = await database.ref('sensor_data').once('value')
+    const val = snapshot.val()
+    if (!val || typeof val !== 'object') return {}
+
+    const result = {}
+    for (const deviceId of Object.keys(val)) {
+      const latest = val[deviceId]?.latest || val[deviceId]
+      if (latest && typeof latest === 'object') {
+        result[deviceId] = {
+          temperature: latest.temperature ?? null,
+          humidity: latest.humidity ?? null,
+          tvoc_ppb: latest.tvoc_ppb ?? latest.voc ?? null,
+          timestamp: latest.timestamp || null,
+        }
+      }
+    }
+    return result
+  } catch (err) {
+    console.error('Firebase getLatestReadings error:', err.message)
+    return {}
+  }
+}
+
+module.exports = { start, stop, writeControlState, getLatestReadings }

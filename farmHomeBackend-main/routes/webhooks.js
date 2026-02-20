@@ -19,97 +19,86 @@ const {
   PAYMENT_STATUSES,
 } = require("../configs/enum");
 const plans = [
-    {
-      id: "basic",
-    name: "Grain Starter",
-    priceFrontend: "$99/mo",
-    description: "Perfect for small grain operations and individual farmers.",
-      features: [
-      "Up to 5 grain batches",
-      "Basic silo monitoring",
-      "Simple traceability",
-      "Email support",
-      "Mobile app access",
-      "Basic reports",
+  {
+    id: "basic",
+    name: "Starter",
+    priceFrontend: "Rs. 1,499/mo",
+    description: "Perfect for small grain operations with a single warehouse.",
+    features: [
+      "1 Warehouse",
+      "3 Silos",
+      "5 Staff (2 Managers + 3 Technicians)",
+      "Mobile Panel",
+      "Web Panel",
+      "AI Predictions",
     ],
-    link: "https://buy.stripe.com/test_8x2bJ3cyO4AofwHcBZa3u00",
-    priceId: "price_1RoRPZRYMUmJuwVF7aJeMEmm",
-    price: 99,
+    priceId: "price_starter_1499",
+    price: 1499,
     duration: "/month",
-    },
-    {
-      id: "intermediate",
-    name: "Grain Professional",
-    priceFrontend: "$299/mo",
+  },
+  {
+    id: "intermediate",
+    name: "Professional",
+    priceFrontend: "Rs. 3,899/mo",
     description:
-      "Advanced features for growing grain operations and cooperatives.",
-      features: [
-      "Up to 50 grain batches",
-      "Advanced silo management",
-      "IoT sensor integration",
-      "AI-powered risk assessment",
-      "Comprehensive traceability",
-      "Insurance management",
-      "Buyer management",
-      "Priority support",
-        "Advanced analytics",
+      "Advanced features for growing grain operations with multiple warehouses.",
+    features: [
+      "2 Warehouses",
+      "6 Silos",
+      "10 Staff",
+      "Mobile Panel",
+      "Web Panel",
+      "AI Predictions",
     ],
-    link: "https://buy.stripe.com/test_fZu7sN6aq7MA5W71Xla3u02",
-    priceId: "price_1RonmCRYMUmJuwVF0bBYtZJW",
-    price: 299,
+    priceId: "price_professional_3899",
+    price: 3899,
     duration: "/month",
-    },
-    {
-      id: "pro",
-    name: "Grain Enterprise",
-    priceFrontend: "$999/mo",
+  },
+  {
+    id: "pro",
+    name: "Enterprise",
+    priceFrontend: "Rs. 5,999/mo",
     description:
-      "Complete solution for large grain operations and trading companies.",
-      features: [
-      "Unlimited grain batches",
-      "Multi-tenant management",
-      "Advanced IoT monitoring",
-      "Predictive analytics",
-        "Custom integrations",
-      "API access",
-      "White-label options",
-        "Dedicated account manager",
-      "24/7 premium support",
-      "Custom reporting",
-      "Bulk operations",
+      "Complete solution for large grain operations with unlimited staff.",
+    features: [
+      "5 Warehouses",
+      "15 Silos",
+      "Unlimited Staff",
+      "Mobile Panel",
+      "Web Panel",
+      "AI Predictions",
     ],
-    link: "https://buy.stripe.com/test_4gM3cx9mC6Iw1FR1Xla3u03",
-    priceId: "price_1RonmYRYMUmJuwVFHKWWflRo",
-    price: 999,
+    priceId: "price_enterprise_5999",
+    price: 5999,
     duration: "/month",
   },
 ];
 
 router.post("/", (request, response) => {
-    let event = request.body;
-    if (endpointSecret) {
+  let event = request.body;
+  if (endpointSecret) {
     const signature = request.headers["stripe-signature"];
-        try {
-            event = stripe.webhooks.constructEvent(
-                request.body,
-                signature,
-                endpointSecret
-            );
-        } catch (err) {
-            console.log(`⚠️  Webhook signature verification failed.`, err.message);
-            return response.sendStatus(400);
-        }
+    try {
+      event = stripe.webhooks.constructEvent(
+        request.body,
+        signature,
+        endpointSecret
+      );
+    } catch (err) {
+      console.log(`⚠️  Webhook signature verification failed.`, err.message);
+      return response.sendStatus(400);
     }
+  }
 
-    switch (event.type) {
+  switch (event.type) {
     case "payment_intent.succeeded": {
-            const paymentIntent = event.data.object;
-            console.log(`PaymentIntent for ${paymentIntent.amount} was successful!`);
+      const paymentIntent = event.data.object;
+      console.log(`PaymentIntent for ${paymentIntent.amount} was successful!`);
       // This is handled by checkout.session.completed, just log it
-            break;
-        }
+      break;
+    }
     case "payment_method.attached": {
-            const paymentMethod = event.data.object;
+      const paymentMethod = event.data.object;
       console.log(`Payment method attached: ${paymentMethod.id}`);
       // Just log, no action needed
       break;
@@ -169,35 +158,35 @@ router.post("/", (request, response) => {
       const invoicePayment = event.data.object;
       console.log(`Invoice payment paid: ${invoicePayment.id}`);
       // This is handled by invoice.payment_succeeded, just log it
-            break;
-        }
+      break;
+    }
     case "checkout.session.completed": {
-            // Grant access to the product (subscription)
+      // Grant access to the product (subscription)
 
-            (async () => {
-                try {
-                    // Retrieve the full session with line_items
-                    const sessionFull = await stripe.checkout.sessions.retrieve(
-                        event.data.object.id,
+      (async () => {
+        try {
+          // Retrieve the full session with line_items
+          const sessionFull = await stripe.checkout.sessions.retrieve(
+            event.data.object.id,
             { expand: ["line_items"] }
-                    );
+          );
 
-                    const customerId = sessionFull?.customer;
-                    const customer = await stripe.customers.retrieve(customerId);
+          const customerId = sessionFull?.customer;
+          const customer = await stripe.customers.retrieve(customerId);
 
-                    const priceId = sessionFull?.line_items?.data[0]?.price?.id;
+          const priceId = sessionFull?.line_items?.data[0]?.price?.id;
           const priceAmount =
             sessionFull?.line_items?.data[0]?.price?.unit_amount;
 
           // Define plan details (same as checkout session)
           const planDetails = {
-            9900: { id: "basic", name: "Grain Starter", price: 99 },
-            29900: {
+            149900: { id: "basic", name: "Starter", price: 1499 },
+            389900: {
               id: "intermediate",
-              name: "Grain Professional",
-              price: 299,
+              name: "Professional",
+              price: 3899,
             },
-            99900: { id: "pro", name: "Grain Enterprise", price: 999 },
+            599900: { id: "pro", name: "Enterprise", price: 5999 },
           };
 
           const plan = planDetails[priceAmount];
@@ -212,13 +201,13 @@ router.post("/", (request, response) => {
           const planFeatures = getPlanFeatures(planKey);
           const subscriptionPlanName = getSubscriptionPlanName(plan.id);
 
-                    let user;
+          let user;
           let tenant;
-                    if (customer.email) {
-                        user = await User.findOne({ email: customer.email });
+          if (customer.email) {
+            user = await User.findOne({ email: customer.email });
             console.log("Found user:", user ? user.email : "none");
 
-                        if (!user) {
+            if (!user) {
               // Create new user for payment-first flow
               console.log("Creating new user for email:", customer.email);
 
@@ -272,16 +261,16 @@ router.post("/", (request, response) => {
                   "User was created between checks, updating instead"
                 );
                 // Update existing user with payment info
-                        user.hasAccess = plan.id;
+                user.hasAccess = plan.id;
                 user.subscription_plan = planKey;
-                        user.customerId = customerId;
+                user.customerId = customerId;
                 user.priceId = priceId;
                 if (tenant && !user.tenant_id) {
                   user.tenant_id = tenant._id;
                   user.owned_tenant_id = tenant._id;
                 }
-                        await user.save();
-                    } else {
+                await user.save();
+              } else {
                 // Create user - use tenant if available, but don't fail if tenant is missing
                 const userData = {
                   email: customer.email,
@@ -429,9 +418,8 @@ router.post("/", (request, response) => {
                 if (!tenant) {
                   try {
                     tenant = new Tenant({
-                      name: `${
-                        user.name || customer.name || "Admin User"
-                      }'s Farm`,
+                      name: `${user.name || customer.name || "Admin User"
+                        }'s Farm`,
                       email: customer.email,
                       business_type: "farm",
                       created_by: user._id || null,
@@ -591,7 +579,7 @@ router.post("/", (request, response) => {
 
               // Generate signup completion link
               const signupLink = `${process.env.FRONT_END_URL}/auth/signup?payment=success&email=${encodeURIComponent(customer.email)}`;
-              
+
               const emailContent = `
 Dear ${customer.name || "Valued Customer"},
 
@@ -599,7 +587,7 @@ Thank you for your successful payment! Your GrainHero subscription has been acti
 
 Payment Details:
 - Plan: ${plan.name}
-- Amount: $${plan.price}${billingPeriod}
+- Amount: Rs. ${plan.price}${billingPeriod}
 - Transaction ID: ${transactionId}
 - Date: ${paymentDate}
 
@@ -717,17 +705,16 @@ Your GrainHero subscription has been successfully renewed!
 
 Renewal Details:
 - Plan: ${subscription.plan_name}
-- Amount: $${subscription.price_per_month}/${
-                  subscription.billing_cycle === BILLING_CYCLES.MONTHLY
+- Amount: Rs. ${subscription.price_per_month}/${subscription.billing_cycle === BILLING_CYCLES.MONTHLY
                     ? "month"
                     : "year"
-                }
+                  }
 - Invoice ID: ${invoice.id}
 - Next Billing Date: ${nextPaymentDate.toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
 
 Your subscription is active and will continue automatically.
 
@@ -787,13 +774,13 @@ The GrainHero Team
             if (newPriceAmount) {
               // Map price amount to plan
               const planDetails = {
-                9900: { id: "basic", name: "Grain Starter", price: 99 },
-                29900: {
+                149900: { id: "basic", name: "Starter", price: 1499 },
+                389900: {
                   id: "intermediate",
-                  name: "Grain Professional",
-                  price: 299,
+                  name: "Professional",
+                  price: 3899,
                 },
-                99900: { id: "pro", name: "Grain Enterprise", price: 999 },
+                599900: { id: "pro", name: "Enterprise", price: 5999 },
               };
 
               const newPlan = planDetails[newPriceAmount];
@@ -865,18 +852,17 @@ Your GrainHero subscription has been ${isUpgrade ? "upgraded" : "downgraded"}!
 Subscription Changes:
 - Previous Plan: ${oldPlanName}
 - New Plan: ${subscriptionPlanName}
-- New Price: $${newPlan.price}/month
+- New Price: Rs. ${newPlan.price}/month
 - Effective Date: ${new Date().toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
                     })}
 
-${
-  isUpgrade
-    ? "🎉 Congratulations! You now have access to additional features and higher limits."
-    : "Your subscription has been adjusted. Some features may no longer be available."
-}
+${isUpgrade
+                        ? "🎉 Congratulations! You now have access to additional features and higher limits."
+                        : "Your subscription has been adjusted. Some features may no longer be available."
+                      }
 
 You can manage your subscription from your dashboard.
 
@@ -888,15 +874,13 @@ The GrainHero Team
 
                     await sendEmail(
                       user.email,
-                      `Subscription ${
-                        isUpgrade ? "Upgraded" : "Downgraded"
+                      `Subscription ${isUpgrade ? "Upgraded" : "Downgraded"
                       } - GrainHero`,
                       changeEmailContent,
                       changeEmailContent.replace(/\n/g, "<br>")
                     );
                     console.log(
-                      `Subscription ${
-                        isUpgrade ? "upgrade" : "downgrade"
+                      `Subscription ${isUpgrade ? "upgrade" : "downgrade"
                       } email sent to:`,
                       user.email
                     );
@@ -906,8 +890,7 @@ The GrainHero Team
                 }
 
                 console.log(
-                  `Subscription ${
-                    isUpgrade ? "upgraded" : "downgraded"
+                  `Subscription ${isUpgrade ? "upgraded" : "downgraded"
                   } from ${oldPlanName} to ${subscriptionPlanName}`
                 );
               }
@@ -957,7 +940,7 @@ We were unable to process your payment for your GrainHero subscription.
 
 Payment Details:
 - Plan: ${subscription.plan_name}
-- Amount: $${subscription.price_per_month}
+- Amount: Rs. ${subscription.price_per_month}
 - Invoice ID: ${invoice.id}
 
 Please update your payment method to avoid service interruption.
@@ -985,8 +968,8 @@ The GrainHero Team
 
               console.log("Payment failed for subscription:", subscription._id);
             }
-                    }
-                } catch (err) {
+          }
+        } catch (err) {
           console.error("Error handling payment failure:", err);
         }
       })();
@@ -1028,13 +1011,13 @@ The GrainHero Team
           console.log("Subscription deleted:", stripeSubscription.id);
         } catch (err) {
           console.error("Error handling subscription deletion:", err);
-                }
-            })();
-            break;
         }
+      })();
+      break;
+    }
     case "customer.deleted": {
       // Handle customer deletion from Stripe
-            (async () => {
+      (async () => {
         try {
           const customerId = event.data.object.id;
           console.log("Customer deleted from Stripe:", customerId);
@@ -1042,7 +1025,7 @@ The GrainHero Team
           // Find user with this customer ID
           const user = await User.findOne({ customerId: customerId });
 
-                if (user) {
+          if (user) {
             // Find all subscriptions for this customer
             const subscriptions = await Subscription.find({
               stripe_customer_id: customerId,
@@ -1064,7 +1047,7 @@ The GrainHero Team
             user.hasAccess = "none";
             user.subscription_plan = undefined;
             user.customerId = undefined; // Clear customer ID
-                    await user.save();
+            await user.save();
 
             console.log(
               "User access revoked due to customer deletion:",
@@ -1076,14 +1059,14 @@ The GrainHero Team
         } catch (err) {
           console.error("Error handling customer deletion:", err);
         }
-            })();
-            break;
-        }
-        default:
-            console.log(`Unhandled event type ${event.type}.`);
+      })();
+      break;
     }
+    default:
+      console.log(`Unhandled event type ${event.type}.`);
+  }
 
-    response.send();
+  response.send();
 });
 
 module.exports = router;

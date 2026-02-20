@@ -185,11 +185,11 @@ const grainBatchSchema = new mongoose.Schema({
     event_id: String,
     event_type: {
       type: String,
-      enum: ['mold', 'insect', 'moisture', 'contamination', 'other']
+      enum: ['mold', 'pests', 'moisture', 'heat', 'smell', 'contamination', 'other']
     },
     severity: {
       type: String,
-      enum: ['minor', 'moderate', 'severe', 'total_loss']
+      enum: ['low', 'medium', 'high', 'critical']
     },
     description: String,
     estimated_loss_kg: Number,
@@ -278,15 +278,15 @@ grainBatchSchema.methods.updateRiskScore = function (newScore, confidence) {
 // Method to dispatch batch (supports partial dispatch)
 grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails, sellPricePerKg, dispatchedQuantityKg) {
   const quantityToDispatch = dispatchedQuantityKg || this.quantity_kg;
-  
+
   // Validate dispatch quantity
   if (quantityToDispatch > this.quantity_kg - this.dispatched_quantity_kg) {
     throw new Error('Dispatched quantity exceeds available quantity');
   }
-  
+
   // Update dispatched quantity
   this.dispatched_quantity_kg = (this.dispatched_quantity_kg || 0) + quantityToDispatch;
-  
+
   // If all quantity is dispatched, mark as fully dispatched
   if (this.dispatched_quantity_kg >= this.quantity_kg) {
     this.status = BATCH_STATUSES.DISPATCHED;
@@ -294,7 +294,7 @@ grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails, sellPric
     // Partial dispatch - keep status as stored or processing
     this.status = this.status === BATCH_STATUSES.STORED ? BATCH_STATUSES.STORED : this.status;
   }
-  
+
   // Set buyer and dispatch details (only if not already set)
   if (!this.buyer_id) {
     this.buyer_id = buyerId;
@@ -302,13 +302,13 @@ grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails, sellPric
   if (dispatchDetails) {
     this.dispatch_details = { ...this.dispatch_details, ...dispatchDetails };
   }
-  
+
   // Calculate revenue and profit for this dispatch
   if (sellPricePerKg && this.purchase_price_per_kg) {
     const dispatchRevenue = sellPricePerKg * quantityToDispatch;
     const dispatchCost = this.purchase_price_per_kg * quantityToDispatch;
     const dispatchProfit = dispatchRevenue - dispatchCost;
-    
+
     // Update sell price (weighted average if multiple dispatches)
     if (this.sell_price_per_kg) {
       const totalDispatched = this.dispatched_quantity_kg;
@@ -317,12 +317,12 @@ grainBatchSchema.methods.dispatch = function (buyerId, dispatchDetails, sellPric
     } else {
       this.sell_price_per_kg = sellPricePerKg;
     }
-    
+
     // Accumulate revenue and profit
     this.revenue = (this.revenue || 0) + dispatchRevenue;
     this.profit = (this.profit || 0) + dispatchProfit;
   }
-  
+
   this.actual_dispatch_date = new Date();
   return this.save();
 };

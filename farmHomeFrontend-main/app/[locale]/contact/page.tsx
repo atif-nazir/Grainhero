@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Wheat as WheatIcon, Mail, Phone, MapPin, CheckCircle, AlertCircle } from "lucide-react"
+import { Wheat as WheatIcon, Mail, Phone, MapPin, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react"
+import { Link } from '@/i18n/navigation'
 
 export default function ContactPage() {
     const searchParams = useSearchParams()
@@ -85,7 +86,13 @@ export default function ContactPage() {
         <div className="min-h-screen bg-white">
             {/* Hero Section */}
             <div className="bg-gradient-to-r from-[#effbf7] to-white text-black py-16 border-b">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+                    <div className="flex justify-start mb-6">
+                        <Link href="/" className="inline-flex items-center gap-2 text-gray-600 hover:text-[#00a63e] transition-colors font-medium">
+                            <ArrowLeft className="h-5 w-5" />
+                            <span>Back to Home</span>
+                        </Link>
+                    </div>
                     <div className="text-center">
                         <div className="flex justify-center mb-6">
                             <div className="bg-[#00a63e]/10 rounded-full p-4">

@@ -55,8 +55,14 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
+  // Collapsible state for Notification Preferences
+  const [showNotifications, setShowNotifications] = useState(false)
+  // Collapsible state for Basic Information
+  const [showBasicInfo, setShowBasicInfo] = useState(false)
   const { user: currentUser, refreshUser } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  // Local avatar state for instant UI update
+  const [avatar, setAvatar] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,11 +85,9 @@ export default function ProfilePage() {
     confirmPassword: ""
   })
   
-  // Notification preferences
+  // Notification preferences (email only)
   const [notifications, setNotifications] = useState({
-    email: true,
-    sms: false,
-    push: true
+    email: true
   })
 
   // Fetch user profile
@@ -95,19 +99,24 @@ export default function ProfilePage() {
       if (response.ok && response.data) {
         // Type the response data as UserProfile
         const typedResponseData = response.data as UserProfile;
-        
-        setProfile(typedResponseData);
-        setProfileData({
-          name: typedResponseData.name || "",
-          phone: typedResponseData.phone || "",
-          location: typedResponseData.location || "",
-          language: typedResponseData.language || "en"
-        })
-        setNotifications(typedResponseData.preferences?.notifications || {
-          email: true,
-          sms: false,
-          push: true
-        })
+        // Only update fields if they exist, otherwise keep previous
+        setProfile(prev => {
+          if (!prev) return typedResponseData;
+          return {
+            ...prev,
+            name: typedResponseData.name || prev.name,
+            phone: typedResponseData.phone !== undefined ? typedResponseData.phone : prev.phone,
+            location: typedResponseData.location !== undefined ? typedResponseData.location : prev.location,
+            language: typedResponseData.language || prev.language
+          };
+        });
+        setProfileData(prev => ({
+          name: typedResponseData.name || prev.name || "",
+          phone: typedResponseData.phone !== undefined ? typedResponseData.phone : prev.phone || "",
+          location: typedResponseData.location !== undefined ? typedResponseData.location : prev.location || "",
+          language: typedResponseData.language || prev.language || "en"
+        }))
+        setNotifications(typedResponseData.preferences?.notifications || { email: true })
         setError(null)
       } else {
         setError(response.error || "Failed to fetch profile")
@@ -130,12 +139,26 @@ export default function ProfilePage() {
   const handleSaveProfile = async () => {
     try {
       setSaving(true)
-      const response = await api.patch("/auth/profile", profileData)
-      
-      if (response.ok) {
+      // Only send editable fields (name, phone, location, language)
+      const response = await api.patch("/auth/profile", {
+        name: profileData.name,
+        phone: profileData.phone,
+        location: profileData.location,
+        language: profileData.language
+      })
+      if (response.ok && response.data) {
         toast.success("Profile updated successfully")
-        await refreshUser() // Refresh user data in context
-        fetchProfile() // Refresh profile data
+        // Update local profile state for instant UI feedback
+        setProfile(prev => prev ? {
+          ...prev,
+          name: profileData.name,
+          phone: profileData.phone,
+          location: profileData.location,
+          language: profileData.language,
+          avatar: avatar !== undefined ? avatar : prev.avatar
+        } : prev)
+        await refreshUser()
+        fetchProfile()
       } else {
         toast.error(response.error || "Failed to update profile")
       }
@@ -209,8 +232,10 @@ export default function ProfilePage() {
       })
 
       if (response.ok) {
-        //const data = await response.json()
+        const data = await response.json()
         toast.success("Avatar updated successfully")
+        setAvatar(data.avatar) // Update local avatar for instant UI
+        setProfile(prev => prev ? { ...prev, avatar: data.avatar } : prev)
         await refreshUser()
         fetchProfile()
       } else {
@@ -310,9 +335,9 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center space-y-4">
                 <div className="relative">
                   <Avatar className="h-24 w-24">
-                    <AvatarImage src={profile.avatar} alt={profile.name} />
+                    <AvatarImage src={avatar !== undefined ? avatar : profile.avatar} alt={profileData.name} />
                     <AvatarFallback className="text-lg">
-                      {profile.name.charAt(0).toUpperCase()}
+                      {(profileData.name || profile.name).charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <label className="absolute bottom-0 right-0 bg-blue-500 text-white p-1 rounded-full cursor-pointer hover:bg-blue-600">
@@ -326,7 +351,7 @@ export default function ProfilePage() {
                   </label>
                 </div>
                 <div className="text-center">
-                  <h3 className="text-lg font-semibold">{profile.name}</h3>
+                  <h3 className="text-lg font-semibold">{profileData.name || profile.name}</h3>
                   <p className="text-sm text-muted-foreground">{profile.email}</p>
                   <div className="flex justify-center space-x-2 mt-2">
                     <Badge className={getRoleBadgeColor(profile.role)}>
@@ -346,21 +371,17 @@ export default function ProfilePage() {
                   <Mail className="h-4 w-4 mr-2 text-gray-400" />
                   <span>{profile.email}</span>
                 </div>
-                {profile.phone && (
-                  <div className="flex items-center">
-                    <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                    <span>{profile.phone}</span>
-                  </div>
-                )}
-                {profile.location && (
-                  <div className="flex items-center">
-                    <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-                    <span>{profile.location}</span>
-                  </div>
-                )}
+                <div className="flex items-center">
+                  <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                  <span>{profileData.phone ? profileData.phone : 'Not set'}</span>
+                </div>
+                <div className="flex items-center">
+                  <MapPin className="h-4 w-4 mr-2 text-gray-400" />
+                  <span>{profileData.location ? profileData.location : 'Not set'}</span>
+                </div>
                 <div className="flex items-center">
                   <Globe className="h-4 w-4 mr-2 text-gray-400" />
-                  <span>{profile.language.toUpperCase()}</span>
+                  <span>{profileData.language ? profileData.language.toUpperCase() : 'Not set'}</span>
                 </div>
               </div>
               
@@ -379,67 +400,71 @@ export default function ProfilePage() {
 
         {/* Profile Settings */}
         <div className="md:col-span-2 space-y-6">
-          {/* Basic Information */}
+          {/* Basic Information (Collapsible) */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <User className="h-5 w-5 mr-2" />
-                Basic Information
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <User className="h-5 w-5 mr-2" />
+                  Basic Information
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowBasicInfo(v => !v)}>
+                  {showBasicInfo ? 'Collapse' : 'Expand'}
+                </Button>
+              </div>
               <CardDescription>
                 Update your personal information
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    value={profileData.name}
-                    onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                    placeholder="Enter your full name"
-                  />
+            {showBasicInfo && (
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      value={profileData.name}
+                      onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input
+                      id="phone"
+                      value={profileData.phone}
+                      onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                      placeholder="Enter your phone number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Location</Label>
+                    <Input
+                      id="location"
+                      value={profileData.location}
+                      onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
+                      placeholder="Enter your location"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="language">Language</Label>
+                    <Select value={profileData.language} onValueChange={(value) => setProfileData({ ...profileData, language: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="en">English</SelectItem>
+                        <SelectItem value="ur">Urdu</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                    placeholder="Enter your phone number"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    value={profileData.location}
-                    onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
-                    placeholder="Enter your location"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="language">Language</Label>
-                  <Select value={profileData.language} onValueChange={(value) => setProfileData({ ...profileData, language: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="ur">Urdu</SelectItem>
-                      <SelectItem value="fr">French</SelectItem>
-                      <SelectItem value="es">Spanish</SelectItem>
-                      <SelectItem value="ar">Arabic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" />
-                {saving ? "Saving..." : "Save Changes"}
-              </Button>
-            </CardContent>
+                <Button type="button" onClick={handleSaveProfile} disabled={saving}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+              </CardContent>
+            )}
           </Card>
 
           {/* Security Settings */}
@@ -535,19 +560,24 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Notification Preferences */}
+          {/* Notification Preferences (Email Only, Collapsible) */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Bell className="h-5 w-5 mr-2" />
-                Notification Preferences
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Bell className="h-5 w-5 mr-2" />
+                  Notification Preferences
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowNotifications(v => !v)}>
+                  {showNotifications ? 'Collapse' : 'Expand'}
+                </Button>
+              </div>
               <CardDescription>
                 Choose how you want to receive notifications
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
+            {showNotifications && (
+              <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="font-medium">Email Notifications</h4>
@@ -560,36 +590,12 @@ export default function ProfilePage() {
                     onCheckedChange={(checked) => setNotifications({ ...notifications, email: checked })}
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">SMS Notifications</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Receive notifications via SMS
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.sms}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, sms: checked })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Push Notifications</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Receive push notifications in your browser
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.push}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, push: checked })}
-                  />
-                </div>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" />
-                {saving ? "Saving..." : "Save Preferences"}
-              </Button>
-            </CardContent>
+                <Button type="button" onClick={handleSaveProfile} disabled={saving}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? "Saving..." : "Save Preferences"}
+                </Button>
+              </CardContent>
+            )}
           </Card>
         </div>
       </div>

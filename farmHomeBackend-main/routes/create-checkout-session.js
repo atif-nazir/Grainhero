@@ -21,7 +21,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
  *             properties:
  *               priceId:
  *                 type: string
- *                 description: Stripe price ID
+ *                 description: Stripe price ID (optional, derived from planId)
  *               userEmail:
  *                 type: string
  *                 description: User email address
@@ -49,7 +49,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
  */
 router.post("/", async (req, res) => {
   try {
-    const { priceId, userEmail, planId } = req.body;
+    const { userEmail, planId } = req.body;
 
     if (!userEmail || !planId) {
       return res.status(400).json({
@@ -58,27 +58,27 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Define plan details
+    // Define plan details with PKR prices (in cents/paisa)
+    // 1499 PKR = 149900
+    // 3899 PKR = 389900
+    // 5999 PKR = 599900
     const planDetails = {
       basic: {
-        name: "Grain Starter",
-        description:
-          "Perfect for small grain operations and individual farmers.",
-       
+        name: "Starter",
+        description: "Perfect for small grain operations with a single warehouse.",
+        price: 149900,
         interval: "month",
       },
       intermediate: {
-        name: "Grain Professional",
-        description:
-          "Advanced features for growing grain operations and cooperatives.",
-       
+        name: "Professional",
+        description: "Advanced features for growing grain operations with multiple warehouses.",
+        price: 389900,
         interval: "month",
       },
       pro: {
-        name: "Grain Enterprise",
-        description:
-          "Complete solution for large grain operations and trading companies.",
-        
+        name: "Enterprise",
+        description: "Complete solution for large grain operations with unlimited staff.",
+        price: 599900,
         interval: "month",
       },
     };
@@ -91,31 +91,34 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Check for existing subscription
-    const User = require("../models/User");
-    const existingUser = await User.findOne({ email: userEmail });
-    if (
-      existingUser &&
-      existingUser.customerId &&
-      existingUser.hasAccess &&
-      existingUser.hasAccess !== "none"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "You already have an active subscription. Please contact us if you want to upgrade or change your plan.",
-      });
+    // Check for existing subscription (optional logic, kept from original)
+    // You might want to remove this if you want to allow re-subscriptions or multiple subs
+    try {
+      const User = require("../models/User");
+      const existingUser = await User.findOne({ email: userEmail });
+      if (
+        existingUser &&
+        existingUser.customerId &&
+        existingUser.hasAccess &&
+        existingUser.hasAccess === planId // Only block if they have the SAME plan active
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "You already have this subscription active.",
+        });
+      }
+    } catch (err) {
+      console.log("User check skipped or failed", err.message);
     }
 
-    // Create or retrieve product
+    // 1. Create or retrieve Product & Price for the SUBSCRIPTION
     let product;
     try {
-      // Try to find existing product first
       const products = await stripe.products.list({ limit: 100 });
       product = products.data.find((p) => p.name === plan.name);
 
       if (!product) {
-        // Create new product if not found
         product = await stripe.products.create({
           name: plan.name,
           description: plan.description,
@@ -123,16 +126,12 @@ router.post("/", async (req, res) => {
       }
     } catch (error) {
       console.error("Error creating/finding product:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to create product",
-      });
+      return res.status(500).json({ success: false, message: "Failed to create product" });
     }
 
-    // Create or retrieve price
     let price;
     try {
-      // Try to find existing price first
+      // Find a price that matches our amount and currency
       const prices = await stripe.prices.list({
         product: product.id,
         limit: 100,
@@ -140,15 +139,15 @@ router.post("/", async (req, res) => {
       price = prices.data.find(
         (p) =>
           p.unit_amount === plan.price &&
+          p.currency === "pkr" &&
           p.recurring?.interval === plan.interval
       );
 
       if (!price) {
-        // Create new price if not found
         price = await stripe.prices.create({
           product: product.id,
           unit_amount: plan.price,
-          currency: "usd",
+          currency: "pkr",
           recurring: {
             interval: plan.interval,
           },
@@ -156,31 +155,44 @@ router.post("/", async (req, res) => {
       }
     } catch (error) {
       console.error("Error creating/finding price:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to create price",
-      });
+      return res.status(500).json({ success: false, message: "Failed to create price" });
     }
 
-    // Create Stripe checkout session with custom branding
+    // 2. Define Line Items
+    const line_items = [
+      {
+        price: price.id,
+        quantity: 1,
+      },
+    ];
+
+    // 3. Add One-Time IoT Setup Fee (7000 PKR = 700000)
+    // We create a one-time price data object for this
+    const iotFeeAmount = 700000;
+    line_items.push({
+      price_data: {
+        currency: "pkr",
+        product_data: {
+          name: "IoT Hardware Setup Fee",
+          description: "One-time charge for IoT infrastructure setup",
+        },
+        unit_amount: iotFeeAmount,
+      },
+      quantity: 1,
+    });
+
+    // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price: price.id,
-          quantity: 1,
-        },
-      ],
+      line_items: line_items,
       mode: "subscription",
       customer_email: userEmail,
-      success_url: `${
-        process.env.FRONT_END_URL
-      }/auth/signup?payment=success&session_id={CHECKOUT_SESSION_ID}&email=${encodeURIComponent(
-        userEmail
-      )}`,
-      cancel_url: `${process.env.FRONT_END_URL}/checkout?cancelled=true`,
+      success_url: `${process.env.FRONT_END_URL || "http://localhost:3000"
+        }/auth/signup?payment=success&session_id={CHECKOUT_SESSION_ID}&email=${encodeURIComponent(
+          userEmail
+        )}`,
+      cancel_url: `${process.env.FRONT_END_URL || "http://localhost:3000"}/checkout?cancelled=true`,
 
-      // Custom branding to match your app theme
       ui_mode: "hosted",
       custom_fields: [
         {
@@ -193,14 +205,6 @@ router.post("/", async (req, res) => {
           optional: true,
         },
       ],
-
-      // Custom colors to match your app theme
-      custom_text: {
-        submit: {
-          message:
-            "Welcome to GrainHero! Your subscription will be activated immediately after payment.",
-        },
-      },
 
       metadata: {
         planId: planId,

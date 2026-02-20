@@ -5,6 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   CreditCard,
   DollarSign,
@@ -20,7 +24,8 @@ import {
   TrendingUp,
   XCircle,
   AlertCircle,
-  Package
+  Package,
+  ArrowUpRight
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
@@ -122,6 +127,14 @@ export default function PaymentsPage() {
   const [dispatchLoading, setDispatchLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null)
+  const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false)
+  const [selectedBatchForPayment, setSelectedBatchForPayment] = useState<DispatchedBatch | null>(null)
+  const [paymentData, setPaymentData] = useState({
+    amount: 0,
+    method: 'jazzcash',
+    transaction_id: '',
+    notes: ''
+  })
 
   const formatter = useMemo(
     () =>
@@ -205,13 +218,23 @@ export default function PaymentsPage() {
   }
 
   const totals = useMemo(() => {
+    const grainRevenue = dispatchedBatches.reduce((sum, b) => {
+      if (b.revenue && b.revenue > 0) return sum + b.revenue
+      const qty = b.dispatched_quantity_kg || b.quantity_kg || 0
+      const price = b.sell_price_per_kg || 0
+      return sum + (qty * price)
+    }, 0)
+    // Subscription is a COST for admin (paying super admin), not revenue
+    const subscriptionCost = summary?.total_revenue || 0
     return {
-      totalRevenue: summary?.total_revenue || 0,
-      completed: items.filter(i => i.payment_status !== "failed" && i.status === "active").length,
-      pending: items.filter(i => i.payment_status === "pending").length,
-      processing: items.filter(i => i.payment_status === "processing").length,
+      totalRevenue: grainRevenue,
+      grainRevenue,
+      subscriptionCost,
+      activeSubscriptions: summary?.active ?? 0,
+      cancelledSubscriptions: summary?.cancelled ?? 0,
+      pastDue: summary?.past_due ?? 0,
     }
-  }, [items, summary])
+  }, [dispatchedBatches, summary])
 
   const salesTotals = useMemo(() => {
     const rows = dispatchedBatches.map((b) => {
@@ -238,8 +261,7 @@ export default function PaymentsPage() {
   const handleDownloadInvoice = async (batch: DispatchedBatch) => {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-      const backendUrl = config.backendUrl
-      const res = await fetch(`${backendUrl}/api/grain-batches/${batch._id}/invoice-pdf`, {
+      const res = await fetch(`${config.backendUrl}/api/logging/batches/${batch._id}/invoice`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
       })
       if (res.ok) {
@@ -247,14 +269,47 @@ export default function PaymentsPage() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `invoice-${batch.batch_id}-${Date.now()}.pdf`
+        a.download = `invoice-${batch.batch_id}.pdf`
         a.click()
-        toast.success('Invoice PDF downloaded')
+        toast.success('Invoice PDF downloaded and recorded')
       } else {
         toast.error('Failed to generate invoice')
       }
     } catch {
       toast.error('Failed to download invoice')
+    }
+  }
+
+  const handleRecordPayment = async () => {
+    if (!selectedBatchForPayment) return
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${config.backendUrl}/api/logging/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          buyer_id: selectedBatchForPayment.buyer_id?._id,
+          batch_id: selectedBatchForPayment._id,
+          amount: paymentData.amount,
+          payment_method: paymentData.method,
+          payment_reference: paymentData.transaction_id,
+          notes: paymentData.notes
+        })
+      })
+
+      if (res.ok) {
+        toast.success('Payment recorded successfully')
+        setIsRecordPaymentDialogOpen(false)
+        await loadDispatchedBatches()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to record payment')
+      }
+    } catch {
+      toast.error('Error recording payment')
     }
   }
 
@@ -290,9 +345,25 @@ export default function PaymentsPage() {
     }
   }
 
-  const handleExport = (format: "pdf" | "csv" = "csv") => {
-    const url = `${config.backendUrl}/dashboard/export-report?type=payments&format=${format}`
-    window.open(url, "_blank", "noopener,noreferrer")
+  const handleExport = async (format: "pdf" | "csv" = "csv") => {
+    try {
+      toast.info(`Generating ${format.toUpperCase()} report...`)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      const res = await fetch(`${config.backendUrl}/dashboard/export-report?type=payments&format=${format}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `payments-report.${format}`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`${format.toUpperCase()} report downloaded`)
+    } catch {
+      toast.error(`Failed to export ${format.toUpperCase()} report`)
+    }
   }
 
   const handlePaymentGateway = async (batch: DispatchedBatch, amount: number, buyerName: string) => {
@@ -379,60 +450,199 @@ export default function PaymentsPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-emerald-50 to-emerald-100/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-200/30 rounded-full -mr-12 -mt-12" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-emerald-900">Total Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium text-emerald-900">Grain Revenue</CardTitle>
               <DollarSign className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-emerald-900">
-                {formatter.format(totals.totalRevenue)}
+                {formatter.format(totals.grainRevenue)}
               </div>
               <div className="flex items-center text-xs text-emerald-600 mt-1">
                 <TrendingUp className="h-3 w-3 mr-1" />
-                Live from subscriptions
+                From grain sales only
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-violet-50 to-violet-100/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-violet-200/30 rounded-full -mr-12 -mt-12" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-violet-900">Subscription Cost</CardTitle>
+              <CreditCard className="h-5 w-5 text-violet-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-violet-900">
+                {formatter.format(totals.subscriptionCost)}
+              </div>
+              <p className="text-xs text-violet-600 mt-1">Monthly plan cost</p>
             </CardContent>
           </Card>
 
           <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-blue-50 to-blue-100/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-200/30 rounded-full -mr-12 -mt-12" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-900">Active</CardTitle>
-              <CheckCircle className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-sm font-medium text-blue-900">Grain Revenue</CardTitle>
+              <Package className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-900">{summary?.active ?? 0}</div>
-              <p className="text-xs text-blue-600 mt-1">Active subscriptions</p>
+              <div className="text-3xl font-bold text-blue-900">{formatter.format(totals.grainRevenue)}</div>
+              <p className="text-xs text-blue-600 mt-1">From dispatched batches</p>
             </CardContent>
           </Card>
 
           <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-gray-50 to-gray-100/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-gray-200/30 rounded-full -mr-12 -mt-12" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-900">Cancelled</CardTitle>
-              <XCircle className="h-5 w-5 text-gray-500" />
+              <CardTitle className="text-sm font-medium text-gray-900">Dispatched</CardTitle>
+              <CheckCircle className="h-5 w-5 text-gray-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-gray-900">{summary?.cancelled ?? 0}</div>
-              <p className="text-xs text-gray-500 mt-1">Ended subscriptions</p>
+              <div className="text-3xl font-bold text-gray-900">{dispatchedBatches.length}</div>
+              <p className="text-xs text-gray-500 mt-1">Batches sold to buyers</p>
             </CardContent>
           </Card>
 
           <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-red-50 to-red-100/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-red-200/30 rounded-full -mr-12 -mt-12" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-red-900">Past Due / Failed</CardTitle>
+              <CardTitle className="text-sm font-medium text-red-900">Pending Payments</CardTitle>
               <AlertCircle className="h-5 w-5 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-red-900">{summary?.past_due ?? 0}</div>
-              <p className="text-xs text-red-600 mt-1">Payment issues</p>
+              <div className="text-3xl font-bold text-red-900">
+                {dispatchedBatches.filter(b => !b.revenue || b.revenue <= 0).length}
+              </div>
+              <p className="text-xs text-red-600 mt-1">Awaiting buyer payment</p>
             </CardContent>
           </Card>
         </div>
+
+        {/* My Subscription - Current Admin Subscription (this is a COST for admin) */}
+        <Card className="border-0 shadow-lg">
+          <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-violet-50">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-purple-900">
+                  <CreditCard className="h-5 w-5" />
+                  My Subscription
+                </CardTitle>
+                <CardDescription className="text-purple-700">
+                  Your current plan &mdash; this is a recurring cost for your account
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-100"
+                onClick={() => {
+                  window.location.href = `/${(window.location.pathname.split('/')[1]) || 'en'}/pricing`
+                }}
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                Change Plan
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading subscription...
+              </div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <CreditCard className="h-12 w-12 mb-3 opacity-30" />
+                <p>No active subscription found</p>
+                <Button
+                  variant="outline"
+                  className="mt-3 gap-2"
+                  onClick={() => {
+                    window.location.href = `/${(window.location.pathname.split('/')[1]) || 'en'}/pricing`
+                  }}
+                >
+                  <ArrowUpRight className="h-4 w-4" />
+                  Subscribe Now
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {items.map((subscription) => (
+                  <Card key={subscription._id} className="border-2 border-purple-200 bg-gradient-to-br from-purple-50/50 to-white">
+                    <CardContent className="pt-6">
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Plan Name</p>
+                            <p className="text-xl font-bold text-purple-900">{subscription.plan_name || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Billing Cycle</p>
+                            <Badge variant="outline" className="bg-white">
+                              {subscription.billing_cycle || 'monthly'}
+                            </Badge>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Monthly Cost</p>
+                            <p className="text-2xl font-bold text-violet-700">
+                              {formatter.format(subscription.price_per_month || 0)}/month
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Status</p>
+                            <Badge
+                              className={
+                                subscription.status === 'active'
+                                  ? 'bg-green-100 text-green-700 border-green-300'
+                                  : subscription.status === 'cancelled'
+                                    ? 'bg-gray-100 text-gray-700 border-gray-300'
+                                    : 'bg-yellow-100 text-yellow-700 border-yellow-300'
+                              }
+                            >
+                              {subscription.status || 'unknown'}
+                            </Badge>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Payment Status</p>
+                            <Badge
+                              className={
+                                subscription.payment_status === 'succeeded' || subscription.payment_status === 'paid'
+                                  ? 'bg-green-100 text-green-700 border-green-300'
+                                  : subscription.payment_status === 'failed'
+                                    ? 'bg-red-100 text-red-700 border-red-300'
+                                    : 'bg-yellow-100 text-yellow-700 border-yellow-300'
+                              }
+                            >
+                              {subscription.payment_status || 'pending'}
+                            </Badge>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Next Payment</p>
+                            <p className="text-sm font-medium">
+                              {subscription.next_payment_date
+                                ? new Date(subscription.next_payment_date).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })
+                                : 'N/A'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Grain Sales Payments - Admin Only */}
         {(user?.role === "admin" || user?.role === "super_admin") && (
@@ -557,7 +767,14 @@ export default function PaymentsPage() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => handlePaymentGateway(b, amount, buyerName)}
+                                      onClick={() => {
+                                        setSelectedBatchForPayment(b)
+                                        setPaymentData({
+                                          ...paymentData,
+                                          amount: amount
+                                        })
+                                        setIsRecordPaymentDialogOpen(true)
+                                      }}
                                       className="h-8 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 text-green-700 border-green-200"
                                     >
                                       <Smartphone className="h-3.5 w-3.5 mr-1" />
@@ -648,6 +865,74 @@ export default function PaymentsPage() {
           </div>
         </div>
       </div>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <DollarSign className="h-5 w-5" />
+              Record Buyer Payment
+            </DialogTitle>
+            <DialogDescription>
+              Record an offline payment received from {selectedBatchForPayment?.dispatch_details?.buyer_name || selectedBatchForPayment?.buyer_id?.name || 'Buyer'} for batch {selectedBatchForPayment?.batch_id}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Amount (PKR)</Label>
+              <Input
+                type="number"
+                value={paymentData.amount}
+                onChange={(e) => setPaymentData({ ...paymentData, amount: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select value={paymentData.method} onValueChange={(v) => setPaymentData({ ...paymentData, method: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="jazzcash">JazzCash</SelectItem>
+                  <SelectItem value="easypaisa">Easypaisa</SelectItem>
+                  <SelectItem value="raast">Raast (IBFT)</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="sadapay">SadaPay</SelectItem>
+                  <SelectItem value="nayapay">NayaPay</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Transaction ID / Reference (Optional)</Label>
+              <Input
+                placeholder="e.g. TID123456789"
+                value={paymentData.transaction_id}
+                onChange={(e) => setPaymentData({ ...paymentData, transaction_id: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                placeholder="Add any internal payment notes..."
+                value={paymentData.notes}
+                onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRecordPaymentDialogOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleRecordPayment}
+            >
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AnimatedBackground>
   )
 }
+

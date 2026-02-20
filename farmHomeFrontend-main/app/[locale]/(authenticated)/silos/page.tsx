@@ -9,10 +9,11 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye } from 'lucide-react'
+import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye, Wifi, WifiOff } from 'lucide-react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { AnimatedBackground } from "@/components/animations/MotionGraphics"
+import { useFirebaseSensorData } from '@/hooks/useFirebaseSensor'
 
 interface Silo {
   _id: string
@@ -47,6 +48,7 @@ export default function SilosPage() {
   const [silos, setSilos] = useState<Silo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const firebaseSensor = useFirebaseSensorData()
 
   // Dialog states
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -63,8 +65,7 @@ export default function SilosPage() {
     warehouse_id: '',
     capacity_kg: '',
     location: {
-      description: '',
-      address: ''
+      description: ''
     },
     status: 'active'
   })
@@ -111,9 +112,9 @@ export default function SilosPage() {
     let mounted = true
       ; (async () => {
         await Promise.all([fetchSilos(), fetchWarehouses()])
-      if (!mounted) return
-      setLoading(false)
-    })()
+        if (!mounted) return
+        setLoading(false)
+      })()
     return () => {
       mounted = false
     }
@@ -146,18 +147,18 @@ export default function SilosPage() {
         };
         error?: string;
       }
-      
+
       interface ErrorResponse {
         error?: string;
       }
-      
+
       const res = await api.post('/api/silos', dataToSend)
       console.log('API Response:', res)
 
       if (res.ok && res.data) {
         const response = res.data as SiloApiResponse;
         const created = response.silo;
-        
+
         // If server auto-created a warehouse, refresh warehouse list so we can show its friendly ID
         if (response.createdWarehouse) {
           await fetchWarehouses()
@@ -236,8 +237,7 @@ export default function SilosPage() {
       warehouse_id: '',
       capacity_kg: '',
       location: {
-        description: '',
-        address: ''
+        description: ''
       },
       status: 'active'
     })
@@ -253,8 +253,7 @@ export default function SilosPage() {
       warehouse_id: silo.warehouse_id || '',
       capacity_kg: silo.capacity_kg.toString(),
       location: {
-        description: silo.location?.description || '',
-        address: silo.location?.address || ''
+        description: silo.location?.description || ''
       },
       status: silo.status || 'active'
     }))
@@ -291,7 +290,7 @@ export default function SilosPage() {
       humidity: { min: 40, max: 70, critical_max: 80 },
       co2: { max: 1000, critical_max: 5000 }
     }
-    
+
     if (type === 'co2') {
       const threshold = thresholds.co2
       if (value > threshold.critical_max) return { status: 'critical', color: 'text-red-600' }
@@ -324,609 +323,611 @@ export default function SilosPage() {
     <AnimatedBackground className="min-h-screen">
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Silo Management</h1>
-          <p className="text-muted-foreground">
-            Monitor storage facilities and environmental conditions
-          </p>
-        </div>
-        <Button className="gap-2 bg-black hover:bg-gray-800 text-white" onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Add New Silo
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Silos</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{silos.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Storage facilities
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Capacity</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {silos.reduce((sum, silo) => sum + silo.capacity_kg, 0).toLocaleString()} kg
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Silo Management</h1>
+              <p className="text-muted-foreground">
+                Monitor storage facilities and environmental conditions
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Maximum storage
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Current Stock</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {silos.reduce((sum, silo) => sum + (silo.current_occupancy_kg || 0), 0).toLocaleString()} kg
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Grain in storage
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Warehouses</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{new Set(silos.map(silo => silo.warehouse_id)).size}</div>
-            <p className="text-xs text-muted-foreground">
-              Total warehouses
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search */}
-      <Card>
-        {/* <CardHeader>
-          <CardTitle>Search Silos</CardTitle>
-        </CardHeader> */}
-        <CardContent>
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by silo name or ID  "
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
-            />
+            <Button className="gap-2 bg-black hover:bg-gray-800 text-white" onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add New Silo
+            </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Silos Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredSilos.map((silo) => {
-          const occupancyPercentage = getOccupancyPercentage(silo.current_occupancy_kg || 0, silo.capacity_kg)
-          const tempValue = silo.current_conditions?.temperature?.value
-          const humValue = silo.current_conditions?.humidity?.value
-          const co2Value = silo.current_conditions?.co2?.value
-          const tempStatus = getConditionStatus(typeof tempValue === 'number' ? tempValue : 0, 'temperature')
-          const humidityStatus = getConditionStatus(typeof humValue === 'number' ? humValue : 0, 'humidity')
-          const co2Status = getConditionStatus(typeof co2Value === 'number' ? co2Value : 0, 'co2')
-
-          return (
-            <Card key={silo._id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{silo.name}</CardTitle>
-                  <Badge className={getStatusBadge(silo.status || 'active')}>
-                    {(silo.status || 'active').charAt(0).toUpperCase() + (silo.status || 'active').slice(1)}
-                  </Badge>
-                </div>
-                <CardDescription>{silo.silo_id}</CardDescription>
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Silos</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent className="space-y-4">
-
-
-                {/* Current Batch */}
-                {silo.current_batch_id && (
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <div className="text-sm font-medium text-blue-900">Current Batch</div>
-                    <div className="text-sm text-blue-700">
-                      {silo.current_batch_id.batch_id} - {silo.current_batch_id.grain_type}
-                    </div>
-                  </div>
-                )}
-
-                {/* Environmental Conditions */}
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Environmental Conditions</div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Thermometer className="h-4 w-4" />
-                      <span>Temperature</span>
-                    </div>
-                    <span className={tempStatus.color}>
-                      {typeof tempValue === 'number' ? `${tempValue}°C` : 'N/A'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Droplets className="h-4 w-4" />
-                      <span>Humidity</span>
-                    </div>
-                    <span className={humidityStatus.color}>
-                      {typeof humValue === 'number' ? `${humValue}%` : 'N/A'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Wind className="h-4 w-4" />
-                      <span>CO₂</span>
-                    </div>
-                    <span className={co2Status.color}>
-                      {typeof co2Value === 'number' ? `${co2Value} ppm` : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-2 justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => openViewDialog(silo)}
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    View
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => openEditDialog(silo)}
-                  >
-                    <Edit className="h-4 w-4 mr-1" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 text-red-600 hover:text-red-700"
-                    onClick={() => openDeleteDialog(silo)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
-                  </Button>
-                </div>
+              <CardContent>
+                <div className="text-2xl font-bold">{silos.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  Storage facilities
+                </p>
               </CardContent>
             </Card>
-          )
-        })}
-      </div>
 
-      {filteredSilos.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500">No silos found matching your search</p>
-          </CardContent>
-        </Card>
-      )}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Capacity</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {silos.reduce((sum, silo) => sum + silo.capacity_kg, 0).toLocaleString()} kg
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Maximum storage
+                </p>
+              </CardContent>
+            </Card>
 
-      {/* Add Silo Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden">
-          <div className="max-h-[80vh] overflow-y-auto">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Current Stock</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {silos.reduce((sum, silo) => sum + (silo.current_occupancy_kg || 0), 0).toLocaleString()} kg
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Grain in storage
+                </p>
+              </CardContent>
+            </Card>
 
-            <div className="bg-black px-6 py-4 text-white">
-              <DialogHeader className="text-left">
-                <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-                  <Plus className="h-6 w-6" />
-                  Add New Silo
-                </DialogTitle>
-                <DialogDescription className="text-green-100">
-                  Create a new grain storage silo 
-                </DialogDescription>
-              </DialogHeader>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="warehouse" className="text-sm font-medium">Warehouse</Label>
-                  <Select value={formData.warehouse_id} onValueChange={(value) => setFormData({ ...formData, warehouse_id: value })}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select warehouse" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((w) => (
-                        <SelectItem key={w._id} value={w._id}>{w.name ? `${w.name} (${w.warehouse_id})` : w.warehouse_id}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {warehouses.length === 0 && (
-                    <p className="text-xs text-red-600 mt-1">No accessible warehouses found. If you proceed, the system will auto-create a default warehouse for you (if your subscription plan allows).</p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="capacity_kg" className="text-sm font-medium">Capacity (kg)</Label>
-                  <Input
-                    id="capacity_kg"
-                    type="number"
-                    value={formData.capacity_kg}
-                    onChange={(e) => setFormData({ ...formData, capacity_kg: e.target.value })}
-                    placeholder="Enter capacity in kg"
-                    className="mt-1"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="status" className="text-sm font-medium">Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="offline">Offline</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="location_description" className="text-sm font-medium">Location</Label>
-                  <Input
-                    id="location_description"
-                    value={formData.location.description}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      location: { ...formData.location, description: e.target.value }
-                    })}
-                    placeholder="Enter location"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="location_address" className="text-sm font-medium">Address</Label>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Warehouses</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{new Set(silos.map(silo => silo.warehouse_id)).size}</div>
+                <p className="text-xs text-muted-foreground">
+                  Total warehouses
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Search */}
+          <Card>
+            {/* <CardHeader>
+          <CardTitle>Search Silos</CardTitle>
+        </CardHeader> */}
+            <CardContent>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="location_address"
-                  value={formData.location.address}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    location: { ...formData.location, address: e.target.value }
-                  })}
-                  placeholder="Enter address"
-                  className="mt-1"
+                  placeholder="Search by silo name or ID  "
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
                 />
               </div>
-              <div className="text-sm text-muted-foreground">
-                <p><strong>Silo ID and Name</strong> will be auto-generated by the system and cannot be set or changed by users.</p>
-                <p className="mt-1">If you need a specific identifier, administrators can reference the generated values after creation.</p>
-              </div>
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  Cancel
-                </Button>
+            </CardContent>
+          </Card>
 
-                <Button onClick={handleAddSilo} className="bg-black hover:bg-gray-800 text-white" disabled={!formData.capacity_kg || (warehouses.length > 0 && !formData.warehouse_id)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Silo
-                </Button>
-              </DialogFooter>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          {/* Silos Grid */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredSilos.map((silo) => {
+              const occupancyPercentage = getOccupancyPercentage(silo.current_occupancy_kg || 0, silo.capacity_kg)
 
-      {/* Edit Silo Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden">
-          <div className="max-h-[80vh] overflow-y-auto">
+              // Use Firebase real-time data, fallback to silo.current_conditions
+              const liveTemp = firebaseSensor.connected && firebaseSensor.temperature !== null
+                ? firebaseSensor.temperature
+                : null
+              const liveHum = firebaseSensor.connected && firebaseSensor.humidity !== null
+                ? firebaseSensor.humidity
+                : null
+              const liveCo2 = firebaseSensor.connected && firebaseSensor.tvoc_ppb !== null
+                ? firebaseSensor.tvoc_ppb
+                : null
 
-            <div className="bg-black px-6 py-4 text-white">
-              <DialogHeader className="text-left">
-                <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-                  <Edit className="h-6 w-6" />
-                  Edit Silo
-                </DialogTitle>
-                <DialogDescription className="text-blue-100">
-                  Update silo details
-                </DialogDescription>
-              </DialogHeader>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit_silo_id" className="text-sm font-medium">Silo ID</Label>
-                  <Input
-                    id="edit_silo_id"
-                    value={formData.silo_id}
-                    disabled
-                    placeholder="(generated)"
-                    className="mt-1 bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit_name" className="text-sm font-medium">Silo Name</Label>
-                  <Input
-                    id="edit_name"
-                    value={formData.name}
-                    disabled
-                    placeholder="(generated)"
-                    className="mt-1 bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit_capacity_kg" className="text-sm font-medium">Capacity (kg)</Label>
-                  <Input
-                    id="edit_capacity_kg"
-                    type="number"
-                    value={formData.capacity_kg}
-                    onChange={(e) => setFormData({ ...formData, capacity_kg: e.target.value })}
-                    placeholder="Enter capacity in kg"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit_status" className="text-sm font-medium">Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="offline">Offline</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="edit_location_description" className="text-sm font-medium">Location Description</Label>
-                  <Input
-                    id="edit_location_description"
-                    value={formData.location.description}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      location: { ...formData.location, description: e.target.value }
-                    })}
-                    placeholder="Enter location description"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit_location_address" className="text-sm font-medium">Address</Label>
-                  <Input
-                    id="edit_location_address"
-                    value={formData.location.address}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      location: { ...formData.location, address: e.target.value }
-                    })}
-                    placeholder="Enter address"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                  Cancel
-                </Button>
+              const tempValue = liveTemp ?? silo.current_conditions?.temperature?.value
+              const humValue = liveHum ?? silo.current_conditions?.humidity?.value
+              const co2Value = liveCo2 ?? silo.current_conditions?.co2?.value
 
-                <Button onClick={handleEditSilo} className="bg-black hover:bg-gray-800 text-white">
-                  <Edit className="h-4 w-4 mr-2" />
-                  Update Silo
-                </Button>
-              </DialogFooter>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+              const tempStatus = getConditionStatus(typeof tempValue === 'number' ? tempValue : 0, 'temperature')
+              const humidityStatus = getConditionStatus(typeof humValue === 'number' ? humValue : 0, 'humidity')
+              const co2Status = getConditionStatus(typeof co2Value === 'number' ? co2Value : 0, 'co2')
 
-      {/* View Silo Dialog */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Silo Details - {selectedSilo?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Complete information about this grain silo
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSilo && (
-            <div className="space-y-6 py-4">
-              {/* Status Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Capacity</p>
-                        <p className="text-lg font-semibold">{selectedSilo.capacity_kg.toLocaleString()} kg</p>
-                      </div>
-                      <Package className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Current Stock</p>
-                        <p className="text-lg font-semibold">{(selectedSilo.current_occupancy_kg || 0).toLocaleString()} kg</p>
-                      </div>
-                      <Package className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Utilization</p>
-                        <p className="text-lg font-semibold">{Math.round(((selectedSilo.current_occupancy_kg || 0) / selectedSilo.capacity_kg) * 100)}%</p>
-                      </div>
-                      <Package className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Main Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
+              return (
+                <Card key={silo._id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
-                    <CardTitle className="text-lg">Silo Information</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{silo.name}</CardTitle>
+                      <Badge className={getStatusBadge(silo.status || 'active')}>
+                        {(silo.status || 'active').charAt(0).toUpperCase() + (silo.status || 'active').slice(1)}
+                      </Badge>
+                    </div>
+                    <CardDescription>{silo.silo_id}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div>
-                      <Label className="font-semibold">Silo ID</Label>
-                      <p className="text-sm text-muted-foreground font-mono">{selectedSilo.silo_id}</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Name</Label>
-                      <p className="text-sm text-muted-foreground">{selectedSilo.name}</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Location</Label>
-                      <p className="text-sm text-muted-foreground">{selectedSilo.location?.description || 'N/A'}</p>
-                      {selectedSilo.location?.address && (
-                        <p className="text-sm text-muted-foreground mt-1">{selectedSilo.location.address}</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Type</Label>
-                      <p className="text-sm text-muted-foreground">{selectedSilo.type || 'N/A'}</p>
-                    </div>
-                  </CardContent>
-                </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Current Status</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label className="font-semibold">Current Batch</Label>
-                      <p className="text-sm text-muted-foreground">
-                        {typeof selectedSilo.current_batch_id === 'string'
-                          ? selectedSilo.current_batch_id
-                          : selectedSilo.current_batch_id?.batch_id || 'Empty'}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Available Space</Label>
-                      <p className="text-sm text-muted-foreground">{(selectedSilo.capacity_kg - (selectedSilo.current_occupancy_kg || 0)).toLocaleString()} kg</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Last Updated</Label>
-                      <p className="text-sm text-muted-foreground">{selectedSilo.updated_at ? new Date(selectedSilo.updated_at).toLocaleDateString() : 'N/A'}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
 
-              {/* Current Batch Section */}
-              {selectedSilo.current_batch_id && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Current Batch</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 rounded-full">
-                        <Package className="h-4 w-4 text-green-600" />
+                    {/* Current Batch */}
+                    {silo.current_batch_id && (
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="text-sm font-medium text-blue-900">Current Batch</div>
+                        <div className="text-sm text-blue-700">
+                          {silo.current_batch_id.batch_id} - {silo.current_batch_id.grain_type}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-green-800">{selectedSilo.current_batch_id.batch_id}</p>
-                        <p className="text-sm text-green-600">{selectedSilo.current_batch_id.grain_type}</p>
+                    )}
+
+                    {/* Environmental Conditions */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">Environmental Conditions</div>
+                        {firebaseSensor.connected ? (
+                          <div className="flex items-center gap-1 text-xs text-green-600">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                            </span>
+                            Live
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-xs text-gray-400">
+                            <WifiOff className="h-3 w-3" />
+                            Offline
+                          </div>
+                        )}
                       </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Thermometer className="h-4 w-4" />
+                          <span>Temperature</span>
+                        </div>
+                        <span className={tempStatus.color}>
+                          {typeof tempValue === 'number' ? `${tempValue.toFixed(1)}°C` : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Droplets className="h-4 w-4" />
+                          <span>Humidity</span>
+                        </div>
+                        <span className={humidityStatus.color}>
+                          {typeof humValue === 'number' ? `${humValue.toFixed(1)}%` : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Wind className="h-4 w-4" />
+                          <span>CO₂</span>
+                        </div>
+                        <span className={co2Status.color}>
+                          {typeof co2Value === 'number' ? `${co2Value.toFixed(1)} ppb` : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-2 justify-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => openViewDialog(silo)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => openEditDialog(silo)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-red-600 hover:text-red-700"
+                        onClick={() => openDeleteDialog(silo)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              )}
-            </div>
+              )
+            })}
+          </div>
+
+          {filteredSilos.length === 0 && (
+            <Card>
+              <CardContent className="text-center py-12">
+                <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-gray-500">No silos found matching your search</p>
+              </CardContent>
+            </Card>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Delete Silo Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-              Delete Silo
-            </DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. This will permanently delete the silo and all associated data.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSilo && (
-            <div className="py-4">
-              <Card className={`border-2 ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'border-red-200 bg-red-50' : 'border-orange-200 bg-orange-50'}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'bg-red-100' : 'bg-orange-100'}`}>
-                      <Package className={`h-4 w-4 ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'text-red-600' : 'text-orange-600'}`} />
+          {/* Add Silo Dialog */}
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogContent className="max-w-2xl p-0 overflow-hidden">
+              <div className="max-h-[80vh] overflow-y-auto">
+
+                <div className="bg-black px-6 py-4 text-white">
+                  <DialogHeader className="text-left">
+                    <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                      <Plus className="h-6 w-6" />
+                      Add New Silo
+                    </DialogTitle>
+                    <DialogDescription className="text-green-100">
+                      Create a new grain storage silo
+                    </DialogDescription>
+                  </DialogHeader>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="warehouse" className="text-sm font-medium">Warehouse</Label>
+                      <Select value={formData.warehouse_id} onValueChange={(value) => setFormData({ ...formData, warehouse_id: value })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select warehouse" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {warehouses.map((w) => (
+                            <SelectItem key={w._id} value={w._id}>{w.name ? `${w.name} (${w.warehouse_id})` : w.warehouse_id}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {warehouses.length === 0 && (
+                        <p className="text-xs text-red-600 mt-1">No accessible warehouses found. If you proceed, the system will auto-create a default warehouse for you (if your subscription plan allows).</p>
+                      )}
                     </div>
                     <div>
-                      <p className={`font-semibold ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'text-red-800' : 'text-orange-800'}`}>
-                        {selectedSilo.name}
-                      </p>
-                      <p className={`text-sm ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'text-red-600' : 'text-orange-600'}`}>
-                        ID: {selectedSilo.silo_id} • {selectedSilo.capacity_kg.toLocaleString()} kg capacity
-                      </p>
-                      {(selectedSilo.current_occupancy_kg || 0) > 0 && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">
-                          ⚠️ Contains {(selectedSilo.current_occupancy_kg || 0).toLocaleString()} kg of grain
-                        </p>
-                      )}
+                      <Label htmlFor="capacity_kg" className="text-sm font-medium">Capacity (kg)</Label>
+                      <Input
+                        id="capacity_kg"
+                        type="number"
+                        value={formData.capacity_kg}
+                        onChange={(e) => setFormData({ ...formData, capacity_kg: e.target.value })}
+                        placeholder="Enter capacity in kg"
+                        className="mt-1"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="status" className="text-sm font-medium">Status</Label>
+                      <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="offline">Offline</SelectItem>
+                          <SelectItem value="maintenance">Maintenance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="location_description" className="text-sm font-medium">Location</Label>
+                      <Input
+                        id="location_description"
+                        value={formData.location.description}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          location: { ...formData.location, description: e.target.value }
+                        })}
+                        placeholder="Enter location"
+                        className="mt-1"
+                      />
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteSilo}
-              disabled={(selectedSilo?.current_occupancy_kg || 0) > 0}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Silo
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                  {/* Address input removed as requested */}
+                  <div className="text-sm text-muted-foreground">
+                    <p><strong>Silo ID and Name</strong> will be auto-generated by the system and cannot be set or changed by users.</p>
+
+                  </div>
+                  <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                      Cancel
+                    </Button>
+
+                    <Button onClick={handleAddSilo} className="bg-black hover:bg-gray-800 text-white" disabled={!formData.capacity_kg || (warehouses.length > 0 && !formData.warehouse_id)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Silo
+                    </Button>
+                  </DialogFooter>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Silo Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-2xl p-0 overflow-hidden">
+              <div className="max-h-[80vh] overflow-y-auto">
+
+                <div className="bg-black px-6 py-4 text-white">
+                  <DialogHeader className="text-left">
+                    <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                      <Edit className="h-6 w-6" />
+                      Edit Silo
+                    </DialogTitle>
+                    <DialogDescription className="text-blue-100">
+                      Update silo details
+                    </DialogDescription>
+                  </DialogHeader>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="edit_silo_id" className="text-sm font-medium">Silo ID</Label>
+                      <Input
+                        id="edit_silo_id"
+                        value={formData.silo_id}
+                        disabled
+                        placeholder="(generated)"
+                        className="mt-1 bg-gray-50"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_name" className="text-sm font-medium">Silo Name</Label>
+                      <Input
+                        id="edit_name"
+                        value={formData.name}
+                        disabled
+                        placeholder="(generated)"
+                        className="mt-1 bg-gray-50"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_capacity_kg" className="text-sm font-medium">Capacity (kg)</Label>
+                      <Input
+                        id="edit_capacity_kg"
+                        type="number"
+                        value={formData.capacity_kg}
+                        onChange={(e) => setFormData({ ...formData, capacity_kg: e.target.value })}
+                        placeholder="Enter capacity in kg"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_status" className="text-sm font-medium">Status</Label>
+                      <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="offline">Offline</SelectItem>
+                          <SelectItem value="maintenance">Maintenance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_location_description" className="text-sm font-medium">Location Description</Label>
+                      <Input
+                        id="edit_location_description"
+                        value={formData.location.description}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          location: { ...formData.location, description: e.target.value }
+                        })}
+                        placeholder="Enter location description"
+                        className="mt-1"
+                      />
+                    </div>
+                    {/* Address input removed as requested */}
+                  </div>
+                  <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                      Cancel
+                    </Button>
+
+                    <Button onClick={handleEditSilo} className="bg-black hover:bg-gray-800 text-white">
+                      <Edit className="h-4 w-4 mr-2" />
+                      Update Silo
+                    </Button>
+                  </DialogFooter>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* View Silo Dialog */}
+          <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Silo Details - {selectedSilo?.name}
+                </DialogTitle>
+                <DialogDescription>
+                  Complete information about this grain silo
+                </DialogDescription>
+              </DialogHeader>
+              {selectedSilo && (
+                <div className="space-y-6 py-4">
+                  {/* Status Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Capacity</p>
+                            <p className="text-lg font-semibold">{selectedSilo.capacity_kg.toLocaleString()} kg</p>
+                          </div>
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Current Stock</p>
+                            <p className="text-lg font-semibold">{(selectedSilo.current_occupancy_kg || 0).toLocaleString()} kg</p>
+                          </div>
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Utilization</p>
+                            <p className="text-lg font-semibold">{Math.round(((selectedSilo.current_occupancy_kg || 0) / selectedSilo.capacity_kg) * 100)}%</p>
+                          </div>
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Main Details Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Silo Information</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <Label className="font-semibold">Silo ID</Label>
+                          <p className="text-sm text-muted-foreground font-mono">{selectedSilo.silo_id}</p>
+                        </div>
+                        <div>
+                          <Label className="font-semibold">Name</Label>
+                          <p className="text-sm text-muted-foreground">{selectedSilo.name}</p>
+                        </div>
+                        <div>
+                          <Label className="font-semibold">Location</Label>
+                          <p className="text-sm text-muted-foreground">{selectedSilo.location?.description || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <Label className="font-semibold">Type</Label>
+                          <p className="text-sm text-muted-foreground">{selectedSilo.type || 'N/A'}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Current Status</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <Label className="font-semibold">Current Batch</Label>
+                          <p className="text-sm text-muted-foreground">
+                            {typeof selectedSilo.current_batch_id === 'string'
+                              ? selectedSilo.current_batch_id
+                              : selectedSilo.current_batch_id?.batch_id || 'Empty'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="font-semibold">Available Space</Label>
+                          <p className="text-sm text-muted-foreground">{(selectedSilo.capacity_kg - (selectedSilo.current_occupancy_kg || 0)).toLocaleString()} kg</p>
+                        </div>
+                        <div>
+                          <Label className="font-semibold">Last Updated</Label>
+                          <p className="text-sm text-muted-foreground">{selectedSilo.updated_at ? new Date(selectedSilo.updated_at).toLocaleDateString() : 'N/A'}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Current Batch Section */}
+                  {selectedSilo.current_batch_id && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Current Batch</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 rounded-full">
+                            <Package className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-green-800">{selectedSilo.current_batch_id.batch_id}</p>
+                            <p className="text-sm text-green-600">{selectedSilo.current_batch_id.grain_type}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Silo Dialog */}
+          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-600">
+                  <Trash2 className="h-5 w-5" />
+                  Delete Silo
+                </DialogTitle>
+                <DialogDescription>
+                  This action cannot be undone. This will permanently delete the silo and all associated data.
+                </DialogDescription>
+              </DialogHeader>
+              {selectedSilo && (
+                <div className="py-4">
+                  <Card className={`border-2 ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'border-red-200 bg-red-50' : 'border-orange-200 bg-orange-50'}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'bg-red-100' : 'bg-orange-100'}`}>
+                          <Package className={`h-4 w-4 ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'text-red-600' : 'text-orange-600'}`} />
+                        </div>
+                        <div>
+                          <p className={`font-semibold ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'text-red-800' : 'text-orange-800'}`}>
+                            {selectedSilo.name}
+                          </p>
+                          <p className={`text-sm ${(selectedSilo.current_occupancy_kg || 0) > 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                            ID: {selectedSilo.silo_id} • {selectedSilo.capacity_kg.toLocaleString()} kg capacity
+                          </p>
+                          {(selectedSilo.current_occupancy_kg || 0) > 0 && (
+                            <p className="text-xs text-red-500 mt-1 font-medium">
+                              ⚠️ Contains {(selectedSilo.current_occupancy_kg || 0).toLocaleString()} kg of grain
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteSilo}
+                  disabled={(selectedSilo?.current_occupancy_kg || 0) > 0}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Silo
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </AnimatedBackground>
