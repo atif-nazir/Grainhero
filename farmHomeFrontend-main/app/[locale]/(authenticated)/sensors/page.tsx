@@ -585,46 +585,46 @@ export default function SensorsPage() {
         </Card>
       </div>
 
-          {/* Filters */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Filter Sensors</CardTitle>
-              <CardDescription>Search and filter IoT sensor devices</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4 flex-wrap">
-                <div className="flex-1 min-w-[200px]">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Enter sensor name or device ID to search..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="offline">Offline</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                    <SelectItem value="error">Error</SelectItem>
-                  </SelectContent>
-                </Select>
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filter Sensors</CardTitle>
+          <CardDescription>Search and filter IoT sensor devices</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Enter sensor name or device ID to search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="offline">Offline</SelectItem>
+                <SelectItem value="maintenance">Maintenance</SelectItem>
+                <SelectItem value="error">Error</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Sensors Grid */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredSensors.map((sensor) => {
-              const statusConfig = getStatusBadge(sensor.status)
-              const StatusIcon = statusConfig.icon
+      {/* Sensors Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {filteredSensors.map((sensor) => {
+          const statusConfig = getStatusBadge(sensor.status)
+          const StatusIcon = statusConfig.icon
 
           return (
             <Card key={sensor._id} className="hover:shadow-lg transition-shadow">
@@ -712,16 +712,14 @@ export default function SensorsPage() {
         })}
       </div>
 
-          {filteredSensors.length === 0 && (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Smartphone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-500">No sensors found matching your filters</p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-    </AnimatedBackground>
+      {filteredSensors.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Smartphone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-500">No sensors found matching your filters</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }

@@ -155,14 +155,14 @@ const aiAnalyticsNav = [
     badge: "AI"
   },
   // COMMENTED OUT - Not in core 10 modules
-  // {
-  //   name: "ai-predictions",
-  //   label: "AI Predictions",
-  //   href: "/ai-predictions",
-  //   icon: Sparkles,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "AI"
-  // },
+  {
+    name: "ai-predictions",
+    label: "AI Predictions",
+    href: "/ai-predictions",
+    icon: Sparkles,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "AI"
+  },
   // {
   //   name: "spoilage-analysis",
   //   label: "Spoilage Analysis",
