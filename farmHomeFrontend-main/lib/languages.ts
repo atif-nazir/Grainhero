@@ -14,6 +14,7 @@ export const languages = {
       marketplace: "Marketplace",
       users: "Users",
       alerts: "Alerts",
+      sensors: "Sensors",
       settings: "Settings",
       logout: "Logout",
 
@@ -671,6 +672,7 @@ export const languages = {
       marketplace: "مارکیٹ",
       users: "صارفین",
       alerts: "الرٹس",
+      sensors: "سینسرز",
       settings: "ترتیبات",
       logout: "لاگ آؤٹ",
 
@@ -872,4 +874,6 @@ export const languages = {
 }
 
 export type LanguageCode = keyof typeof languages
-export type TranslationKey = keyof typeof languages.en.translations | `Sidebar.${keyof typeof languages.en.translations.Sidebar}`;
+export type TranslationKey = {
+  [K in keyof typeof languages.en.translations]: K extends string ? K : never;
+}[keyof typeof languages.en.translations];

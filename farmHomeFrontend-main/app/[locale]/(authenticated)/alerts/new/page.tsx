@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -16,7 +16,7 @@ interface Alert {
   description: string;
 }
 
-function AlertForm({ onSubmit, loading, submitLabel }: { onSubmit: (data: Alert) => void, loading: boolean, submitLabel: string }) {
+function AlertForm({ onSubmit, loading }: { onSubmit: (data: Alert) => void, loading: boolean }) {
   const t = useTranslations('AlertsNewPage');
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -74,7 +74,7 @@ export default function NewAlertPage() {
     })
       .then(async (res) => {
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
+          await res.json().catch(() => ({}));
           throw new Error(t('errorFailedCreate'));
         }
         return res.json();
@@ -82,7 +82,7 @@ export default function NewAlertPage() {
       .then(() => {
         router.push("/alerts");
       })
-      .catch((err) => {
+      .catch(() => {
         setError(t('errorCreatingAlert'));
         setLoading(false);
       });
@@ -109,7 +109,7 @@ export default function NewAlertPage() {
         </CardHeader>
         <CardContent>
           {error && <div className="text-red-500 mb-2">{error}</div>}
-          <AlertForm onSubmit={handleCreate} loading={loading} submitLabel={t('addAlert')} />
+          <AlertForm onSubmit={handleCreate} loading={loading} />
         </CardContent>
       </Card>
     </div>

@@ -76,7 +76,7 @@ export default function NewMaintenanceRecordPage() {
         const error = await res.json().catch(() => ({}))
         toast.error(error?.message || 'Failed to create maintenance record')
       }
-    } catch (err) {
+    } catch {
       toast.error('Network error')
     } finally {
       setIsLoading(false)

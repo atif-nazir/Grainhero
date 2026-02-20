@@ -14,8 +14,8 @@ import {
   Key, 
   Eye, 
   EyeOff, 
-  AlertTriangle, 
-  CheckCircle, 
+  //AlertTriangle, 
+  //CheckCircle, 
   Clock,
   Smartphone,
   Monitor,
@@ -24,7 +24,7 @@ import {
   Trash2,
   RefreshCw
 } from 'lucide-react'
-import { api } from '@/lib/api'
+//import { api } from '@/lib/api'
 
 interface SecurityLog {
   _id: string

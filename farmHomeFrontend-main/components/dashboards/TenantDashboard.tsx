@@ -21,6 +21,7 @@ import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { TeamInvitationForm } from "@/components/TeamInvitationForm"
 
 type DashboardResponse = {
   stats: Array<{ title: string; value: number | string }>
@@ -256,9 +257,11 @@ export function TenantDashboard() {
 
   return (
     <div className="space-y-8">
+
+
       {/* Tenant Overview Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -273,9 +276,9 @@ export function TenantDashboard() {
                 typeof planDetails.usage.users.limit === 'number' ? (tenantStats.totalUsers / planDetails.usage.users.limit) * 100 : 0
             } className="mt-2" />
           </CardContent>
-        </Card>
+        </Card> */}
 
-        <Card>
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Grain Batches</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
@@ -286,31 +289,21 @@ export function TenantDashboard() {
               {recentBatches.length > 0 ? `${recentBatches.length} recent` : 'No batches yet'}
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
 
-        <Card>
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${tenantStats.totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">PKR {tenantStats.totalRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               +15% from last month
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Health</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tenantStats.systemHealth}%</div>
-            <Progress value={tenantStats.systemHealth} className="mt-2" />
-          </CardContent>
-        </Card>
       </div>
 
       {/* Critical Alerts - Only show if there are actual critical issues */}

@@ -169,6 +169,13 @@ class RealTimeDataService extends EventEmitter {
     }
 
     /**
+     * Backward-compatible wrapper
+     */
+    processQueue() {
+        this.startQueueProcessor();
+    }
+
+    /**
      * Process individual sensor reading item
      */
     async processSensorReadingItem(readingData) {

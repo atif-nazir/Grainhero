@@ -62,6 +62,7 @@ router.get("/users", auth, async (req, res) => {
     if (userRole === USER_ROLES.SUPER_ADMIN) {
       // Super admin can see all users
       if (role) query.role = role;
+      if (tenant_id) query.$or = [{ tenant_id }, { owned_tenant_id: tenant_id }];
     } else if (userRole === USER_ROLES.ADMIN) {
       // Admin can only see their team members (managers and technicians)
       query.$or = [

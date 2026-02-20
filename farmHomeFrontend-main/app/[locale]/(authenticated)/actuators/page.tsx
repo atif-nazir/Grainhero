@@ -5,217 +5,338 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Slider } from "@/components/ui/slider"
+import { toast } from "sonner"
 import {
   Fan,
-  Droplets,
+  Lightbulb,
   Volume2,
   Thermometer,
+  VolumeX,
   Power,
-  Settings,
+  PowerOff,
   Activity,
   AlertTriangle,
   CheckCircle,
-  XCircle,
-  Zap
+  Zap,
+  ThermometerSun,
+  Droplets,
+  Wind,
+  Shield,
+  Timer,
+  Radio,
+  Gauge
 } from 'lucide-react'
 
-interface IoTDevice {
-  _id: string
-  device_id: string
-  name: string
-  type: 'sensor' | 'actuator'
-  category: string
-  location: string
-  status: 'online' | 'offline'
-  current_value: number
-  unit: string
-  threshold_min?: number
-  threshold_max?: number
-  power_consumption?: number
-  last_reading?: string
-  last_activity?: string
-  human_requested_fan?: boolean
-  ml_requested_fan?: boolean
-  target_fan_speed?: number
+const backendUrl = typeof window !== 'undefined'
+  ? ((window as unknown as Record<string, unknown>).__BACKEND_URL as string) || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  : process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+
+const DEVICE_ID = process.env.NEXT_PUBLIC_DEVICE_ID || '004B12387760'
+
+interface LiveTelemetry {
+  temperature: number
+  humidity: number
+  tvoc: number
+  fanState: string
+  lidState: string
+  alarmState: string
+  mlDecision: string
+  humanOverride: boolean
+  riskIndex: number | null
+  dewPoint: number | null
+  pressure: number | null
+  timestamp: number
+  pwm_speed?: number
+  led2State?: boolean
+  led3State?: boolean
+  led4State?: boolean
 }
 
 export default function ActuatorsPage() {
-  const [devices, setDevices] = useState<IoTDevice[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('all')
-  const [selectedDevices, setSelectedDevices] = useState<string[]>([])
+  const [live, setLive] = useState<LiveTelemetry | null>(null)
+  const [pwmValue, setPwmValue] = useState(80)
+  const [sending, setSending] = useState<string | null>(null)
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
-
-  const loadDevices = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${backendUrl}/iot/devices`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setDevices(data.devices || [])
-      }
-    } catch (error) {
-      console.error('Error loading devices:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [backendUrl])
-
+  // Poll live telemetry from Firebase
   useEffect(() => {
-    loadDevices()
-  }, [loadDevices])
-
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${backendUrl}/iot/devices`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      }
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      setDevices(data.devices || [])
+    let mounted = true
+    const poll = async () => {
+      try {
+        const r = await fetch(`${backendUrl}/api/iot/silos/${DEVICE_ID}/telemetry-public`)
+        if (!r.ok || !mounted) return
+        const d = await r.json()
+        if (mounted) setLive(d)
+      } catch { }
     }
-  } catch (error) {
-    console.error('Error loading devices:', error)
-  } finally {
-    setLoading(false)
-  }
-}
+    poll()
+    const i = setInterval(poll, 2000)
+    return () => { mounted = false; clearInterval(i) }
+  }, [])
 
-const controlDevice = async (deviceId: string, action: string, value?: number) => {
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${backendUrl}/iot/devices/${deviceId}/control`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({ action, value })
-    })
+  const sendControl = useCallback(async (action: string, value?: number, extras?: Record<string, unknown>) => {
+    setSending(action)
+    try {
+      const body: Record<string, unknown> = { action }
+      if (value !== undefined) body.value = value
+      if (extras) Object.assign(body, extras)
 
-    if (response.ok) {
-      const result = await response.json()
-      console.log('Device control result:', result)
-      loadDevices() // Refresh device list
-    }
-  } catch (error) {
-    console.error('Error controlling device:', error)
-  }
-}
-
-const bulkControl = async (action: string, value?: number) => {
-  if (selectedDevices.length === 0) return
-
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${backendUrl}/iot/bulk-control`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        devices: selectedDevices,
-        action,
-        value
+      const r = await fetch(`${backendUrl}/api/iot/devices/${DEVICE_ID}/control-public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
       })
-    })
-
-    if (response.ok) {
-      const result = await response.json()
-      console.log('Bulk control result:', result)
-      setSelectedDevices([])
-      loadDevices() // Refresh device list
-    }
-  } catch (error) {
-    console.error('Error in bulk control:', error)
-  }
-}
-
-const emergencyShutdown = async () => {
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${backendUrl}/iot/emergency-shutdown`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      if (r.ok) {
+        const result = await r.json()
+        toast.success(`✅ ${result.message || action}`)
+      } else {
+        const err = await r.text().catch(() => '')
+        toast.error(`❌ Control failed: ${err || r.status}`)
       }
-    })
-
-    if (response.ok) {
-      const result = await response.json()
-      console.log('Emergency shutdown result:', result)
-      loadDevices() // Refresh device list
+    } catch (e) {
+      toast.error(`❌ Network error: ${(e as Error).message}`)
+    } finally {
+      setSending(null)
     }
-  } catch (error) {
-    console.error('Error in emergency shutdown:', error)
-  }
-}
+  }, [])
 
-const getDeviceIcon = (category: string) => {
-  switch (category) {
-    case 'ventilation': return <Fan className="h-5 w-5" />
-    case 'humidity_control': return <Droplets className="h-5 w-5" />
-    case 'alert': return <Volume2 className="h-5 w-5" />
-    case 'environmental': return <Thermometer className="h-5 w-5" />
-    default: return <Settings className="h-5 w-5" />
-  }
-}
+  const fanIsOn = live?.fanState === 'on' || live?.fanState === 'ON'
+  const lidIsOpen = live?.lidState === 'open' || live?.lidState === 'OPEN'
+  const alarmIsOn = live?.alarmState === 'on' || live?.alarmState === 'ON'
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'online': return 'bg-green-100 text-green-800'
-    case 'offline': return 'bg-red-100 text-red-800'
-    default: return 'bg-gray-100 text-gray-800'
-  }
-}
-
-const filteredDevices = devices.filter(device => {
-  if (activeTab === 'all') return true
-  if (activeTab === 'sensors') return device.type === 'sensor'
-  if (activeTab === 'actuators') return device.type === 'actuator'
-  return device.category === activeTab
-})
-
-const sensors = devices.filter(d => d.type === 'sensor')
-const actuators = devices.filter(d => d.type === 'actuator')
-const onlineDevices = devices.filter(d => d.status === 'online')
-
-return (
-  <div className="space-y-6">
-    {/* Header */}
-    <div className="flex items-center justify-between">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">IoT Device Control</h1>
-        <p className="text-gray-600">Monitor and control sensors and actuators</p>
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
+            Actuator Control Center
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Direct hardware control • Fan, LEDs, Alarm • Device {DEVICE_ID}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {live ? (
+            <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 gap-1.5 px-3 py-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live • {new Date(live.timestamp).toLocaleTimeString()}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground gap-1.5">
+              <Radio className="h-3 w-3" /> Connecting...
+            </Badge>
+          )}
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              sendControl('turn_off')
+              sendControl('alarm_off')
+              sendControl('turn_off', 0, { led: 'led2', ledState: false })
+              sendControl('turn_off', 0, { led: 'led3', ledState: false })
+              sendControl('turn_off', 0, { led: 'led4', ledState: false })
+              toast.warning('🚨 Emergency shutdown sent')
+            }}
+          >
+            <AlertTriangle className="h-4 w-4" /> Emergency Stop
+          </Button>
+        </div>
       </div>
-      <div className="flex space-x-2">
-        <Button
-          onClick={() => loadDevices()}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Activity className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
-        <Button
-          onClick={emergencyShutdown}
-          className="bg-red-600 hover:bg-red-700"
-        >
-          <AlertTriangle className="h-4 w-4 mr-2" />
-          Emergency Shutdown
-        </Button>
+
+      {/* Live Status Strip */}
+      {live && (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="rounded-xl border p-3 bg-gradient-to-br from-orange-50 to-orange-100/50">
+            <div className="text-[10px] uppercase tracking-wider text-orange-500 font-medium">Temp</div>
+            <div className="text-lg font-bold text-orange-700">{live.temperature.toFixed(1)}°C</div>
+          </div>
+          <div className="rounded-xl border p-3 bg-gradient-to-br from-blue-50 to-blue-100/50">
+            <div className="text-[10px] uppercase tracking-wider text-blue-500 font-medium">Humidity</div>
+            <div className="text-lg font-bold text-blue-700">{live.humidity.toFixed(1)}%</div>
+          </div>
+          <div className="rounded-xl border p-3 bg-gradient-to-br from-violet-50 to-violet-100/50">
+            <div className="text-[10px] uppercase tracking-wider text-violet-500 font-medium">TVOC</div>
+            <div className="text-lg font-bold text-violet-700">{live.tvoc} ppb</div>
+          </div>
+          <div className="rounded-xl border p-3 bg-gradient-to-br from-emerald-50 to-emerald-100/50">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-500 font-medium">ML</div>
+            <div className="text-lg font-bold text-emerald-700 capitalize">{live.mlDecision}</div>
+          </div>
+          <div className="rounded-xl border p-3 bg-gradient-to-br from-yellow-50 to-yellow-100/50">
+            <div className="text-[10px] uppercase tracking-wider text-yellow-600 font-medium">Override</div>
+            <div className="text-lg font-bold text-yellow-700">{live.humanOverride ? 'MANUAL' : 'AUTO'}</div>
+          </div>
+          <div className={`rounded-xl border p-3 bg-gradient-to-br ${(live.riskIndex ?? 0) > 70 ? 'from-red-50 to-red-100/50' : (live.riskIndex ?? 0) > 40 ? 'from-amber-50 to-amber-100/50' : 'from-green-50 to-green-100/50'}`}>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Risk</div>
+            <div className={`text-lg font-bold ${(live.riskIndex ?? 0) > 70 ? 'text-red-600' : (live.riskIndex ?? 0) > 40 ? 'text-amber-600' : 'text-green-600'}`}>{live.riskIndex ?? '--'}/100</div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Control Grid */}
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+
+        {/* Fan Control */}
+        <Card className={`relative overflow-hidden border-2 transition-all duration-300 ${fanIsOn ? 'border-emerald-400 shadow-lg shadow-emerald-100' : 'border-transparent hover:border-gray-200'}`}>
+          <div className={`absolute inset-0 transition-opacity duration-500 ${fanIsOn ? 'opacity-100' : 'opacity-0'}`} style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(6,182,212,0.05) 100%)' }} />
+          <CardHeader className="relative">
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <div className={`p-2 rounded-lg ${fanIsOn ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                  <Fan className={`h-5 w-5 ${fanIsOn ? 'animate-spin' : ''}`} style={fanIsOn ? { animationDuration: '1s' } : {}} />
+                </div>
+                Ventilation Fan
+              </span>
+              <Badge variant={fanIsOn ? 'default' : 'secondary'} className={fanIsOn ? 'bg-emerald-500' : ''}>
+                {fanIsOn ? 'Running' : 'Stopped'}
+              </Badge>
+            </CardTitle>
+            <CardDescription className="flex items-center gap-4 text-xs">
+              <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Lid: {lidIsOpen ? 'OPEN' : 'CLOSED'}</span>
+              <span className="flex items-center gap-1"><Gauge className="h-3 w-3" /> PWM: {live?.pwm_speed ?? 0}%</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="relative space-y-4">
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                disabled={sending === 'turn_on'}
+                onClick={() => sendControl('turn_on', pwmValue)}
+              >
+                <Power className="h-4 w-4" /> Start ({pwmValue}%)
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+                disabled={sending === 'turn_off'}
+                onClick={() => sendControl('turn_off')}
+              >
+                <PowerOff className="h-4 w-4" /> Stop
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                <span>Fan Speed</span>
+                <span className="font-bold text-foreground">{pwmValue}%</span>
+              </label>
+              <Slider
+                value={[pwmValue]}
+                onValueChange={([v]) => setPwmValue(v)}
+                min={0} max={100} step={5}
+                className="py-2"
+              />
+              <div className="flex gap-1.5">
+                {[20, 40, 60, 80, 100].map(v => (
+                  <Button key={v} variant="outline" size="sm" className="flex-1 text-xs h-7"
+                    onClick={() => { setPwmValue(v); sendControl('set_value', v) }}
+                  >{v}%</Button>
+                ))}
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs"
+              onClick={() => sendControl('auto')}
+            >
+              <Activity className="h-3 w-3" /> Return to Auto Mode
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* LED Control */}
+        <Card className="relative overflow-hidden border-2 border-transparent hover:border-gray-200 transition-all duration-300">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+                <Lightbulb className="h-5 w-5" />
+              </div>
+              Silo Lighting
+            </CardTitle>
+            <CardDescription>LED 2 (GPIO 14) · LED 3 (GPIO 12) · LED 4 (GPIO 25)</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              { key: 'led2', label: 'LED 2 — Inspection', color: 'blue', pin: 14 },
+              { key: 'led3', label: 'LED 3 — Warning', color: 'amber', pin: 12 },
+              { key: 'led4', label: 'LED 4 — Status', color: 'green', pin: 25 }
+            ].map(({ key, label, color, pin }) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-lg border bg-white/50 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`h-3 w-3 rounded-full ${live?.[`${key}State` as keyof LiveTelemetry] ? `bg-${color}-400 shadow-lg shadow-${color}-200` : 'bg-gray-300'}`} />
+                  <div>
+                    <div className="text-sm font-medium">{label}</div>
+                    <div className="text-[10px] text-muted-foreground">GPIO {pin}</div>
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                    onClick={() => sendControl('set_value', 0, { led: key, ledState: true })}
+                  ><Zap className="h-3 w-3" /> On</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-gray-200 hover:bg-gray-100"
+                    onClick={() => sendControl('set_value', 0, { led: key, ledState: false })}
+                  >Off</Button>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" size="sm" className="flex-1 text-xs gap-1 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                onClick={() => {
+                  sendControl('set_value', 0, { led: 'led2', ledState: true })
+                  sendControl('set_value', 0, { led: 'led3', ledState: true })
+                  sendControl('set_value', 0, { led: 'led4', ledState: true })
+                }}
+              ><Lightbulb className="h-3 w-3" /> All On</Button>
+              <Button variant="outline" size="sm" className="flex-1 text-xs gap-1"
+                onClick={() => {
+                  sendControl('set_value', 0, { led: 'led2', ledState: false })
+                  sendControl('set_value', 0, { led: 'led3', ledState: false })
+                  sendControl('set_value', 0, { led: 'led4', ledState: false })
+                }}
+              >All Off</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Alarm Control */}
+        <Card className={`relative overflow-hidden border-2 transition-all duration-300 ${alarmIsOn ? 'border-red-400 shadow-lg shadow-red-100' : 'border-transparent hover:border-gray-200'}`}>
+          <div className={`absolute inset-0 transition-opacity duration-500 ${alarmIsOn ? 'opacity-100' : 'opacity-0'}`} style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(249,115,22,0.04) 100%)' }} />
+          <CardHeader className="relative">
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <div className={`p-2 rounded-lg ${alarmIsOn ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-500'}`}>
+                  {alarmIsOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                </div>
+                Audible Alarm
+              </span>
+              <Badge variant={alarmIsOn ? 'destructive' : 'secondary'}>
+                {alarmIsOn ? '🔴 ACTIVE' : 'Silent'}
+              </Badge>
+            </CardTitle>
+            <CardDescription>Buzzer on GPIO 4 — alert staff of dangerous grain conditions</CardDescription>
+          </CardHeader>
+          <CardContent className="relative space-y-3">
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 gap-1.5 bg-red-600 hover:bg-red-700"
+                disabled={sending === 'alarm_on'}
+                onClick={() => sendControl('alarm_on')}
+              >
+                <Volume2 className="h-4 w-4" /> Trigger Alarm
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 gap-1.5 border-gray-200"
+                disabled={sending === 'alarm_off'}
+                onClick={() => sendControl('alarm_off')}
+              >
+                <VolumeX className="h-4 w-4" /> Silence
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              The alarm will sound continuously until silenced. Use for emergency grain safety alerts, pest detection, or unauthorized access warnings.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
 
@@ -276,199 +397,72 @@ return (
       </Card>
     </div>
 
-    {/* Bulk Control */}
-    {selectedDevices.length > 0 && (
-      <Card>
-        <CardHeader>
-          <CardTitle>Bulk Control ({selectedDevices.length} devices selected)</CardTitle>
-          <CardDescription>Control multiple devices at once</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex space-x-2">
-            <Button
-              onClick={() => bulkControl('turn_on')}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <Power className="h-4 w-4 mr-2" />
-              Turn All ON
-            </Button>
-            <Button
-              onClick={() => bulkControl('turn_off')}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              <XCircle className="h-4 w-4 mr-2" />
-              Turn All OFF
-            </Button>
-            <Button
-              onClick={() => setSelectedDevices([])}
-              variant="outline"
-            >
-              Clear Selection
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )}
+      {/* Control Mode & Safety Info */}
+      <div className="grid gap-5 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="h-4 w-4 text-indigo-600" /> Control Mode & Safety
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between p-2.5 rounded-lg border">
+              <span className="text-muted-foreground">Current Mode</span>
+              <Badge variant={live?.humanOverride ? 'default' : 'outline'} className={live?.humanOverride ? 'bg-amber-500' : ''}>
+                {live?.humanOverride ? '🧑 Manual Override' : '🤖 Auto (ML)'}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-lg border">
+              <span className="text-muted-foreground">ML Decision</span>
+              <span className="font-semibold capitalize">{live?.mlDecision || '--'}</span>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-lg border">
+              <span className="text-muted-foreground">Dew Point</span>
+              <span className="font-semibold">{live?.dewPoint ?? '--'}°C</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <Button variant="outline" size="sm" className="text-xs gap-1"
+                onClick={() => sendControl('turn_on', 40)}>
+                <Timer className="h-3 w-3" /> Gentle (40%)
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs gap-1"
+                onClick={() => sendControl('turn_on', 60)}>
+                <Wind className="h-3 w-3" /> Normal (60%)
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs gap-1"
+                onClick={() => sendControl('turn_on', 100)}>
+                <Zap className="h-3 w-3" /> Max (100%)
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-    {/* Device Tabs */}
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <TabsList>
-        <TabsTrigger value="all">All Devices</TabsTrigger>
-        <TabsTrigger value="sensors">Sensors</TabsTrigger>
-        <TabsTrigger value="actuators">Actuators</TabsTrigger>
-        <TabsTrigger value="ventilation">Ventilation</TabsTrigger>
-        <TabsTrigger value="humidity_control">Humidity</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value={activeTab} className="space-y-4">
-        {loading ? (
-          <div className="text-center py-8">Loading devices...</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredDevices.map((device) => (
-              <Card key={device._id} className="relative">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      {getDeviceIcon(device.category)}
-                      <CardTitle className="text-lg">{device.name}</CardTitle>
-                    </div>
-                    <Badge className={getStatusColor(device.status)}>
-                      {device.status}
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    {device.device_id} • {device.location}
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* Current Value */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Current Value:</span>
-                      <span className="text-lg font-bold">
-                        {device.current_value} {device.unit}
-                      </span>
-                    </div>
-
-                    {/* Thresholds for sensors */}
-                    {device.type === 'sensor' && device.threshold_min && device.threshold_max && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Min: {device.threshold_min}{device.unit}</span>
-                          <span>Max: {device.threshold_max}{device.unit}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full"
-                            // Dynamic width for sensor threshold progress bar (browser warning can be safely ignored)
-                            style={{
-                              width: `${Math.min(100, Math.max(0,
-                                ((device.current_value - device.threshold_min) /
-                                  (device.threshold_max - device.threshold_min)) * 100
-                              ))}%`
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Power consumption for actuators */}
-                    {device.type === 'actuator' && (
-                      <div className="space-y-2 py-2 border-t border-b border-gray-100">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-gray-500">Target Speed:</span>
-                          <span className="font-bold text-blue-600">{device.target_fan_speed || 0}%</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-gray-500">Mode:</span>
-                          <Badge variant="outline" className="text-[10px] uppercase">
-                            {device.human_requested_fan ? 'Manual Override' : (device.ml_requested_fan ? 'AI Controlled' : 'Idle')}
-                          </Badge>
-                        </div>
-                        {device.power_consumption && (
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium text-gray-500">Actual Power:</span>
-                            <span>{device.power_consumption}W</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Control buttons for actuators */}
-                    {device.type === 'actuator' && (
-                      <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          onClick={() => controlDevice(device._id, 'turn_on')}
-                          className="bg-green-600 hover:bg-green-700 flex-1"
-                          disabled={device.human_requested_fan}
-                        >
-                          <Power className="h-4 w-4 mr-1" />
-                          Request ON
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => controlDevice(device._id, 'turn_off')}
-                          className="bg-red-600 hover:bg-red-700 flex-1"
-                          disabled={!device.human_requested_fan && !device.ml_requested_fan}
-                        >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Request OFF
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Selection checkbox for bulk control */}
-                    {device.type === 'actuator' && (
-                      <div className="flex items-center space-x-2">
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedDevices.includes(device._id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedDevices([...selectedDevices, device._id])
-                              } else {
-                                setSelectedDevices(selectedDevices.filter(id => id !== device._id))
-                              }
-                            }}
-                            className="rounded"
-                            title="Select actuator for bulk control"
-                            aria-label="Select actuator for bulk control"
-                          />
-                        </label>
-                        <span className="text-sm text-gray-600">Select for bulk control</span>
-                      </div>
-                    )}
-
-                    {/* Last activity */}
-                    <div className="text-xs text-gray-500">
-                      Last {device.type === 'sensor' ? 'reading' : 'activity'}: {
-                        device.last_reading || device.last_activity ?
-                          (() => {
-                            const dt = device.last_reading || device.last_activity;
-                            if (typeof dt === 'string' && dt) {
-                              try {
-                                return new Date(dt).toLocaleString();
-                              } catch {
-                                return 'Never';
-                              }
-                            }
-                            return 'Never';
-                          })() :
-                          'Never'
-                      }
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </TabsContent>
-    </Tabs>
-  </div>
-
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Activity className="h-4 w-4 text-emerald-600" /> System Rules
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground">
+            <div className="flex items-start gap-2 p-2 rounded bg-blue-50 border border-blue-100">
+              <CheckCircle className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-blue-700">Lid opens before fan starts</strong> — The ESP32 state machine always opens the lid first, waits 3s, then starts the fan.</span>
+            </div>
+            <div className="flex items-start gap-2 p-2 rounded bg-amber-50 border border-amber-100">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-amber-700">Manual override expires</strong> — After 10 minutes of inactivity, control returns to ML/Auto mode automatically.</span>
+            </div>
+            <div className="flex items-start gap-2 p-2 rounded bg-red-50 border border-red-100">
+              <Shield className="h-3.5 w-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-red-700">Guardrails enforced</strong> — Ventilation is blocked if ambient RH &gt; 80%, dew point gap &lt; 1°C, or rainfall detected. The fan command will be ignored by the ESP32.</span>
+            </div>
+            <div className="flex items-start gap-2 p-2 rounded bg-emerald-50 border border-emerald-100">
+              <ThermometerSun className="h-3.5 w-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-emerald-700">Min run time</strong> — Fan runs for at least 15 seconds before it can be stopped to prevent short-cycling and protect the motor.</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
 }

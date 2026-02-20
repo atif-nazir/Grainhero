@@ -16,8 +16,8 @@ import {
     Users,
     Download,
     ArrowLeft,
-    CheckCircle2,
-    AlertCircle
+    //CheckCircle2,
+    //AlertCircle
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
@@ -97,7 +97,7 @@ export default function BillingPage() {
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
-            currency: 'USD'
+            currency: 'PKR'
         }).format(amount)
     }
 

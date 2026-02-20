@@ -32,8 +32,9 @@ async function request<T>(path: string, method: HttpMethod = "GET", body?: unkno
       return { ok: false, status: res.status, error: (payload && (payload.error || payload.msg)) || res.statusText };
     }
     return { ok: true, status: res.status, data: payload as T };
-  } catch (e: any) {
-    return { ok: false, status: 0, error: e?.message || "Network error" };
+  } catch (e: unknown) {
+    const errorMessage = e && typeof e === 'object' && 'message' in e ? (e as {message: string}).message : "Network error";
+    return { ok: false, status: 0, error: errorMessage };
   }
 }
 

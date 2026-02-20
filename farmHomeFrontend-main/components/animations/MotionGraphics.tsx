@@ -1,20 +1,20 @@
 "use client"
 
-import React, { useRef, useEffect, useState } from 'react'
-import { motion, useAnimation } from 'framer-motion'
-import { useSpring, animated, useTransition } from '@react-spring/web'
-import { useGesture } from '@use-gesture/react'
+import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
+//import { useSpring, animated, useTransition } from '@react-spring/web'
+//import { useGesture } from '@use-gesture/react'
 import { useInView as useIntersectionObserver } from 'react-intersection-observer'
-import { 
-  Sparkles, 
-  Zap, 
-  Activity, 
-  TrendingUp, 
-  Globe, 
-  Shield,
-  Database,
-  Cpu
-} from 'lucide-react'
+// import { 
+//   Sparkles, 
+//   Zap, 
+//   Activity, 
+//   TrendingUp, 
+//   Globe, 
+//   Shield,
+//   Database,
+//   Cpu
+// } from 'lucide-react'
 
 // Particle System Component
 export function ParticleSystem({ count = 50, className = "" }: { count?: number, className?: string }) {
@@ -276,7 +276,7 @@ export function AnimatedIconGrid({
   icons,
   className = ""
 }: { 
-  icons: Array<{ icon: React.ComponentType<any>, label: string, color: string }>
+  icons: Array<{ icon: React.ComponentType<React.SVGProps<SVGSVGElement>>, label: string, color: string }>
   className?: string
 }) {
   return (
@@ -328,7 +328,7 @@ export function AnimatedFeatureGrid({
   className = ""
 }: { 
   features: Array<{ 
-    icon: React.ComponentType<any>, 
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>, 
     title: string, 
     description: string,
     color: string

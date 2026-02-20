@@ -5,32 +5,29 @@ const { getRiskLevel } = require('../configs/risk-thresholds');
 const sensorReadingSchema = new mongoose.Schema({
   // Device and location references
   device_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SensorDevice',
+    type: mongoose.Schema.Types.Mixed,
     required: [true, "Device ID is required"]
   },
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"]
+    ref: 'Tenant'
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Silo',
-    required: [true, "Silo ID is required"]
+    ref: 'Silo'
   },
   batch_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'GrainBatch'
   },
-  
+
   // Timestamp
   timestamp: {
     type: Date,
     required: [true, "Timestamp is required"],
     default: Date.now
   },
-  
+
   // Sensor readings - all optional as different devices may have different sensors
   temperature: {
     value: Number,
@@ -40,7 +37,7 @@ const sensorReadingSchema = new mongoose.Schema({
       enum: ['celsius', 'fahrenheit', 'kelvin']
     }
   },
-  
+
   humidity: {
     value: {
       type: Number,
@@ -52,7 +49,7 @@ const sensorReadingSchema = new mongoose.Schema({
       default: 'percent'
     }
   },
-  
+
   co2: {
     value: {
       type: Number,
@@ -63,7 +60,7 @@ const sensorReadingSchema = new mongoose.Schema({
       default: 'ppm'
     }
   },
-  
+
   voc: {
     value: {
       type: Number,
@@ -79,7 +76,7 @@ const sensorReadingSchema = new mongoose.Schema({
     relative_30min: Number,
     rate_5min: Number
   },
-  
+
   moisture: {
     value: {
       type: Number,
@@ -126,7 +123,7 @@ const sensorReadingSchema = new mongoose.Schema({
       }
     }
   },
-  
+
   light: {
     value: {
       type: Number,
@@ -137,7 +134,7 @@ const sensorReadingSchema = new mongoose.Schema({
       default: 'lux'
     }
   },
-  
+
   pressure: {
     value: {
       type: Number,
@@ -148,7 +145,7 @@ const sensorReadingSchema = new mongoose.Schema({
       default: 'hPa'
     }
   },
-  
+
   ph: {
     value: {
       type: Number,
@@ -160,7 +157,7 @@ const sensorReadingSchema = new mongoose.Schema({
       default: 'pH'
     }
   },
-  
+
   // Device health metrics at time of reading
   device_metrics: {
     battery_level: {
@@ -177,7 +174,7 @@ const sensorReadingSchema = new mongoose.Schema({
     memory_usage: Number, // percentage
     cpu_temperature: Number
   },
-  
+
   // Data quality indicators
   quality_indicators: {
     is_valid: {
@@ -202,7 +199,7 @@ const sensorReadingSchema = new mongoose.Schema({
       moisture: Number
     }
   },
-  
+
   // Alert triggers
   alerts_triggered: [{
     sensor_type: {
@@ -297,7 +294,7 @@ const sensorReadingSchema = new mongoose.Schema({
     },
     ml_risk_score: Number,
     ml_confidence: Number,
-    
+
     // Enhanced spoilage detection metrics
     spoilage_risk_factors: {
       high_voc_relative: Boolean,
@@ -306,7 +303,7 @@ const sensorReadingSchema = new mongoose.Schema({
       condensation_risk: Boolean,
       pest_presence: Boolean
     },
-    
+
     // Smart control logic metrics
     fan_recommendation: {
       type: String,
@@ -332,7 +329,7 @@ const sensorReadingSchema = new mongoose.Schema({
     storage_days: Number,
     notes: String
   },
-  
+
   // Environmental context (from external APIs)
   environmental_context: {
     weather: {
@@ -349,14 +346,14 @@ const sensorReadingSchema = new mongoose.Schema({
       ozone: Number
     }
   },
-  
+
   // Raw data for debugging
   raw_payload: mongoose.Schema.Types.Mixed,
-  
+
   // Processing metadata
   processed_at: Date,
   processing_version: String,
-  
+
   // Aggregation flags
   is_aggregated: {
     type: Boolean,
@@ -366,16 +363,16 @@ const sensorReadingSchema = new mongoose.Schema({
     type: String,
     enum: ['minute', 'hour', 'day']
   },
-  
+
   // Soft delete
   deleted_at: {
     type: Date,
     default: null,
     select: false
   }
-}, { 
+}, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  versionKey: false 
+  versionKey: false
 });
 
 // Indexes for better query performance
@@ -388,32 +385,32 @@ sensorReadingSchema.index({ 'quality_indicators.is_valid': 1 });
 sensorReadingSchema.index({ 'quality_indicators.anomaly_detected': 1 });
 
 // Compound indexes for common queries
-sensorReadingSchema.index({ 
-  tenant_id: 1, 
-  silo_id: 1, 
-  timestamp: -1 
+sensorReadingSchema.index({
+  tenant_id: 1,
+  silo_id: 1,
+  timestamp: -1
 });
-sensorReadingSchema.index({ 
-  device_id: 1, 
-  'quality_indicators.is_valid': 1, 
-  timestamp: -1 
+sensorReadingSchema.index({
+  device_id: 1,
+  'quality_indicators.is_valid': 1,
+  timestamp: -1
 });
-sensorReadingSchema.index({ 
+sensorReadingSchema.index({
   'derived_metrics.ml_risk_class': 1,
   timestamp: -1
 });
-sensorReadingSchema.index({ 
+sensorReadingSchema.index({
   'derived_metrics.voc_relative_5min': 1,
   timestamp: -1
 });
 
 // Exclude deleted readings by default
-sensorReadingSchema.pre(/^find/, function() {
+sensorReadingSchema.pre(/^find/, function () {
   this.where({ deleted_at: null });
 });
 
 // Compute derived metrics before saving (enhanced for VOC-first detection)
-sensorReadingSchema.pre('save', async function(next) {
+sensorReadingSchema.pre('save', async function (next) {
   try {
     const reading = this;
     const SensorReadingModel = reading.constructor;
@@ -455,7 +452,7 @@ sensorReadingSchema.pre('save', async function(next) {
     } else if (derived.airflow === undefined) {
       derived.airflow = 0; // Default to 0 (fan OFF) instead of null
     }
-    
+
     // Sync fan_state (numeric 0/1) with fan_status (string) for IoT spec compatibility
     if (reading.actuation_state) {
       if (reading.actuation_state.fan_status === 'on' || reading.actuation_state.fan_state === 1) {
@@ -518,24 +515,24 @@ sensorReadingSchema.pre('save', async function(next) {
     // ML implicitly learns pest presence from VOC + environmental patterns
     if (derived.voc_relative_5min !== undefined && derived.voc_rate_5min !== undefined) {
       let pestScore = 0.0; // Start at 0 (no pest activity)
-      
+
       // Yellow threshold pattern: VOC_relative_5min > 150 AND VOC_rate_5min > 20
       // This indicates early pest/spoilage activity
       if (derived.voc_relative_5min > 150 && derived.voc_rate_5min > 20) {
         pestScore += 0.5; // Moderate pest activity
       }
-      
+
       // Red threshold pattern: VOC_relative_30min > 100 AND Grain_Moisture > 14%
       // Sustained VOC rise with high moisture = strong pest/spoilage signal
       if (derived.voc_relative_30min !== undefined && derived.voc_relative_30min > 100 && (grainMoisture || 0) > 14) {
         pestScore += 0.4; // High pest activity
       }
-      
+
       // High humidity amplifies pest risk (IoT spec: environmental context)
       if ((coreHumidity || 0) > 70) {
         pestScore += 0.1; // Humidity factor
       }
-      
+
       // Normalize to 0-1 scale
       derived.pest_presence_score = Number(Math.min(1, pestScore).toFixed(2));
       derived.pest_presence_flag = derived.pest_presence_score >= 0.5; // Threshold for pest detection
@@ -547,25 +544,25 @@ sensorReadingSchema.pre('save', async function(next) {
     // 2. Ambient_RH > 80%
     // 3. T_core - Dew_Point_core < 1°C (condensation risk)
     const guardrailReasons = [];
-    
+
     // Condensation risk: T_core - Dew_Point < 1°C
     if (derived.condensation_risk || (derived.dew_point_gap !== undefined && derived.dew_point_gap < 1)) {
       guardrailReasons.push('T_core - Dew_Point < 1°C (condensation risk)');
       derived.condensation_risk = true;
     }
-    
+
     // Rainfall > 0 blocks ventilation
     const rainfall = reading.environmental_context?.weather?.precipitation;
     if (rainfall !== undefined && rainfall > 0) {
       guardrailReasons.push('External rainfall detected (rainfall > 0)');
     }
-    
+
     // Ambient RH > 80% blocks ventilation
     const ambientHumidity = reading.ambient?.humidity?.value ?? reading.environmental_context?.weather?.humidity;
     if (ambientHumidity !== undefined && ambientHumidity > 80) {
       guardrailReasons.push('Ambient humidity above 80%');
     }
-    
+
     if (!derived.guardrails) derived.guardrails = {};
     derived.guardrails.venting_blocked = guardrailReasons.length > 0;
     derived.guardrails.reasons = guardrailReasons;
@@ -577,18 +574,18 @@ sensorReadingSchema.pre('save', async function(next) {
     if (derived.voc_relative_5min !== undefined && derived.voc_rate_5min !== undefined) {
       let riskScore = 0;
       const moisture = grainMoisture || 0;
-      
+
       // Red threshold (Spoiled): VOC_relative_5min > 300 OR (VOC_relative_30min > 100 AND Moisture > 14%)
-      if (derived.voc_relative_5min > 300 || 
-          (derived.voc_relative_30min !== undefined && derived.voc_relative_30min > 100 && moisture > 14)) {
+      if (derived.voc_relative_5min > 300 ||
+        (derived.voc_relative_30min !== undefined && derived.voc_relative_30min > 100 && moisture > 14)) {
         riskScore = 85;
         derived.ml_risk_class = 'spoiled';
-      } 
+      }
       // Yellow threshold (Risky): VOC_relative_5min > 150 AND VOC_rate_5min > 20
       else if (derived.voc_relative_5min > 150 && derived.voc_rate_5min > 20) {
         riskScore = 65;
         derived.ml_risk_class = 'risky';
-      } 
+      }
       // Safe
       else {
         riskScore = 25;
@@ -596,7 +593,7 @@ sensorReadingSchema.pre('save', async function(next) {
       }
       derived.ml_risk_score = riskScore;
       derived.ml_confidence = derived.ml_risk_class === 'safe' ? 0.75 : 0.88;
-      
+
       // Use centralized risk level calculation
       const riskLevel = getRiskLevel(riskScore);
       // Map 'safe'/'risky'/'spoiled' to standard risk levels for consistency
@@ -625,11 +622,11 @@ sensorReadingSchema.pre('save', async function(next) {
       // ON: RH_core > 65% AND Grain_Moisture > 14% OR ML risk high (if external conditions safe)
       // OFF: RH_core < 62% AND Grain_Moisture < 13.5% (hysteresis: ON at 65%, OFF at 62%)
       // NEVER: Rainfall > 0 OR Ambient_RH > 80% OR T_core - Dew_Point < 1°C
-      
-      const shouldTurnOn = (coreRH > 65 && grainMoisture > 14) || 
-                           (derived.ml_risk_class === 'risky' || derived.ml_risk_class === 'spoiled');
+
+      const shouldTurnOn = (coreRH > 65 && grainMoisture > 14) ||
+        (derived.ml_risk_class === 'risky' || derived.ml_risk_class === 'spoiled');
       const shouldTurnOff = (coreRH < 62 && grainMoisture < 13.5);
-      
+
       // Guardrails block ALL ventilation (IoT spec)
       if (derived.guardrails.venting_blocked) {
         derived.fan_recommendation = 'hold';
@@ -681,18 +678,18 @@ sensorReadingSchema.pre('save', async function(next) {
 });
 
 // Virtual for has any sensor data
-sensorReadingSchema.virtual('has_sensor_data').get(function() {
-  return !!(this.temperature?.value || this.humidity?.value || this.co2?.value || 
-           this.voc?.value || this.moisture?.value || this.light?.value || 
-           this.pressure?.value || this.ph?.value);
+sensorReadingSchema.virtual('has_sensor_data').get(function () {
+  return !!(this.temperature?.value || this.humidity?.value || this.co2?.value ||
+    this.voc?.value || this.moisture?.value || this.light?.value ||
+    this.pressure?.value || this.ph?.value);
 });
 
 // Method to get all sensor values as object
-sensorReadingSchema.methods.getAllSensorValues = function() {
+sensorReadingSchema.methods.getAllSensorValues = function () {
   const values = {};
-  
+
   const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture', 'light', 'pressure', 'ph'];
-  
+
   sensorTypes.forEach(type => {
     if (this[type]?.value !== undefined) {
       values[type] = {
@@ -701,44 +698,44 @@ sensorReadingSchema.methods.getAllSensorValues = function() {
       };
     }
   });
-  
+
   return values;
 };
 
 // Method to check if reading is within normal ranges
-sensorReadingSchema.methods.isWithinNormalRanges = function(thresholds) {
+sensorReadingSchema.methods.isWithinNormalRanges = function (thresholds) {
   if (!thresholds) return true;
-  
+
   const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
-  
+
   for (const type of sensorTypes) {
     const value = this[type]?.value;
     const threshold = thresholds[type];
-    
+
     if (value !== undefined && threshold) {
       if ((threshold.min !== undefined && value < threshold.min) ||
-          (threshold.max !== undefined && value > threshold.max)) {
+        (threshold.max !== undefined && value > threshold.max)) {
         return false;
       }
     }
   }
-  
+
   return true;
 };
 
 // Method to detect anomalies based on historical data
-sensorReadingSchema.methods.detectAnomalies = function(historicalStats) {
+sensorReadingSchema.methods.detectAnomalies = function (historicalStats) {
   const anomalies = [];
   const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
-  
+
   sensorTypes.forEach(type => {
     const value = this[type]?.value;
     const stats = historicalStats[type];
-    
+
     if (value !== undefined && stats) {
       const { mean, stdDev } = stats;
       const zScore = Math.abs((value - mean) / stdDev);
-      
+
       // Flag as anomaly if z-score > 3 (99.7% confidence interval)
       if (zScore > 3) {
         anomalies.push({
@@ -753,23 +750,23 @@ sensorReadingSchema.methods.detectAnomalies = function(historicalStats) {
       }
     }
   });
-  
+
   if (anomalies.length > 0) {
     this.quality_indicators.anomaly_detected = true;
     this.quality_indicators.confidence_score = Math.max(0, 1 - (anomalies.length * 0.2));
   }
-  
+
   return anomalies;
 };
 
 // Static method to get aggregated data
-sensorReadingSchema.statics.getAggregatedData = function(query, groupBy = 'hour') {
+sensorReadingSchema.statics.getAggregatedData = function (query, groupBy = 'hour') {
   const groupByMap = {
     'minute': { $dateToString: { format: '%Y-%m-%d %H:%M', date: '$timestamp' } },
     'hour': { $dateToString: { format: '%Y-%m-%d %H', date: '$timestamp' } },
     'day': { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } }
   };
-  
+
   return this.aggregate([
     { $match: query },
     {

@@ -64,9 +64,9 @@ export default function AuthenticatedLayout({
 
   return (
     <CartProvider>
-      <div className="flex h-screen bg-gray-100">
-        <Sidebar user={user} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+      <div className="flex h-screen" style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 25%, #eff6ff 50%, #f5f3ff 75%, #fdf4ff 100%)' }}>
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto p-6 scroll-smooth">{children}</main>
       </div>
     </CartProvider>
   )

@@ -1,11 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { Shield, KeyRound, UserCheck, AlertTriangle, Database, Globe, Activity, Users, Lock, Eye } from 'lucide-react'
+import { Shield, KeyRound, AlertTriangle, Database, Globe, Activity, Users, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import {  XAxis, YAxis, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
 export default function SecurityCenterPage() {
   const authEvents = [

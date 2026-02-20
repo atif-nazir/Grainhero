@@ -5,6 +5,7 @@ const {
   requirePermission,
   requireTenantAccess,
 } = require("../middleware/permission");
+const { requireWarehouseAccess } = require('../middleware/warehouseAccess');
 const { body } = require("express-validator");
 const GrainBatch = require("../models/GrainBatch");
 const Silo = require("../models/Silo");
@@ -14,6 +15,10 @@ const SensorReading = require("../models/SensorReading");
 const SensorDevice = require("../models/SensorDevice");
 const Alert = require("../models/Alert");
 const Buyer = require("../models/Buyer");
+const Warehouse = require("../models/Warehouse");
+const WarehouseFinancials = require("../models/WarehouseFinancials");
+const Subscription = require("../models/Subscription");
+const Tenant = require("../models/Tenant");
 const PDFKit = require("pdfkit");
 const json2csv = require("json2csv").parse;
 const fs = require("fs");
@@ -97,36 +102,17 @@ function getStorageStatus(capacity, currentQuantity) {
  *                       type: array
  *                       items:
  *                         type: object
- *                         properties:
- *                           tagId:
- *                             type: string
- *                           reason:
- *                             type: string
- *                     breeding:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           tagId:
- *                             type: string
- *                           reason:
- *                             type: string
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden
  */
-// Test endpoint to verify connection
-router.get("/dashboard/test", (req, res) => {
-  res.json({
-    message: "Dashboard API is working!",
-    timestamp: new Date().toISOString(),
-  });
-});
+router.get(
+  "/dashboard",
+  [auth, requirePermission("dashboard.view"), requireTenantAccess, requireWarehouseAccess()],
+  async (req, res) => {
+    try {
+      const { language = "en" } = req.query;
 
-// Import cache middleware
-const { createCacheMiddleware } = require('../middleware/cache');
-const { requireWarehouseAccess } = require('../middleware/warehouseAccess');
+      // Scope conditions for multi-tenancy
+      // Super admins should have access to all data
+      const isSuperAdmin = req.user?.role === 'super_admin';
 
 // Cache dashboard for 30 seconds (frequently accessed, but needs to be relatively fresh)
 router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(30 * 1000), async (req, res) => {
@@ -148,181 +134,621 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       scopeConditions.push(req.warehouseFilter);
     }
 
-    const applyScope = (extra = {}) => {
-      if (!scopeConditions.length) {
-        return extra;
+        // Add warehouse filter for managers and technicians
+        if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
+          scopeConditions.push(req.warehouseFilter);
+        }
       }
-      if (!Object.keys(extra).length) {
-        return { $or: scopeConditions };
-      }
-      return { $and: [{ $or: scopeConditions }, extra] };
-    };
 
-    // Grain batch stats
-    const grainBatches = await GrainBatch.find(applyScope({ deleted_at: null }))
-      .populate("silo_id", "name")
-      .lean();
-    const totalBatches = grainBatches.length;
+      const applyScope = (extra = {}) => {
+        if (isSuperAdmin || !scopeConditions.length) {
+          return extra;
+        }
+        if (!Object.keys(extra).length) {
+          return { $or: scopeConditions };
+        }
+        return { $and: [{ $or: scopeConditions }, extra] };
+      };
 
-    // Silo stats
-    const silos = await Silo.find(applyScope({ deleted_at: null })).lean();
-    const totalSilos = silos.length;
-    let totalCapacity = 0;
-    let totalCurrentQuantity = 0;
-    const storageStatus = { Low: 0, Medium: 0, High: 0, Critical: 0 };
-    const grainTypes = {};
+      let totalBatches = 0;
+      let totalSilos = 0;
+      let totalCapacity = 0;
+      let totalCurrentQuantity = 0;
+      const storageStatus = { Low: 0, Medium: 0, High: 0, Critical: 0 };
+      const grainTypes = {};
+      let storageUtilization = 0;
+      let recentIncidents = 0;
+      let activeUsers = 0;
+      let activeAlerts = 0;
+      let silos = [];
+      let grainBatches = [];
 
-    silos.forEach((silo) => {
-      totalCapacity += silo.capacity_kg || 0;
-      totalCurrentQuantity += silo.current_occupancy_kg || 0;
+      if (isSuperAdmin) {
+        // For super admin, get system-wide statistics
+        grainBatches = await GrainBatch.find({ deleted_at: null })
+          .populate("silo_id", "name")
+          .lean();
+        totalBatches = grainBatches.length;
 
-      // Storage status
-      const status = getStorageStatus(
-        silo.capacity_kg || 0,
-        silo.current_occupancy_kg || 0
-      );
-      storageStatus[status] = (storageStatus[status] || 0) + 1;
-    });
+        silos = await Silo.find({ deleted_at: null }).lean();
+        totalSilos = silos.length;
 
-    // Grain type distribution
-    grainBatches.forEach((batch) => {
-      if (batch.grain_type) {
-        grainTypes[batch.grain_type] = (grainTypes[batch.grain_type] || 0) + 1;
-      }
-    });
+        silos.forEach((silo) => {
+          totalCapacity += silo.capacity_kg || 0;
+          totalCurrentQuantity += silo.current_occupancy_kg || 0;
 
-    // Storage utilization percentage
-    const storageUtilization =
-      totalCapacity > 0
-        ? Math.round((totalCurrentQuantity / totalCapacity) * 100)
-        : 0;
+          // Storage status
+          const status = getStorageStatus(
+            silo.capacity_kg || 0,
+            silo.current_occupancy_kg || 0
+          );
+          storageStatus[status] = (storageStatus[status] || 0) + 1;
+        });
 
-    // Recent incidents (last month)
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    const recentIncidents = await Incident.countDocuments(
-      applyScope({ date: { $gte: oneMonthAgo } })
-    );
+        // Grain type distribution
+        grainBatches.forEach((batch) => {
+          if (batch.grain_type) {
+            grainTypes[batch.grain_type] = (grainTypes[batch.grain_type] || 0) + 1;
+          }
+        });
 
-    // Active users (not blocked)
-    const activeUsers = await User.countDocuments(
-      applyScope({ blocked: false })
-    );
+        // Storage utilization percentage
+        storageUtilization =
+          totalCapacity > 0
+            ? Math.round((totalCurrentQuantity / totalCapacity) * 100)
+            : 0;
 
-    // Active alerts
-    const activeAlerts = await Alert.countDocuments(
-      applyScope({ status: "active" })
-    );
+        // Recent incidents (last month) - system wide
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        recentIncidents = await Incident.countDocuments({ date: { $gte: oneMonthAgo } });
 
-    // Storage recommendations
-    const criticalSilos = silos
-      .filter((s) => {
-        const utilization =
-          ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
-        return utilization >= 90;
-      })
-      .map((s) => ({
-        siloId: s._id,
-        name: s.name,
-        reason: "Near capacity - consider offloading",
-      }));
+        // Active users (not blocked) - system wide
+        activeUsers = await User.countDocuments({ blocked: false });
 
-    const lowUtilizationSilos = silos
-      .filter((s) => {
-        const utilization =
-          ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
-        return utilization < 25;
-      })
-      .map((s) => ({
-        siloId: s._id,
-        name: s.name,
-        reason: "Low utilization - optimize storage",
-      }));
-
-    // Recent batch activity (latest 5)
-    const recentBatches = grainBatches
-      .sort(
-        (a, b) =>
-          new Date(b.intake_date || b.created_at) -
-          new Date(a.intake_date || a.created_at)
-      )
-      .slice(0, 5)
-      .map((batch) => ({
-        id: batch.batch_id,
-        grain: batch.grain_type,
-        quantity: batch.quantity_kg,
-        status: batch.status,
-        silo: batch.silo_id?.name || "Unassigned",
-        date: batch.intake_date || batch.created_at,
-        risk:
-          batch.risk_score >= 70
-            ? "High"
-            : batch.risk_score >= 40
-              ? "Medium"
-              : "Low",
-      }));
-
-    // Alerts detail list
-    const alertList = await Alert.find(
-      applyScope({ status: { $in: ["active", "warning"] } })
-    )
-      .sort({ created_at: -1 })
-      .limit(6)
-      .lean();
-
-    const alerts = alertList.map((alert) => ({
-      id: alert._id,
-      type: alert.category || alert.type || "Alert",
-      message: alert.message || alert.description || "Attention required",
-      severity: alert.severity || alert.priority || "Medium",
-      time: alert.created_at,
-    }));
-
-    // Analytics calculations
-    const monthsBack = new Date();
-    monthsBack.setMonth(monthsBack.getMonth() - 6);
-
-    const monthlyIntakeRaw = await GrainBatch.aggregate([
-      { $match: applyScope({ intake_date: { $gte: monthsBack } }) },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m", date: "$intake_date" },
-          },
-          total: { $sum: "$quantity_kg" },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const monthlyIntake = monthlyIntakeRaw.map((entry) => ({
-      month: entry._id,
-      total: entry.total,
-    }));
-
-    const totalGrainCount = Object.values(grainTypes).reduce(
-      (sum, count) => sum + count,
-      0
-    );
-
-    const grainDistribution = Object.entries(grainTypes).map(
-      ([grainType, count]) => ({
-        grain: grainType,
-        percentage: totalGrainCount
-          ? Math.round((count / totalGrainCount) * 100)
-          : 0,
-        quantity: count,
-      })
-    );
-
-    const qualityBuckets = { safe: 0, risky: 0, spoiled: 0 };
-    grainBatches.forEach((batch) => {
-      if (batch.spoilage_label === "spoiled") {
-        qualityBuckets.spoiled += 1;
-      } else if (batch.spoilage_label === "risky") {
-        qualityBuckets.risky += 1;
+        // Active alerts - system wide
+        activeAlerts = await Alert.countDocuments({ status: "active" });
       } else {
-        qualityBuckets.safe += 1;
+        // For non-super admins, use tenant-specific data
+        grainBatches = await GrainBatch.find(applyScope({ deleted_at: null }))
+          .populate("silo_id", "name")
+          .lean();
+        totalBatches = grainBatches.length;
+
+        silos = await Silo.find(applyScope({ deleted_at: null })).lean();
+        totalSilos = silos.length;
+
+        silos.forEach((silo) => {
+          totalCapacity += silo.capacity_kg || 0;
+          totalCurrentQuantity += silo.current_occupancy_kg || 0;
+
+          // Storage status
+          const status = getStorageStatus(
+            silo.capacity_kg || 0,
+            silo.current_occupancy_kg || 0
+          );
+          storageStatus[status] = (storageStatus[status] || 0) + 1;
+        });
+
+        // Grain type distribution
+        grainBatches.forEach((batch) => {
+          if (batch.grain_type) {
+            grainTypes[batch.grain_type] = (grainTypes[batch.grain_type] || 0) + 1;
+          }
+        });
+
+        // Storage utilization percentage
+        storageUtilization =
+          totalCapacity > 0
+            ? Math.round((totalCurrentQuantity / totalCapacity) * 100)
+            : 0;
+
+        // Recent incidents (last month)
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        recentIncidents = await Incident.countDocuments(
+          applyScope({ date: { $gte: oneMonthAgo } })
+        );
+
+        // Active users (not blocked)
+        activeUsers = await User.countDocuments(
+          applyScope({ blocked: false })
+        );
+
+        // Active alerts
+        activeAlerts = await Alert.countDocuments(
+          applyScope({ status: "active" })
+        );
+      }
+
+      // Storage recommendations
+      const criticalSilos = silos
+        .filter((s) => {
+          const utilization =
+            ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
+          return utilization >= 90;
+        })
+        .map((s) => ({
+          siloId: s._id,
+          name: s.name,
+          reason: "Near capacity - consider offloading",
+        }));
+
+      const lowUtilizationSilos = silos
+        .filter((s) => {
+          const utilization =
+            ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
+          return utilization < 25;
+        })
+        .map((s) => ({
+          siloId: s._id,
+          name: s.name,
+          reason: "Low utilization - optimize storage",
+        }));
+
+      // Recent batch activity (latest 5)
+      const recentBatches = grainBatches
+        .sort(
+          (a, b) =>
+            new Date(b.intake_date || b.created_at) -
+            new Date(a.intake_date || a.created_at)
+        )
+        .slice(0, 5)
+        .map((batch) => ({
+          id: batch.batch_id,
+          grain: batch.grain_type,
+          quantity: batch.quantity_kg,
+          status: batch.status,
+          silo: batch.silo_id?.name || "Unassigned",
+          date: batch.intake_date || batch.created_at,
+          risk:
+            batch.risk_score >= 70
+              ? "High"
+              : batch.risk_score >= 40
+                ? "Medium"
+                : "Low",
+        }));
+
+      // Alerts detail list
+      const alertList = await Alert.find(
+        applyScope({ status: { $in: ["active", "warning"] } })
+      )
+        .sort({ created_at: -1 })
+        .limit(6)
+        .lean();
+
+      const alerts = alertList.map((alert) => ({
+        id: alert._id,
+        type: alert.category || alert.type || "Alert",
+        message: alert.message || alert.description || "Attention required",
+        severity: alert.severity || alert.priority || "Medium",
+        time: alert.created_at,
+      }));
+
+      // Analytics calculations
+      const monthsBack = new Date();
+      monthsBack.setMonth(monthsBack.getMonth() - 6);
+
+      const monthlyIntakeRaw = await GrainBatch.aggregate([
+        { $match: applyScope({ intake_date: { $gte: monthsBack } }) },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m", date: "$intake_date" },
+            },
+            total: { $sum: "$quantity_kg" },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+
+      const monthlyIntake = monthlyIntakeRaw.map((entry) => ({
+        month: entry._id,
+        total: entry.total,
+      }));
+
+      const totalGrainCount = Object.values(grainTypes).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+
+      const grainDistribution = Object.entries(grainTypes).map(
+        ([grainType, count]) => ({
+          grain: grainType,
+          percentage: totalGrainCount
+            ? Math.round((count / totalGrainCount) * 100)
+            : 0,
+          quantity: count,
+        })
+      );
+
+      const qualityBuckets = { safe: 0, risky: 0, spoiled: 0 };
+      grainBatches.forEach((batch) => {
+        if (batch.spoilage_label === "spoiled") {
+          qualityBuckets.spoiled += 1;
+        } else if (batch.spoilage_label === "risky") {
+          qualityBuckets.risky += 1;
+        } else {
+          qualityBuckets.safe += 1;
+        }
+      });
+
+      const analytics = {
+        monthlyIntake,
+        grainDistribution,
+        qualityMetrics: [
+          { quality: "Excellent / Safe", value: qualityBuckets.safe },
+          { quality: "Monitor / Risky", value: qualityBuckets.risky },
+          { quality: "Critical / Spoiled", value: qualityBuckets.spoiled },
+        ],
+      };
+
+      // Sensor snapshots
+      const sensorDevices = await SensorDevice.find(
+        applyScope({ status: { $ne: "retired" } })
+      )
+        .sort({ "health_metrics.last_heartbeat": -1 })
+        .limit(4)
+        .populate("silo_id", "name")
+        .lean();
+
+      const sensors = sensorDevices.map((device) => ({
+        id: device.device_id,
+        type: (device.sensor_types && device.sensor_types[0]) || "Sensor",
+        value:
+          device.health_metrics?.uptime_percentage || device.battery_level || 0,
+        unit: device.health_metrics?.uptime_percentage ? "%" : "%",
+        status: device.status,
+        location: device.silo_id?.name || "Unassigned",
+        lastReading:
+          device.health_metrics?.last_heartbeat ||
+          device.updated_at ||
+          new Date(),
+        battery: device.battery_level || 100,
+        signal: device.signal_strength || -50,
+      }));
+
+      let activeBuyers = 0;
+      let avgPrice = 0;
+      let dispatchRate = 0;
+      let currentMonthRevenue = 0;
+      let lastMonthRevenue = 0;
+      let revenueGrowthPercentage = 0;
+
+      if (isSuperAdmin) {
+        // For super admin, get system-wide business KPIs
+        activeBuyers = await Buyer.countDocuments({ status: { $ne: "inactive" } });
+
+        const allPricedBatches = await GrainBatch.find({ purchase_price_per_kg: { $exists: true, $ne: null } }).lean();
+        avgPrice = allPricedBatches.length > 0
+          ? allPricedBatches.reduce(
+            (sum, batch) => sum + (batch.purchase_price_per_kg || 0),
+            0
+          ) / allPricedBatches.length
+          : 0;
+
+        const allDispatchedBatches = await GrainBatch.find({ status: "dispatched" }).lean();
+        const allBatches = await GrainBatch.find({}).lean();
+        dispatchRate = allBatches.length > 0
+          ? Math.round((allDispatchedBatches.length / allBatches.length) * 100)
+          : 0;
+
+        // Calculate monthly revenue system-wide
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+        // Get all batches with dispatch activity in current month system-wide
+        const currentMonthDispatched = await GrainBatch.find({
+          actual_dispatch_date: {
+            $gte: new Date(currentYear, currentMonth, 1),
+            $lt: new Date(currentYear, currentMonth + 1, 1)
+          },
+          $or: [
+            { status: "dispatched" },
+            { dispatched_quantity_kg: { $gt: 0 } }
+          ]
+        }).lean();
+
+        // Get all batches with dispatch activity in last month system-wide
+        const lastMonthDispatched = await GrainBatch.find({
+          actual_dispatch_date: {
+            $gte: new Date(lastYear, lastMonth, 1),
+            $lt: new Date(lastYear, lastMonth + 1, 1)
+          },
+          $or: [
+            { status: "dispatched" },
+            { dispatched_quantity_kg: { $gt: 0 } }
+          ]
+        }).lean();
+
+        // Calculate revenue for current month
+        currentMonthRevenue = currentMonthDispatched.reduce((sum, batch) => {
+          if (batch.revenue && batch.revenue > 0) {
+            return sum + batch.revenue;
+          }
+          const dispatchedQty = batch.dispatched_quantity_kg || batch.quantity_kg || 0;
+          const sellPrice = batch.sell_price_per_kg || 0;
+          return sum + (dispatchedQty * sellPrice);
+        }, 0);
+
+        // Calculate revenue for last month
+        lastMonthRevenue = lastMonthDispatched.reduce((sum, batch) => {
+          if (batch.revenue && batch.revenue > 0) {
+            return sum + batch.revenue;
+          }
+          const dispatchedQty = batch.dispatched_quantity_kg || batch.quantity_kg || 0;
+          const sellPrice = batch.sell_price_per_kg || 0;
+          return sum + (dispatchedQty * sellPrice);
+        }, 0);
+
+        revenueGrowthPercentage = lastMonthRevenue > 0
+          ? Math.round(((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+          : currentMonthRevenue > 0 ? 100 : 0;
+      } else {
+        // For non-super admins, use tenant-specific data
+        activeBuyers = await Buyer.countDocuments(
+          applyScope({ status: { $ne: "inactive" } })
+        );
+
+        const pricedBatches = grainBatches.filter(
+          (batch) => batch.purchase_price_per_kg
+        );
+        avgPrice =
+          pricedBatches.length > 0
+            ? pricedBatches.reduce(
+              (sum, batch) => sum + (batch.purchase_price_per_kg || 0),
+              0
+            ) / pricedBatches.length
+            : 0;
+
+        const dispatchedBatches = grainBatches.filter(
+          (batch) => batch.status?.toLowerCase() === "dispatched"
+        );
+        dispatchRate =
+          totalBatches > 0
+            ? Math.round((dispatchedBatches.length / totalBatches) * 100)
+            : 0;
+
+        // Calculate monthly revenue from dispatched batches
+        // Revenue = sell_price_per_kg * dispatched_quantity_kg (or use batch.revenue if already calculated)
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+        // Get all batches with dispatch activity in current month
+        const currentMonthDispatched = grainBatches.filter(batch => {
+          if (!batch.actual_dispatch_date) return false;
+          const batchDate = new Date(batch.actual_dispatch_date);
+          const batchMonth = batchDate.getMonth();
+          const batchYear = batchDate.getFullYear();
+          // Include batches that have been dispatched (fully or partially) this month
+          return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) &&
+            batchMonth === currentMonth &&
+            batchYear === currentYear;
+        });
+
+        // Get all batches with dispatch activity in last month
+        const lastMonthDispatched = grainBatches.filter(batch => {
+          if (!batch.actual_dispatch_date) return false;
+          const batchDate = new Date(batch.actual_dispatch_date);
+          const batchMonth = batchDate.getMonth();
+          const batchYear = batchDate.getFullYear();
+          return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) &&
+            batchMonth === lastMonth &&
+            batchYear === lastYear;
+        });
+
+        // Calculate revenue: use batch.revenue if available, otherwise calculate from sell_price_per_kg * dispatched_quantity_kg
+        currentMonthRevenue = currentMonthDispatched.reduce((sum, batch) => {
+          // If revenue is already calculated, use it
+          if (batch.revenue && batch.revenue > 0) {
+            return sum + batch.revenue;
+          }
+          // Otherwise calculate from sell_price_per_kg and dispatched_quantity_kg
+          const dispatchedQty = batch.dispatched_quantity_kg || batch.quantity_kg || 0;
+          const sellPrice = batch.sell_price_per_kg || 0;
+          return sum + (dispatchedQty * sellPrice);
+        }, 0);
+
+        lastMonthRevenue = lastMonthDispatched.reduce((sum, batch) => {
+          if (batch.revenue && batch.revenue > 0) {
+            return sum + batch.revenue;
+          }
+          const dispatchedQty = batch.dispatched_quantity_kg || batch.quantity_kg || 0;
+          const sellPrice = batch.sell_price_per_kg || 0;
+          return sum + (dispatchedQty * sellPrice);
+        }, 0);
+
+        revenueGrowthPercentage = lastMonthRevenue > 0
+          ? Math.round(((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+          : currentMonthRevenue > 0 ? 100 : 0;
+      }
+
+      let monthlyProfit = 0;
+      let averageSellingPrice = 0;
+
+      // Shared date variables for profit and average selling price calculation
+      const profitNow = new Date();
+      const currentMonth = profitNow.getMonth();
+      const currentYear = profitNow.getFullYear();
+
+      if (isSuperAdmin) {
+        // For super admin, calculate system-wide financial metrics
+        // Calculate system-wide monthly profit
+
+        const allBatches = await GrainBatch.find({}).lean();
+        const currentMonthDispatched = allBatches.filter(batch => {
+          if (!batch.actual_dispatch_date) return false;
+          const batchDate = new Date(batch.actual_dispatch_date);
+          const batchMonth = batchDate.getMonth();
+          const batchYear = batchDate.getFullYear();
+          return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) &&
+            batchMonth === currentMonth &&
+            batchYear === currentYear;
+        });
+
+        monthlyProfit = currentMonthDispatched.reduce((sum, batch) => {
+          // Use stored profit if available
+          if (batch.profit && batch.profit !== 0) {
+            return sum + batch.profit;
+          }
+          // Otherwise calculate profit from sell_price and purchase_price
+          if (batch.sell_price_per_kg && batch.purchase_price_per_kg && batch.dispatched_quantity_kg) {
+            const revenue = batch.sell_price_per_kg * batch.dispatched_quantity_kg;
+            const cost = batch.purchase_price_per_kg * batch.dispatched_quantity_kg;
+            return sum + (revenue - cost);
+          }
+          return sum;
+        }, 0);
+
+        // Calculate system-wide average selling price
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+        const allDispatchedThisMonth = allBatches.filter(batch => {
+          if (!batch.actual_dispatch_date) return false;
+          const batchDate = new Date(batch.actual_dispatch_date);
+          const batchMonth = batchDate.getMonth();
+          const batchYear = batchDate.getFullYear();
+          return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) &&
+            batchMonth === currentMonth &&
+            batchYear === currentYear &&
+            batch.sell_price_per_kg && batch.dispatched_quantity_kg > 0;
+        });
+
+        if (allDispatchedThisMonth.length > 0) {
+          const totalRevenue = allDispatchedThisMonth.reduce((sum, batch) => {
+            if (batch.revenue && batch.revenue > 0) {
+              return sum + batch.revenue;
+            }
+            if (batch.sell_price_per_kg && batch.dispatched_quantity_kg) {
+              return sum + (batch.sell_price_per_kg * batch.dispatched_quantity_kg);
+            }
+            return sum;
+          }, 0);
+
+          const totalQuantity = allDispatchedThisMonth.reduce((sum, batch) => {
+            return sum + (batch.dispatched_quantity_kg || 0);
+          }, 0);
+
+          averageSellingPrice = totalQuantity > 0 ? totalRevenue / totalQuantity : 0;
+        }
+      } else {
+        // For non-super admins, use tenant-specific data
+
+        // Calculate monthly profit from warehouse financials
+        // First get warehouses for current user
+        const warehouses = await Warehouse.find(applyScope({ deleted_at: null })).lean();
+
+        // Get financials for these warehouses
+        const warehouseFinancials = await WarehouseFinancials.findOne({
+          warehouse_id: { $in: warehouses.map(w => w._id) }
+        }).lean();
+
+        // Calculate monthly profit from warehouse financials (if available) or from dispatched batches
+        if (warehouseFinancials && warehouseFinancials.profit?.monthly_profit) {
+          monthlyProfit = warehouseFinancials.profit.monthly_profit;
+        } else {
+          // Calculate from dispatched batches if warehouse financials not available
+          const currentMonthDispatched = grainBatches.filter(batch => {
+            if (!batch.actual_dispatch_date) return false;
+            const batchDate = new Date(batch.actual_dispatch_date);
+            const batchMonth = batchDate.getMonth();
+            const batchYear = batchDate.getFullYear();
+            // Include batches that have been dispatched (fully or partially) this month
+            return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) &&
+              batchMonth === currentMonth &&
+              batchYear === currentYear;
+          });
+
+          monthlyProfit = currentMonthDispatched.reduce((sum, batch) => {
+            // Use stored profit if available
+            if (batch.profit && batch.profit !== 0) {
+              return sum + batch.profit;
+            }
+            // Otherwise calculate profit from sell_price and purchase_price
+            if (batch.sell_price_per_kg && batch.purchase_price_per_kg && batch.dispatched_quantity_kg) {
+              const revenue = batch.sell_price_per_kg * batch.dispatched_quantity_kg;
+              const cost = batch.purchase_price_per_kg * batch.dispatched_quantity_kg;
+              return sum + (revenue - cost);
+            }
+            return sum;
+          }, 0);
+        }
+
+        // Calculate average selling price for dispatched batches this month
+        const dispatchedThisMonth = grainBatches.filter(batch => {
+          if (!batch.actual_dispatch_date) return false;
+          const batchDate = new Date(batch.actual_dispatch_date);
+          const batchMonth = batchDate.getMonth();
+          const batchYear = batchDate.getFullYear();
+          return (batch.status?.toLowerCase() === "dispatched" || (batch.dispatched_quantity_kg || 0) > 0) &&
+            batchMonth === currentMonth &&
+            batchYear === currentYear &&
+            batch.sell_price_per_kg && batch.dispatched_quantity_kg > 0;
+        });
+
+        if (dispatchedThisMonth.length > 0) {
+          const totalRevenue = dispatchedThisMonth.reduce((sum, batch) => {
+            if (batch.revenue && batch.revenue > 0) {
+              return sum + batch.revenue;
+            }
+            if (batch.sell_price_per_kg && batch.dispatched_quantity_kg) {
+              return sum + (batch.sell_price_per_kg * batch.dispatched_quantity_kg);
+            }
+            return sum;
+          }, 0);
+
+          const totalQuantity = dispatchedThisMonth.reduce((sum, batch) => {
+            return sum + (batch.dispatched_quantity_kg || 0);
+          }, 0);
+
+          averageSellingPrice = totalQuantity > 0 ? totalRevenue / totalQuantity : 0;
+        }
+      }
+
+      // Today's intake calculation
+      let totalTodaysIntake = 0;
+
+      if (isSuperAdmin) {
+        // For super admin, get system-wide today's intake
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const allTodaysIntake = await GrainBatch.find({
+          created_at: { $gte: today, $lt: tomorrow },
+          deleted_at: null
+        }).lean();
+
+        totalTodaysIntake = allTodaysIntake.reduce((sum, batch) => {
+          return sum + (batch.quantity_kg || 0);
+        }, 0);
+      } else {
+        // For non-super admins, use tenant-specific data
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const todaysIntake = await GrainBatch.find(
+          applyScope({
+            created_at: { $gte: today, $lt: tomorrow },
+            deleted_at: null
+          })
+        ).lean();
+
+        totalTodaysIntake = todaysIntake.reduce((sum, batch) => {
+          return sum + (batch.quantity_kg || 0);
+        }, 0);
       }
     });
 
@@ -396,66 +822,119 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
     );
 
-    res.json({
-      stats: [
+      // Get current plan information for the user
+      let currentPlan = 'Basic';
+      if (isSuperAdmin) {
+        // For super admin, show system-wide info
+        currentPlan = 'System Admin';
+      } else {
+        try {
+          const currentUser = await User.findById(req.user._id).populate('subscription_id').lean();
+          if (currentUser && currentUser.subscription_id) {
+            // If user has a subscription, get the plan name from it
+            if (currentUser.subscription_id.plan_id) {
+              const subscription = await Subscription.findById(currentUser.subscription_id.plan_id).lean();
+              if (subscription && subscription.name) {
+                currentPlan = subscription.name;
+              }
+            } else if (currentUser.subscription_id.name) {
+              // If the subscription object has a name directly
+              currentPlan = currentUser.subscription_id.name;
+            }
+          } else {
+            // Fallback: try to get from tenant if user doesn't have a subscription
+            if (req.user.tenant_id) {
+              const tenant = await Tenant.findById(req.user.tenant_id).lean();
+              if (tenant && tenant.plan) {
+                currentPlan = tenant.plan || 'Basic';
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching plan information:', error);
+          currentPlan = 'Basic'; // Default to Basic if there's an error
+        }
+      }
+
+      const avgRiskScore =
+        totalBatches > 0
+          ? grainBatches.reduce(
+            (sum, batch) => sum + (batch.risk_score || 0),
+            0
+          ) / totalBatches
+          : 0;
+      const qualityScore = Number(
+        Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
+      );
+
+      // Filter out Monthly Revenue and Recent Incidents from main stats, add Current Plan
+      const filteredStats = [
         {
-          title: "Total Grain Batches",
-          value: totalBatches,
+          title: isSuperAdmin ? "Total Tenants" : "Total Silos",
+          value: isSuperAdmin ? await Tenant.countDocuments({}) : totalSilos,
         },
+
+        // Monthly Revenue and Recent Incidents (last month) are excluded
         {
-          title: "Storage Utilization",
-          value: `${storageUtilization}%`,
-        },
-        {
-          title: "Recent Incidents (last month)",
-          value: recentIncidents,
-        },
-        {
-          title: "Active Users",
+          title: "Active Staff",
           value: activeUsers,
         },
         {
           title: "Active Alerts",
           value: activeAlerts,
         },
-      ],
-      storageDistribution: Object.entries(storageStatus).map(
-        ([status, count]) => ({
-          status,
-          count,
-        })
-      ),
-      grainTypeDistribution: Object.entries(grainTypes).map(
-        ([grainType, count]) => ({
-          grainType,
-          count,
-        })
-      ),
-      capacityStats: {
-        totalCapacity,
-        totalCurrentQuantity,
-        utilizationPercentage: storageUtilization,
-      },
-      suggestions: {
-        criticalStorage: criticalSilos,
-        optimization: lowUtilizationSilos,
-      },
-      recentBatches,
-      alerts,
-      analytics,
-      sensors,
-      business: {
-        activeBuyers,
-        avgPricePerKg: Number(avgPrice.toFixed(2)),
-        dispatchRate,
-        qualityScore,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+        {
+          title: "Current Plan",
+          value: currentPlan,
+        },
+      ];
+
+      res.json({
+        stats: filteredStats,
+        storageDistribution: Object.entries(storageStatus).map(
+          ([status, count]) => ({
+            status,
+            count,
+          })
+        ),
+        grainTypeDistribution: Object.entries(grainTypes).map(
+          ([grainType, count]) => ({
+            grainType,
+            count,
+          })
+        ),
+        capacityStats: {
+          totalCapacity,
+          totalCurrentQuantity,
+          utilizationPercentage: storageUtilization,
+          todaysIntake: totalTodaysIntake,  // Add today's intake
+        },
+        suggestions: {
+          criticalStorage: criticalSilos,
+          optimization: lowUtilizationSilos,
+        },
+        recentBatches,
+        alerts,
+        analytics,
+        sensors,
+        business: {
+          activeBuyers,
+          avgPricePerKg: Number(avgPrice.toFixed(2)),
+          dispatchRate,
+          qualityScore,
+          monthlyRevenue: currentMonthRevenue,
+          monthlyRevenueGrowth: revenueGrowthPercentage,
+          lastMonthRevenue: lastMonthRevenue,
+          monthlyProfit,
+          averageSellingPrice,
+          currentPlan,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Server error" });
+    }
+  });
 
 // ============= ENHANCED DASHBOARD & REPORTING =============
 
@@ -476,7 +955,10 @@ router.get(
       const { language = "en" } = req.query;
 
       // Get all silos with their latest sensor readings
-      const silos = await Silo.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }).populate(
+      const siloQuery = req.user?.role === 'super_admin'
+        ? {}
+        : req.warehouseFilter || { tenant_id: req.user.tenant_id };
+      const silos = await Silo.find(siloQuery).populate(
         {
           path: "sensor_devices",
           model: "SensorDevice",
@@ -614,11 +1096,12 @@ router.get(
 
       const comparisonData = [];
 
+      const isSuperAdmin = req.user?.role === 'super_admin';
       for (const siloId of siloIds) {
         const silo = await Silo.findOne({
           _id: siloId,
           ...req.warehouseFilter,
-          tenant_id: req.user.tenant_id,
+          ...(isSuperAdmin ? {} : { tenant_id: req.user.tenant_id }),
         });
         if (!silo) continue;
 
@@ -627,6 +1110,7 @@ router.get(
           silo_id: siloId,
           timestamp: { $gte: startDate },
           ...req.warehouseFilter,
+          ...(isSuperAdmin ? {} : { tenant_id: req.user.tenant_id }),
         }).sort({ timestamp: 1 });
 
         // Get batches in this silo
@@ -734,16 +1218,20 @@ router.get(
       const { format = "pdf", type = "summary", language = "en" } = req.query;
 
       // Get comprehensive dashboard data
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      const adminId = req.user.admin_id || req.user._id;
+      const queryFilter = isSuperAdmin ? {} : req.warehouseFilter || { admin_id: adminId };
+
       const [batches, silos, alerts, devices] = await Promise.all([
-        GrainBatch.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }).populate("silo_id"),
-        Silo.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }),
-        Alert.find(req.warehouseFilter || { tenant_id: req.user.tenant_id, status: "active" }),
-        SensorDevice.find(req.warehouseFilter || { tenant_id: req.user.tenant_id }),
+        GrainBatch.find(queryFilter).populate("silo_id"),
+        Silo.find(queryFilter),
+        Alert.find({ ...queryFilter, status: "active" }),
+        SensorDevice.find(queryFilter),
       ]);
 
       const reportData = {
         generated_at: new Date(),
-        tenant_id: req.user.tenant_id,
+        tenant_id: req.user.tenant_id || (isSuperAdmin ? 'all' : req.user.tenant_id),
         report_type: type,
         summary: {
           total_batches: batches.length,
@@ -844,7 +1332,7 @@ router.get(
         doc.fontSize(12);
         doc.text(`Total Batches: ${reportData.summary.total_batches}`);
         doc.text(`Total Silos: ${reportData.summary.total_silos}`);
-        doc.text(`Storage Utilization: ${reportData.summary.avg_utilization}%`);
+
         doc.text(`High Risk Batches: ${reportData.summary.high_risk_batches}`);
         doc.text(`Active Alerts: ${reportData.summary.active_alerts}`);
         doc.moveDown();
@@ -1021,8 +1509,10 @@ router.get(
       const { role, status, page = 1, limit = 20 } = req.query;
       const skip = (page - 1) * limit;
 
+      const isSuperAdmin = req.user?.role === 'super_admin';
+
       // Build filter for tenant users
-      const filter = {
+      const filter = isSuperAdmin ? {} : {
         $or: [
           { tenant_id: req.user.tenant_id },
           { owned_tenant_id: req.user.tenant_id },
@@ -1097,7 +1587,9 @@ router.get(
   [auth, requirePermission("sensor.manage"), requireTenantAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
-      const devices = await SensorDevice.find(req.warehouseFilter || { tenant_id: req.user.tenant_id })
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      const deviceQuery = isSuperAdmin ? {} : req.warehouseFilter || { tenant_id: req.user.tenant_id };
+      const devices = await SensorDevice.find(deviceQuery)
         .populate("silo_id", "name location")
         .sort({ created_at: -1 });
 
@@ -1327,9 +1819,12 @@ router.get(
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - parseInt(days));
 
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      const baseFilter = isSuperAdmin ? {} : req.warehouseFilter || { tenant_id: req.user.tenant_id };
+
       // Build aggregation pipeline
       const matchStage = {
-        ...(req.warehouseFilter || { tenant_id: req.user.tenant_id }),
+        ...baseFilter,
         created_at: { $gte: startDate },
       };
 
@@ -1474,5 +1969,25 @@ function getDeviceHealthStatus(device) {
 
   return "healthy";
 }
+
+/**
+ * @swagger
+ * /api/firebase/live-sensors:
+ *   get:
+ *     summary: Get live sensor readings from Firebase Realtime Database
+ *     tags: [Sensors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/api/firebase/live-sensors', auth, async (req, res) => {
+  try {
+    const firebaseService = require('../services/firebaseRealtimeService');
+    const readings = await firebaseService.getLatestReadings();
+    res.json({ success: true, devices: readings });
+  } catch (err) {
+    console.error('Firebase live sensors error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch live sensor data' });
+  }
+});
 
 module.exports = router; 

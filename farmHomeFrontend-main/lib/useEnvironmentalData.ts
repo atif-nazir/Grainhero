@@ -17,7 +17,7 @@ export interface EnvironmentalRecord {
       precipitation?: number;
       visibility?: number;
       cloudiness?: number;
-      [key: string]: any;
+      [key: string]: number | string | boolean | undefined;
     };
     air_quality_index?: number;
   };
@@ -42,7 +42,7 @@ export interface EnvironmentalRecord {
     ml_risk_score?: number;
     fan_recommendation?: string;
     fan_guardrails_active?: boolean;
-    [key: string]: any;
+    [key: string]: number | string | boolean | object | undefined;
   };
   actuation_state?: {
     fan_state?: number;
@@ -51,7 +51,7 @@ export interface EnvironmentalRecord {
     fan_duty_cycle?: number;
     fan_rpm?: number;
     last_command_source?: string;
-    [key: string]: any;
+    [key: string]: number | string | boolean | object | undefined;
   };
   temperature?: { value?: number };
   humidity?: { value?: number };
@@ -70,11 +70,11 @@ export interface LocationOption {
   address?: string;
   silo_count: number;
   silos: Array<{ silo_id: string; name: string }>;
-  weather?: Record<string, any>;
-  air_quality?: Record<string, any>;
-  impact_assessment?: Record<string, any>;
-  aqi_level?: Record<string, any>;
-  regional_analysis?: Record<string, any>;
+  weather?: Record<string, unknown>;
+  air_quality?: Record<string, unknown>;
+  impact_assessment?: Record<string, unknown>;
+  aqi_level?: Record<string, unknown>;
+  regional_analysis?: Record<string, unknown>;
 }
 
 interface UseEnvHistoryOptions {
@@ -85,22 +85,24 @@ interface UseEnvHistoryOptions {
 }
 
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+  (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__BACKEND_URL as string) ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
 
 // Simple in-memory cache for API responses (client-side)
-const responseCache = new Map<string, { data: any; timestamp: number }>();
+const responseCache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_TTL = 15 * 1000; // 15 seconds
 
-function getCachedResponse(key: string) {
+function getCachedResponse<T>(key: string): T | null {
   const cached = responseCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
+    return cached.data as T;
   }
   responseCache.delete(key);
   return null;
 }
 
-function setCachedResponse(key: string, data: any) {
+function setCachedResponse<T>(key: string, data: T) {
   responseCache.set(key, { data, timestamp: Date.now() });
 }
 
@@ -138,7 +140,7 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
         // Check cache first (only if not forcing fresh)
         const cacheKey = `env-history-${tenantId}-${limit}-${latitude}-${longitude}`;
         if (!forceFresh) {
-          const cached = getCachedResponse(cacheKey);
+          const cached = getCachedResponse<EnvironmentalRecord[]>(cacheKey);
           if (cached && mounted) {
             setData(cached);
             setLoading(false);
@@ -183,7 +185,7 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
     return () => {
       mounted = false;
     };
-  }, [limit, latitude, longitude]);
+  }, [limit, latitude, longitude, forceFresh]);
 
   const latest = useMemo(
     () => (data.length ? data[data.length - 1] : undefined),
@@ -207,7 +209,7 @@ export function useEnvironmentalLocations() {
         
         // Check cache first (locations don't change often)
         const cacheKey = "env-locations";
-        const cached = getCachedResponse(cacheKey);
+        const cached = getCachedResponse<LocationOption[]>(cacheKey);
         if (cached && mounted) {
           setLocations(cached);
           setLoading(false);

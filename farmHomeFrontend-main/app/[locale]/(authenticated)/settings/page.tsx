@@ -20,6 +20,7 @@ import {
   Clock
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 interface TenantSettings {
   name: string
@@ -84,6 +85,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [initialTwoFactorState, setInitialTwoFactorState] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -92,44 +94,86 @@ export default function SettingsPage() {
   const loadSettings = async () => {
     try {
       setLoading(true)
-      // Fetch current user data
-      const userRes = await api.get('/api/user-management/users/profile')
+      // Fetch current user data from auth/profile
+      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || '/api'}/auth/profile`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      let user = null;
+      if (userResponse.ok) {
+        user = await userResponse.json();
+      }
 
-      if (userRes.ok && userRes.data) {
-        const user: Record<string, any> = userRes.data.user || userRes.data
+      if (user) {
+        // Define type for tenant settings response
+        interface TenantSettingsResponse {
+          business_type?: string;
+          location?: {
+            address?: string;
+            city?: string;
+            country?: string;
+          };
+          notifications?: {
+            email_alerts: boolean;
+            sms_alerts: boolean;
+            push_notifications: boolean;
+            weekly_reports: boolean;
+            monthly_reports: boolean;
+          };
+          system?: {
+            auto_backup: boolean;
+            data_retention_days: number;
+            session_timeout_minutes: number;
+            two_factor_auth: boolean;
+          };
+          integrations?: {
+            weather_api: boolean;
+            market_prices: boolean;
+            government_data: boolean;
+          };
+        }
+        
         const tenantRes = await api.get('/api/tenant/settings').catch(() => null)
-        setSettings({
-          name: user.organization_name || user.name || '',
+        const tenantData: TenantSettingsResponse | null = tenantRes?.data || null;
+        
+        const loadedSettings = {
+          name: user.name || '',
           email: user.email || '',
           phone: user.phone || '',
-          business_type: user.business_type || 'farm',
+          business_type: tenantData?.business_type || 'farm',
           location: {
-            address: user.address || tenantRes?.data?.location?.address || '',
-            city: user.city || tenantRes?.data?.location?.city || '',
-            country: user.country || tenantRes?.data?.location?.country || 'Pakistan'
+            address: tenantData?.location?.address || '',
+            city: tenantData?.location?.city || '',
+            country: tenantData?.location?.country || 'Pakistan'
           },
-          notifications: (tenantRes && tenantRes.data && tenantRes.data.notifications) ? tenantRes.data.notifications : {
+          notifications: tenantData?.notifications || {
             email_alerts: true,
             sms_alerts: false,
             push_notifications: true,
             weekly_reports: true,
             monthly_reports: true
           },
-          system: (tenantRes && tenantRes.data && tenantRes.data.system) ? tenantRes.data.system : {
+          system: tenantData?.system || {
             auto_backup: true,
             data_retention_days: 365,
             session_timeout_minutes: 60,
             two_factor_auth: false
           },
-          integrations: (tenantRes && tenantRes.data && tenantRes.data.integrations) ? tenantRes.data.integrations : {
+          integrations: tenantData?.integrations || {
             weather_api: true,
             market_prices: true,
             government_data: false
           }
-        })
+        };
+        
+        setSettings(loadedSettings);
+        // Set the initial 2FA state
+        setInitialTwoFactorState(loadedSettings.system.two_factor_auth);
       } else {
         // Fallback to default settings if API fails
-        setSettings({
+        const defaultSettings = {
           name: '',
           email: '',
           phone: '',
@@ -153,7 +197,10 @@ export default function SettingsPage() {
             market_prices: true,
             government_data: false
           }
-        })
+        };
+        
+        setSettings(defaultSettings);
+        setInitialTwoFactorState(defaultSettings.system.two_factor_auth);
       }
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -165,21 +212,51 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Save user profile data
-      const profileRes = await api.put('/api/user-management/users/profile', {
-        name: settings.name,
-        email: settings.email,
-        phone: settings.phone,
-        business_type: settings.business_type,
-        address: settings.location.address,
-        city: settings.location.city,
-        country: settings.location.country
-      })
+      // Handle 2FA toggle separately if changed
+      if (settings.system.two_factor_auth !== initialTwoFactorState) {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || '/api'}/auth/toggle-2fa`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update 2FA settings');
+        }
+      }
 
-      // Save tenant settings if available
+      // Save user profile data (only name and phone are allowed on the profile endpoint)
+      let profileRes;
+      try {
+        const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || '/api'}/auth/profile`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            name: settings.name,
+            phone: settings.phone
+          })
+        });
+        
+        profileRes = { 
+          ok: profileResponse.ok, 
+          data: profileResponse.ok ? await profileResponse.json() : null 
+        };
+      } catch (error) {
+        console.error('Profile update failed:', error);
+        profileRes = { ok: false, data: null };
+      }
+
+      // Save tenant settings if available (excluding two_factor_auth since it's handled separately)
+      const { two_factor_auth, ...systemWithout2FA } = settings.system;
       await api.put('/api/tenant/settings', {
         notifications: settings.notifications,
-        system: settings.system,
+        system: systemWithout2FA,
         integrations: settings.integrations,
         location: settings.location
       }).catch(() => {
@@ -187,11 +264,20 @@ export default function SettingsPage() {
         console.log('Tenant settings endpoint not available')
       })
 
-      if (profileRes.ok) {
+      // Check if profile update was successful
+      if (profileRes && profileRes.ok) {
         setSaveStatus('success')
         setTimeout(() => setSaveStatus('idle'), 3000)
       } else {
-        throw new Error('Failed to save settings')
+        // If profile update failed, but 2FA was toggled successfully, we can still consider it a success
+        // or at least show a partial success message
+        if (settings.system.two_factor_auth !== initialTwoFactorState) {
+          // 2FA was toggled, so it's a partial success
+          setSaveStatus('success')
+          setTimeout(() => setSaveStatus('idle'), 3000)
+        } else {
+          throw new Error('Failed to save profile settings')
+        }
       }
     } catch (error) {
       console.error('Failed to save settings:', error)
@@ -224,7 +310,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -277,6 +365,7 @@ export default function SettingsPage() {
                     id="name"
                     value={settings.name}
                     onChange={(e) => updateSettings('name', 'name', e.target.value)}
+                    placeholder="Enter organization name"
                   />
                 </div>
                 <div className="space-y-2">
@@ -286,6 +375,7 @@ export default function SettingsPage() {
                     type="email"
                     value={settings.email}
                     onChange={(e) => updateSettings('email', 'email', e.target.value)}
+                    placeholder="Enter contact email"
                   />
                 </div>
                 <div className="space-y-2">
@@ -294,6 +384,7 @@ export default function SettingsPage() {
                     id="phone"
                     value={settings.phone}
                     onChange={(e) => updateSettings('phone', 'phone', e.target.value)}
+                    placeholder="Enter phone number"
                   />
                 </div>
                 <div className="space-y-2">
@@ -330,6 +421,7 @@ export default function SettingsPage() {
                     id="city"
                     value={settings.location.city}
                     onChange={(e) => updateSettings('location', 'city', e.target.value)}
+                    placeholder="Enter city"
                   />
                 </div>
                 <div className="space-y-2">
@@ -338,6 +430,7 @@ export default function SettingsPage() {
                     id="country"
                     value={settings.location.country}
                     onChange={(e) => updateSettings('location', 'country', e.target.value)}
+                    placeholder="Enter country"
                   />
                 </div>
               </div>
@@ -547,6 +640,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   )
 }

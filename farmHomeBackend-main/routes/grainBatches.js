@@ -9,11 +9,15 @@ const {
 } = require("../middleware/permission");
 const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const { body, validationResult, param, query } = require("express-validator");
+const { BATCH_STATUSES } = require("../configs/enum");
 const QRCode = require("qrcode");
 const PDFKit = require("pdfkit");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const LoggingService = require("../services/loggingService");
+const NotificationService = require("../services/notificationService");
+const DispatchTransaction = require("../models/DispatchTransaction");
 
 // Configure multer for photo uploads
 const storage = multer.diskStorage({
@@ -90,7 +94,7 @@ router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, 
   try {
     const { grain_type } = req.params;
     const currentYear = new Date().getFullYear();
-    
+
     // Map grain types to abbreviations
     const grainAbbreviations = {
       'Wheat': 'WB',
@@ -100,12 +104,12 @@ router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, 
       'Barley': 'BB',
       'Sorghum': 'SB'
     };
-    
+
     const abbreviation = grainAbbreviations[grain_type];
     if (!abbreviation) {
       return res.status(400).json({ error: "Invalid grain type" });
     }
-    
+
     // Find all batches for this tenant in the current year with this grain type
     const existingBatches = await GrainBatch.find({
       tenant_id: req.user.tenant_id,
@@ -115,13 +119,13 @@ router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, 
         $lt: new Date(`${currentYear + 1}-01-01`)
       }
     }).sort({ createdAt: -1 });
-    
+
     // Calculate next sequence number
     const nextSequence = existingBatches.length + 1;
     const sequenceStr = String(nextSequence).padStart(3, '0');
-    
+
     const batch_id = `${abbreviation}-${sequenceStr}-${currentYear}`;
-    
+
     res.json({
       batch_id,
       sequence: nextSequence,
@@ -157,10 +161,10 @@ router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, 
 router.get("/available-silos/:grain_type", [auth, requireTenantAccess], async (req, res) => {
   try {
     const { grain_type } = req.params;
-    
+
     // Determine the tenant/admin filter
     const filterQuery = {};
-    
+
     // Try tenant_id first, then admin_id
     if (req.user.tenant_id) {
       filterQuery.tenant_id = req.user.tenant_id;
@@ -170,27 +174,27 @@ router.get("/available-silos/:grain_type", [auth, requireTenantAccess], async (r
       // Fallback: use user's own id if they are an admin
       filterQuery.admin_id = req.user._id;
     }
-    
+
     console.log("Available silos filter query:", filterQuery);
-    
+
     // Get all silos for this tenant/admin
     const silos = await Silo.find(filterQuery).sort({ name: 1 });
-    
+
     console.log(`Found ${silos.length} silos for user ${req.user._id}`);
-    
+
     // For each silo, check what grain types it currently contains
     const availableSilos = [];
-    
+
     for (const silo of silos) {
       // Find all active batches in this silo
       const batchesInSilo = await GrainBatch.find({
         silo_id: silo._id,
         status: { $in: ['stored', 'processing', 'on_hold'] } // Active statuses
       }).select('grain_type').lean();
-      
+
       // Check what grain types are in this silo
       const grainTypesInSilo = [...new Set(batchesInSilo.map(b => b.grain_type))];
-      
+
       // Include silo if:
       // 1. It's empty (no active batches), OR
       // 2. It only contains the same grain type we're looking for
@@ -206,7 +210,7 @@ router.get("/available-silos/:grain_type", [auth, requireTenantAccess], async (r
         });
       }
     }
-    
+
     res.json({
       silos: availableSilos,
       total: availableSilos.length,
@@ -318,7 +322,8 @@ router.post(
             source_location,
             harvest_date,
         notes,
-        } = req.body;
+        purchase_price_per_kg,
+      } = req.body;
 
         // Check if silo exists and has capacity
         const silo = await Silo.findById(silo_id);
@@ -334,22 +339,29 @@ router.post(
             });
         }
 
-        // Create batch
-        const batch = new GrainBatch({
-            batch_id,
+      // Calculate total purchase value if purchase price is provided
+      const total_purchase_value = purchase_price_per_kg
+        ? purchase_price_per_kg * quantity_kg
+        : null;
+
+      // Create batch
+      const batch = new GrainBatch({
+        batch_id,
         admin_id: req.user.admin_id,
-            silo_id,
-            grain_type,
-            quantity_kg,
-            variety,
-            grade,
-            moisture_content,
-            protein_content,
-            farmer_name,
-            farmer_contact,
-            source_location,
-            harvest_date: harvest_date ? new Date(harvest_date) : null,
-            notes,
+        silo_id,
+        grain_type,
+        quantity_kg,
+        variety,
+        grade,
+        moisture_content,
+        protein_content,
+        farmer_name,
+        farmer_contact,
+        source_location,
+        harvest_date: harvest_date ? new Date(harvest_date) : null,
+        notes,
+        purchase_price_per_kg: purchase_price_per_kg || null,
+        total_purchase_value: total_purchase_value || null,
         created_by: req.user._id,
         });
 
@@ -370,7 +382,10 @@ router.post(
                 ...batch.toObject(),
           qr_code_image: qrCodeUrl,
         },
-        });
+      });
+
+      // Log batch creation (async, don't await)
+      LoggingService.logBatchCreated(req.user, batch, req.ip).catch(() => { });
     } catch (error) {
       console.error("Create batch error:", error);
         if (error.code === 11000) {
@@ -425,9 +440,9 @@ router.get(
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        // Build filter
+      // Build filter
       let filter = {};
-      
+
       // Super Admin: See all batches
       if (req.user.role === "super_admin") {
         filter = {};
@@ -448,23 +463,23 @@ router.get(
         const silos = await Silo.find({ warehouse_id: req.user.warehouse_id }).select("_id");
         filter = { silo_id: { $in: silos.map(s => s._id) } };
       }
-        
-        if (req.query.status) filter.status = req.query.status;
-        if (req.query.grain_type) filter.grain_type = req.query.grain_type;
-        if (req.query.silo_id) {
-          // Validate silo_id belongs to user's accessible warehouses
-          const silo = await Silo.findById(req.query.silo_id);
-          if (!silo) {
-            return res.status(404).json({ error: "Silo not found" });
-          }
-          // Check access (already handled by filter above, but double-check)
-          if (req.user.role === "manager" || req.user.role === "technician") {
-            if (silo.warehouse_id.toString() !== req.user.warehouse_id.toString()) {
-              return res.status(403).json({ error: "Access denied to this silo" });
-            }
-          }
-          filter.silo_id = req.query.silo_id;
+
+      if (req.query.status) filter.status = req.query.status;
+      if (req.query.grain_type) filter.grain_type = req.query.grain_type;
+      if (req.query.silo_id) {
+        // Validate silo_id belongs to user's accessible warehouses
+        const silo = await Silo.findById(req.query.silo_id);
+        if (!silo) {
+          return res.status(404).json({ error: "Silo not found" });
         }
+        // Check access (already handled by filter above, but double-check)
+        if (req.user.role === "manager" || req.user.role === "technician") {
+          if (silo.warehouse_id.toString() !== req.user.warehouse_id.toString()) {
+            return res.status(403).json({ error: "Access denied to this silo" });
+          }
+        }
+        filter.silo_id = req.query.silo_id;
+      }
 
         // Get batches with pagination
         const [batches, total] = await Promise.all([
@@ -627,12 +642,69 @@ router.put(
         batch.updated_by = req.user._id;
         await batch.save();
 
-        res.json({
+      // Log batch update
+      const changes = {};
+      allowedUpdates.forEach(f => { if (req.body[f] !== undefined) changes[f] = req.body[f]; });
+      LoggingService.logBatchUpdated(req.user, batch, changes, req.ip).catch(() => { });
+
+      res.json({
         message: "Batch updated successfully",
         batch,
         });
     } catch (error) {
       console.error("Update batch error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /grain-batches/{id}/buyers:
+ *   get:
+ *     summary: Get available buyers for dispatch
+ *     tags: [Grain Batches]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get(
+  "/:id/buyers",
+  [
+    auth,
+    requirePermission("batch.dispatch"),
+    requireTenantAccess,
+    param("id").isMongoId().withMessage("Valid batch ID is required"),
+  ],
+  async (req, res) => {
+    try {
+      const Buyer = require("../models/Buyer");
+      const tenantId = req.user.tenant_id || req.user.owned_tenant_id || req.user._id;
+      const adminId = req.user.admin_id || req.user._id;
+
+      // Get all active buyers for this tenant/admin
+      const buyers = await Buyer.find({
+        tenant_id: tenantId,
+        admin_id: adminId,
+        status: "active",
+      })
+        .select("_id name company_name contact_person location buyer_type rating")
+        .sort({ name: 1 })
+        .lean();
+
+      res.json({
+        buyers: buyers.map(buyer => ({
+          _id: buyer._id,
+          name: buyer.name,
+          company_name: buyer.company_name,
+          contact: buyer.contact_person,
+          location: buyer.location,
+          buyer_type: buyer.buyer_type,
+          rating: buyer.rating,
+        })),
+        total: buyers.length,
+      });
+    } catch (error) {
+      console.error("Get buyers for dispatch error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -656,12 +728,21 @@ router.post(
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
       body("buyer_id").isMongoId().withMessage("Valid buyer ID is required"),
+      body("sell_price_per_kg")
+        .isFloat({ min: 0 })
+        .withMessage("Sell price per kg is required and must be positive"),
+      body("dispatched_quantity_kg")
+        .optional()
+        .isFloat({ min: 0.1 })
+        .withMessage("Dispatched quantity must be positive"),
       body("dispatch_details.vehicle_number")
+        .optional()
         .notEmpty()
-        .withMessage("Vehicle number is required"),
+        .withMessage("Vehicle number is required if dispatch details provided"),
       body("dispatch_details.driver_name")
+        .optional()
         .notEmpty()
-        .withMessage("Driver name is required"),
+        .withMessage("Driver name is required if dispatch details provided"),
     ],
   ],
   async (req, res) => {
@@ -680,27 +761,91 @@ router.post(
         return res.status(404).json({ error: "Batch not found" });
       }
 
-      if (batch.status !== "stored") {
-        return res
-          .status(400)
-          .json({ error: "Only stored batches can be dispatched" });
-        }
+      // Check if batch can be dispatched
+      const availableQuantity = batch.quantity_kg - (batch.dispatched_quantity_kg || 0);
+      if (availableQuantity <= 0) {
+        return res.status(400).json({ error: "Batch is already fully dispatched" });
+      }
 
-        // Dispatch batch
-        await batch.dispatch(req.body.buyer_id, req.body.dispatch_details);
+      const dispatchedQuantity = req.body.dispatched_quantity_kg || availableQuantity;
 
-        // Update silo occupancy
-        const silo = await Silo.findById(batch.silo_id);
-        if (silo) {
-            await silo.removeBatch(batch.quantity_kg);
-        }
-
-        res.json({
-        message: "Batch dispatched successfully",
-        batch,
+      // Validate dispatch quantity
+      if (dispatchedQuantity > availableQuantity) {
+        return res.status(400).json({
+          error: `Cannot dispatch more than available quantity. Available: ${availableQuantity} kg`
         });
+      }
+
+      const sellPricePerKg = parseFloat(req.body.sell_price_per_kg);
+      const buyerId = req.body.buyer_id;
+
+      // Dispatch batch (handles partial dispatch)
+      await batch.dispatch(
+        buyerId,
+        req.body.dispatch_details || {},
+        sellPricePerKg,
+        dispatchedQuantity
+      );
+
+      // Calculate remaining quantity after dispatch
+      const remainingQuantity = batch.quantity_kg - batch.dispatched_quantity_kg;
+
+      // Update silo occupancy - only remove dispatched quantity
+      const silo = await Silo.findById(batch.silo_id);
+      if (silo) {
+        await silo.removeBatch(dispatchedQuantity);
+      }
+
+      // Reload batch to get updated values
+      await batch.populate('buyer_id', 'name company_name contact_person');
+
+      res.json({
+        message: "Batch dispatched successfully",
+        batch: {
+          ...batch.toObject(),
+          dispatched_quantity: batch.dispatched_quantity_kg,
+          remaining_quantity: remainingQuantity,
+          revenue: batch.revenue,
+          profit: batch.profit,
+        },
+      });
+
+      // Log dispatch & create transaction (async)
+      const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
+      LoggingService.logBatchDispatched(req.user, batch, {
+        buyer_id: buyerId,
+        quantity_kg: dispatchedQuantity,
+        sell_price_per_kg: sellPricePerKg
+      }, req.ip).catch(() => { });
+
+      // Create dispatch transaction record
+      const dt = new DispatchTransaction({
+        tenant_id: tenantId,
+        admin_id: req.user.admin_id || req.user._id,
+        batch_id: batch._id,
+        batch_ref: batch.batch_id,
+        buyer_id: buyerId,
+        grain_type: batch.grain_type,
+        quantity_kg: dispatchedQuantity,
+        sell_price_per_kg: sellPricePerKg,
+        total_amount: sellPricePerKg * dispatchedQuantity,
+        vehicle_number: req.body.dispatch_details?.vehicle_number,
+        driver_name: req.body.dispatch_details?.driver_name,
+        driver_contact: req.body.dispatch_details?.driver_contact,
+        destination: req.body.dispatch_details?.destination,
+        dispatched_by: req.user._id
+      });
+      dt.save().catch(err => console.error('DispatchTransaction save error:', err));
+
+      // Notify admin/manager
+      const Buyer = require("../models/Buyer");
+      const buyerDoc = await Buyer.findById(buyerId).select('name');
+      NotificationService.notifyDispatch(tenantId, batch, buyerDoc?.name || 'Unknown', dispatchedQuantity).catch(() => { });
     } catch (error) {
       console.error("Dispatch batch error:", error);
+      if (error.message.includes('exceeds available')) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -743,8 +888,13 @@ router.post(
       body("buyer_name").notEmpty().withMessage("Buyer name is required"),
       body("buyer_contact").notEmpty().withMessage("Buyer contact is required"),
       body("quantity_dispatched")
+        .optional()
         .isNumeric()
         .withMessage("Quantity must be a number"),
+      body("sell_price_per_kg")
+        .optional()
+        .isNumeric()
+        .withMessage("Sell price per kg must be a number"),
     ],
   ],
   async (req, res) => {
@@ -763,10 +913,22 @@ router.post(
         return res.status(404).json({ error: "Batch not found" });
       }
 
-      if (batch.status === "dispatched" || batch.status === "sold") {
+      // Check available quantity
+      const availableQuantity = batch.quantity_kg - (batch.dispatched_quantity_kg || 0);
+      if (availableQuantity <= 0) {
         return res
           .status(400)
-          .json({ error: "Batch is already dispatched or sold" });
+          .json({ error: "Batch is already fully dispatched" });
+      }
+
+      const dispatchedQuantity = req.body.quantity_dispatched
+        ? parseFloat(req.body.quantity_dispatched)
+        : availableQuantity;
+
+      if (dispatchedQuantity > availableQuantity) {
+        return res.status(400).json({
+          error: `Cannot dispatch more than available quantity. Available: ${availableQuantity} kg`
+        });
       }
 
       // Buyer upsert logic: unify with manual buyer creation
@@ -818,29 +980,39 @@ router.post(
         new: true,
         setDefaultsOnInsert: true,
       });
-      // Update batch with dispatch information
-      batch.status = "dispatched";
-      batch.buyer_id = buyer._id;
-      batch.dispatch_details = {
+
+      // Use dispatch method to handle revenue calculation
+      const sellPricePerKg = req.body.sell_price_per_kg
+        ? parseFloat(req.body.sell_price_per_kg)
+        : null;
+
+      const dispatchDetails = {
         buyer_name: buyer.name,
         buyer_contact: buyer.contact_person.phone,
-        quantity: parseFloat(req.body.quantity_dispatched),
+        quantity: dispatchedQuantity,
         dispatch_date: req.body.dispatch_date || new Date().toISOString(),
         notes: req.body.notes || "",
       };
-      batch.actual_dispatch_date = new Date();
 
-      await batch.save();
+      // Dispatch batch using the model method (handles revenue calculation)
+      if (sellPricePerKg) {
+        await batch.dispatch(buyer._id, dispatchDetails, sellPricePerKg, dispatchedQuantity);
+      } else {
+        // If no sell price, just update dispatch info without revenue calculation
+        batch.buyer_id = buyer._id;
+        batch.dispatch_details = dispatchDetails;
+        batch.actual_dispatch_date = new Date();
+        batch.dispatched_quantity_kg = (batch.dispatched_quantity_kg || 0) + dispatchedQuantity;
+        if (batch.dispatched_quantity_kg >= batch.quantity_kg) {
+          batch.status = BATCH_STATUSES.DISPATCHED;
+        }
+        await batch.save();
+      }
 
-      // Update silo occupancy
+      // Update silo occupancy - only remove dispatched quantity
       const silo = await Silo.findById(batch.silo_id);
       if (silo) {
-        const dispatchedQuantity = parseFloat(req.body.quantity_dispatched);
-        silo.current_occupancy_kg = Math.max(
-          0,
-          silo.current_occupancy_kg - dispatchedQuantity
-        );
-        await silo.save();
+        await silo.removeBatch(dispatchedQuantity);
       }
 
       res.json({
@@ -1294,12 +1466,12 @@ router.post(
         reported_by: req.user._id,
         photos: req.files
           ? req.files.map((file) => ({
-              filename: file.filename,
-              original_name: file.originalname,
-              path: file.path,
-              size: file.size,
-              upload_date: new Date(),
-            }))
+            filename: file.filename,
+            original_name: file.originalname,
+            path: file.path,
+            size: file.size,
+            upload_date: new Date(),
+          }))
           : [],
         environmental_conditions: {
           temperature: req.body.temperature,
@@ -1402,8 +1574,7 @@ router.get(
       doc.text(`Current Risk Score: ${batch.risk_score || "N/A"}%`);
       doc.text(`Spoilage Label: ${batch.spoilage_label || "N/A"}`);
       doc.text(
-        `Last Assessment: ${
-          batch.last_risk_assessment?.toLocaleDateString() || "N/A"
+        `Last Assessment: ${batch.last_risk_assessment?.toLocaleDateString() || "N/A"
         }`
       );
       doc.moveDown();

@@ -55,14 +55,13 @@ export function PlanStatusCard({
     if (typeof limit === "string" && limit.toLowerCase().includes("unlimited")) {
       return 75 // Show 75% for unlimited
     }
-    return Math.min((used / limit) * 100, 100)
+    if (typeof limit === "number") {
+      return Math.min((used / limit) * 100, 100);
+    }
+    return 0; // Default case if limit is not a number
   }
 
-  const getUsageColor = (percentage: number) => {
-    if (percentage >= 90) return "bg-red-500"
-    if (percentage >= 75) return "bg-yellow-500"
-    return "bg-green-500"
-  }
+
 
   return (
     <Card className={cn("", className)}>

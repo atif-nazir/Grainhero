@@ -78,6 +78,7 @@ async function uploadFile(req) {
 router.post("/signup", async (req, res) => {
   const { name, email, phone, password, confirm_password, invitation_token } =
     req.body;
+  let invitationData = null;
 
   console.log("=== SIGNUP DEBUG ===");
   console.log("Request body:", {
@@ -143,14 +144,42 @@ router.post("/signup", async (req, res) => {
 
     // Query for existing user considering email and phone (if provided)
     let existingUser = null;
-    if (phone) {
-      existingUser = await User.findOne({ $or: [{ email }, { phone }] });
-    } else {
-      // If phone is not provided, only check for email
-      existingUser = await User.findOne({ email });
+
+    // Check for invitation token first
+    if (invitation_token) {
+      console.log("Looking for invitation with token:", invitation_token);
+
+      // Look for user with invitation token that hasn't expired
+      invitationData = await User.findOne({
+        invitationToken: invitation_token,
+        invitationExpires: { $gt: Date.now() },
+      }).select("+invitationToken +invitationRole");
+
+      console.log("Valid invitation found:", invitationData ? "YES" : "NO");
+      if (invitationData) {
+        console.log("Valid invitation details:", {
+          email: invitationData.email,
+          role: invitationData.role,
+          invitationRole: invitationData.invitationRole,
+          expires: invitationData.invitationExpires,
+        });
+
+        // Use the invitation user as the existing user
+        existingUser = invitationData;
+      }
     }
 
-    if (existingUser) {
+    // If no invitation was found, check for existing users with email/phone
+    if (!invitationData) {
+      if (phone) {
+        existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+      } else {
+        // If phone is not provided, only check for email
+        existingUser = await User.findOne({ email });
+      }
+    }
+
+    if (existingUser && !invitationData) {
       console.log("Existing user found with details:", {
         id: existingUser._id,
         role: existingUser.role,
@@ -161,6 +190,28 @@ router.post("/signup", async (req, res) => {
 
       // Check if this is a pending user who has already paid (from webhook)
       if (
+        existingUser.role === "admin" &&
+        existingUser.customerId &&
+        existingUser.hasAccess &&
+        existingUser.emailVerified
+      ) {
+        console.log(
+          "User already exists as admin with payment:",
+          email
+        );
+        // User already completed signup, return success
+        return res.status(200).json({
+          message: "Account already exists! You can login with your credentials.",
+          user: {
+            id: existingUser._id,
+            name: existingUser.name,
+            email: existingUser.email,
+            role: existingUser.role,
+            hasAccess: existingUser.hasAccess,
+          },
+          hasAccess: existingUser.hasAccess,
+        });
+      } else if (
         existingUser.role === "pending" &&
         existingUser.customerId &&
         existingUser.hasAccess
@@ -254,6 +305,14 @@ router.post("/signup", async (req, res) => {
       }
     }
 
+    // If we reach here, no existing user was found, continue with normal signup flow
+    // Skip the duplicate check that was here before (lines 383-479) since we already handled it above
+
+    // If invitation was found, use that user data
+    if (invitationData) {
+      existingUser = invitationData;
+    }
+
     // Determine role based on signup context
     const userCount = await User.countDocuments();
     const isFirstUser = userCount === 0;
@@ -281,11 +340,35 @@ router.post("/signup", async (req, res) => {
             .json({ error: "Invalid or expired invitation token" });
         }
       } else {
-        // Regular signup without invitation - only admin can be created this way, 
-        // managers and technicians must be invited
-        return res
-          .status(400)
-          .json({ error: "Managers and technicians must be invited by an admin" });
+        // Check if this user is completing signup after payment (via webhook)
+        // This applies to users who paid for subscription and are now completing registration
+        if (req.body.email && req.body.password) {
+          // Check if this user exists as a pending user with payment info (from webhook)
+          const pendingUser = await User.findOne({
+            email: req.body.email,
+            role: "pending",
+            customerId: { $exists: true },
+            hasAccess: { $exists: true }
+          });
+          
+          if (pendingUser && pendingUser.hasAccess !== "none") {
+            // This is a user who has paid and is completing signup
+            // Set their role to admin since they paid for a subscription
+            userRole = "admin";
+          } else {
+            // Regular signup without invitation - only admin can be created this way, 
+            // managers and technicians must be invited
+            return res
+              .status(400)
+              .json({ error: "Managers and technicians must be invited by an admin" });
+          }
+        } else {
+          // Regular signup without invitation - only admin can be created this way, 
+          // managers and technicians must be invited
+          return res
+            .status(400)
+            .json({ error: "Managers and technicians must be invited by an admin" });
+        }
       }
     }
 
@@ -301,7 +384,6 @@ router.post("/signup", async (req, res) => {
     };
 
     // Handle invitation token if present
-    let invitationData = null;
     if (invitation_token) {
       console.log("Looking for invitation with token:", invitation_token);
       console.log("Current time:", Date.now());
@@ -346,101 +428,41 @@ router.post("/signup", async (req, res) => {
       }
     }
 
-    // Check for existing users only if this is NOT an invited user
-    if (!invitationData) {
-      let existingUser = await User.findOne({ $or: [{ email }, { phone }] });
-      if (existingUser) {
-        // Check if this is a pending user who has already paid (from webhook)
-        if (
-          existingUser.role === "pending" &&
-          existingUser.customerId &&
-          existingUser.hasAccess
-        ) {
-          console.log(
-            "Found pending user with payment, updating to admin:",
-            email
-          );
+    // The duplicate user check has been moved above to avoid conflicts
+    // This section was causing the signup flow to fail for users who paid via Stripe
 
-          // Import plan mapping to set subscription_plan correctly
-          const {
-            checkoutPlanIdToPlanKey,
-          } = require("../configs/plan-mapping");
-
-          // Update the existing user with password and role
-          existingUser.name = name;
-          existingUser.phone = phone || existingUser.phone;
-          existingUser.password = password;
-          existingUser.role = "admin"; // Set as admin since they paid
-          existingUser.emailVerified = true;
-
-          // Ensure subscription_plan is set from hasAccess
-          if (
-            existingUser.hasAccess &&
-            existingUser.hasAccess !== "none" &&
-            !existingUser.subscription_plan
-          ) {
-            existingUser.subscription_plan = checkoutPlanIdToPlanKey(
-              existingUser.hasAccess
-            );
-          }
-
-          try {
-            await existingUser.save();
-            console.log("Successfully updated pending user to admin");
-
-            // Generate JWT token
-            const token = jwt.sign(
-              {
-                userId: existingUser._id,
-                email: existingUser.email,
-                role: existingUser.role,
-              },
-              process.env.JWT_SECRET,
-              { expiresIn: "7d" }
-            );
-
-            return res.status(201).json({
-              message: "Account activated successfully! You can now login.",
-              user: {
-                id: existingUser._id,
-                name: existingUser.name,
-                email: existingUser.email,
-                role: existingUser.role,
-                hasAccess: existingUser.hasAccess,
-              },
-              token,
-              hasAccess: existingUser.hasAccess,
-            });
-          } catch (error) {
-            console.error("Error updating pending user:", error);
-            return res
-              .status(500)
-              .json({ error: "Failed to activate account. Please try again." });
-          }
-        } else {
-          console.log("User already exists with email/phone:", {
-            email,
-            phone,
-          });
-          // Check which field is causing the conflict
-          const emailExists = await User.findOne({ email });
-          const phoneExists = await User.findOne({ phone });
-
-          if (emailExists && phoneExists) {
-            return res.status(400).json({
-              error:
-                "Both email and phone number are already in use. Please use different credentials or try logging in.",
-            });
-          } else if (emailExists) {
-            return res.status(400).json({
-              error:
-                "An account with this email already exists. Please use a different email or try logging in.",
-            });
+    // Handle tenant association based on role
+    if (userRole === "super_admin") {
+      // Super admin doesn't need a tenant, they manage the entire system
+      userData.owned_tenant_id = null; // Super admin doesn't own a specific tenant
+    } else if (userRole === "admin") {
+      // Admin creates and owns a tenant
+      const Tenant = require("../models/Tenant");
+      
+      // Check if tenant with this email already exists
+      let tenant = await Tenant.findOne({ email: email.toLowerCase() });
+      
+      if (!tenant) {
+        // Create new tenant only if one doesn't exist
+        tenant = new Tenant({
+          name: `${name}'s Farm`,
+          email: email,
+          business_type: "farm",
+          created_by: null, // Will be set after user creation
+        });
+        try {
+          await tenant.save();
+        } catch (error) {
+          // Handle race condition where another signup created the tenant simultaneously
+          if (error.code === 11000) {
+            tenant = await Tenant.findOne({ email: email.toLowerCase() });
+            if (!tenant) {
+              return res.status(500).json({
+                error: "Failed to create tenant. Please try again.",
+              });
+            }
           } else {
-            return res.status(400).json({
-              error:
-                "An account with this phone number already exists. Please use a different phone number.",
-            });
+            throw error;
           }
         }
       }
@@ -474,7 +496,8 @@ router.post("/signup", async (req, res) => {
       invitationData.name = name;
       invitationData.phone = phone || invitationData.phone; // Keep existing phone if not provided
       invitationData.password = password;
-      invitationData.role = userRole;
+      // Update role from pending to the invited role
+      invitationData.role = invitationData.invitationRole || "technician";
       invitationData.invitationToken = undefined;
       invitationData.invitationExpires = undefined;
       invitationData.emailVerified = true;
@@ -656,6 +679,51 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid Credentials" });
     }
 
+    // Check if user requires 2FA
+    if (user.requiresTwoFactor()) {
+      // Generate 2FA code and send via email
+      const twoFactorCode = user.generateTwoFactorCode();
+      await user.save();
+
+      // Create temporary token for 2FA verification
+      const tempPayload = {
+        userId: user.id,
+        email: user.email,
+        requires2FA: true
+      };
+      const tempToken = jwt.sign(tempPayload, process.env.JWT_SECRET, { expiresIn: '10m' });
+
+      // Send 2FA code via email
+      const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; border: 1px solid #eee; border-radius: 8px; padding: 32px 24px; background: #fafbfc;">
+                <h2 style="color: #2d3748;">Two-Factor Authentication</h2>
+                <p style="color: #4a5568;">Hello <b>${user.name || user.email}</b>,</p>
+                <p style="color: #4a5568;">Your verification code is:</p>
+                <div style="margin: 24px 0; padding: 16px; background: #edf2f7; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 4px; border-radius: 4px;">
+                  ${twoFactorCode}
+                </div>
+                <p style="color: #718096; font-size: 13px;">This code will expire in 10 minutes. If you did not request this, please ignore this email.</p>
+                <hr style="margin: 24px 0; border: none; border-top: 1px solid #e2e8f0;">
+                <p style="color: #a0aec0; font-size: 12px;">&copy; ${new Date().getFullYear()} GrainHero. All rights reserved.</p>
+            </div>
+          `;
+
+      await sendEmail(
+        user.email,
+        "Two-Factor Authentication Code",
+        `Your 2FA verification code is: ${twoFactorCode}`,
+        html
+      );
+
+      return res.status(200).json({
+        requires2FA: true,
+        message: "Two-factor authentication required. Please check your email for the verification code.",
+        tempToken: tempToken,
+        userId: user.id
+      });
+    }
+
+    // If no 2FA required, proceed with normal login
     const payload = {
       user: {
         id: user.id,
@@ -686,6 +754,104 @@ router.post("/login", async (req, res) => {
         });
       }
     );
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server Error: " + err.message });
+  }
+});
+
+// Verify 2FA Route
+router.post("/verify-2fa", async (req, res) => {
+  try {
+    const { code, tempToken } = req.body;
+
+    if (!code || !tempToken) {
+      return res.status(400).json({ error: "Verification code and temporary token are required" });
+    }
+
+    // Verify the temporary token
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ error: "Invalid or expired temporary token" });
+    }
+
+    // Find the user
+    const user = await User.findById(decoded.userId).select("+two_factor_code +two_factor_code_expires");
+    if (!user) {
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    // Verify the 2FA code
+    if (!user.verifyTwoFactorCode(code)) {
+      // Clear the code to prevent replay attacks
+      await user.clearTwoFactorCode();
+      return res.status(400).json({ error: "Invalid or expired verification code" });
+    }
+
+    // Clear the code after successful verification
+    await user.clearTwoFactorCode();
+
+    // Generate final JWT token
+    const payload = {
+      user: {
+        id: user.id,
+        role: user.role,
+        name: user.fullName || user.name,
+        email: user.email,
+        avatar: user.avatar,
+        phone: user.phone,
+        hasAccess: user.hasAccess,
+      },
+    };
+
+    jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" },
+      (err, token) => {
+        if (err) throw err;
+        res.json({
+          token,
+          id: user.id,
+          role: user.role,
+          avatar: user.avatar,
+          name: user.fullName || user.name,
+          email: user.email,
+          phone: user.phone,
+          hasAccess: user.hasAccess,
+        });
+      }
+    );
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server Error: " + err.message });
+  }
+});
+
+// Toggle 2FA Route
+router.patch("/toggle-2fa", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Only allow 2FA toggle for specific roles
+    const allowedRoles = ["superadmin", "admin", "manager"];
+    if (!allowedRoles.includes(user.role)) {
+      return res.status(403).json({ error: "2FA can only be toggled for superadmin, admin, and manager roles" });
+    }
+
+    // Toggle 2FA setting
+    user.two_factor_enabled = !user.two_factor_enabled;
+    await user.save();
+
+    res.json({
+      message: `Two-factor authentication ${user.two_factor_enabled ? 'enabled' : 'disabled'} successfully`,
+      twoFactorEnabled: user.two_factor_enabled
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: "Server Error: " + err.message });

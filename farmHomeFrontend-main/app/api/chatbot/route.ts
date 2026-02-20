@@ -24,7 +24,7 @@ Always provide practical, actionable advice based on scientific principles and i
 
   const openaiMessages = [
     { role: "system", content: systemPrompt },
-    ...messages.map((m: any) => ({
+    ...messages.map((m: { role: string; text: string }) => ({
       role: m.role,
       content: m.text,
     })),

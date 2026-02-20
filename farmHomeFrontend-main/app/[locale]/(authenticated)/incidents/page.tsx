@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Search, Download, Edit, Trash2, Eye, AlertTriangle, Clock, CheckCircle } from "lucide-react"
-import { useTranslations } from 'next-intl';
 
 // Mock data for grain-related incidents
 const incidentData = [
@@ -81,7 +80,7 @@ const incidentData = [
 ]
 
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useState(incidentData)
+  const [incidents] = useState(incidentData)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [filterSeverity, setFilterSeverity] = useState("all")
@@ -89,7 +88,7 @@ export default function IncidentsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const recordsPerPage = 10
 
-  const t = useTranslations()
+
 
   const getSeverityColor = (severity: string) => {
     switch (severity.toLowerCase()) {

@@ -2,6 +2,8 @@
 
 import { User } from "@/app/[locale]/providers"
 
+
+
 export interface RoleHierarchy {
   [key: string]: number
 }
@@ -40,7 +42,7 @@ export function hasRouteAccess(userRole: string, route: string): boolean {
     // Admin and Super Admin routes
     '/users': ['super_admin', 'admin'],
     '/settings': ['super_admin', 'admin'],
-    '/insurance': ['super_admin', 'admin'],
+
     '/warehouses': ['super_admin', 'admin'], // Warehouse management
     
     // Manager, Admin, and Super Admin routes
@@ -224,7 +226,7 @@ export function validateUserSession(user: User | null, currentPath: string): { i
 /**
  * Get user's tenant information for display
  */
-export function getUserTenantInfo(_user: User): { name: string; type: 'owned' | 'member' | 'none' } {
+export function getUserTenantInfo(): { name: string; type: 'owned' | 'member' | 'none' } {
   // This would need to be implemented based on your data structure
   // For now, returning placeholder
   return { name: 'Default Tenant', type: 'member' }

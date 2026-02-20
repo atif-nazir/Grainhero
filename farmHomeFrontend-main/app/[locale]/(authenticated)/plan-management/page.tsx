@@ -7,15 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { 
-  Crown, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  DollarSign, 
-  Users, 
-  HardDrive, 
+import {
+  Crown,
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  DollarSign,
+  Users,
+  HardDrive,
   Smartphone,
   CheckCircle,
   XCircle,
@@ -90,10 +90,11 @@ interface SubscriptionAnalyticsRow {
   }
   warnings: number
   created_at: string
+  [key: string]: unknown
 }
 
-const formatCurrency = (value: number, currency = "USD") => {
-  if (Number.isNaN(value)) return "$0"
+const formatCurrency = (value: number, currency = "PKR") => {
+  if (Number.isNaN(value)) return "PKR 0"
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -243,7 +244,7 @@ export default function PlanManagementPage() {
     {
       key: "plan",
       label: "Plan",
-      render: (_: string, row: SubscriptionAnalyticsRow) => (
+      render: (_: unknown, row: SubscriptionAnalyticsRow) => (
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
             <Crown className="h-5 w-5 text-yellow-600" />
@@ -258,7 +259,7 @@ export default function PlanManagementPage() {
     {
       key: "pricing",
       label: "Pricing",
-      render: (_: string, row: SubscriptionAnalyticsRow) => (
+      render: (_: unknown, row: SubscriptionAnalyticsRow) => (
         <div>
           <div className="font-medium">{formatCurrency(row.price_per_month || 0)}</div>
           <div className="text-sm text-muted-foreground">per month</div>
@@ -268,7 +269,7 @@ export default function PlanManagementPage() {
     {
       key: "status",
       label: "Status",
-      render: (_: string, row: SubscriptionAnalyticsRow) => (
+      render: (_: unknown, row: SubscriptionAnalyticsRow) => (
         <div className="flex items-center space-x-2">
           {getStatusIcon(row.status)}
           <Badge variant={getStatusColor(row.status)}>
@@ -280,12 +281,12 @@ export default function PlanManagementPage() {
     {
       key: "usage",
       label: "Usage",
-      render: (_: string, row: SubscriptionAnalyticsRow) => (
+      render: (_: unknown, row: SubscriptionAnalyticsRow) => (
         <div className="text-sm space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Users</span>
             <span>{row.usage.users}/{formatLimit(row.limits.users, "", "∞")}</span>
-        </div>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Devices</span>
             <span>{row.usage.devices}/{formatLimit(row.limits.devices, "", "∞")}</span>
@@ -296,7 +297,7 @@ export default function PlanManagementPage() {
     {
       key: "warnings",
       label: "Warnings",
-      render: (_: string, row: SubscriptionAnalyticsRow) => (
+      render: (_: unknown, row: SubscriptionAnalyticsRow) => (
         <Badge variant={row.warnings > 0 ? "destructive" : "secondary"}>
           {row.warnings} warning{row.warnings === 1 ? "" : "s"}
         </Badge>
@@ -427,7 +428,7 @@ export default function PlanManagementPage() {
                 <div className="text-center">
                   <div className="text-3xl font-bold">
                     {formatCurrency(plan.price, plan.currency)}
-                </div>
+                  </div>
                   <div className="text-sm text-muted-foreground">per {plan.billingCycle}</div>
                 </div>
 
@@ -489,7 +490,7 @@ export default function PlanManagementPage() {
           <div className="flex items-center space-x-4 mb-6">
             <div className="relative flex-1">
               <Input
-                placeholder="Search by plan name, tenant, or status..."
+                placeholder="Enter plan name, tenant, or status to search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -501,7 +502,7 @@ export default function PlanManagementPage() {
             </Button>
           </div>
 
-          <DataTable
+          <DataTable<SubscriptionAnalyticsRow>
             title=""
             data={filteredSubscriptions}
             columns={columns}
@@ -533,7 +534,7 @@ export default function PlanManagementPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium">Price ($)</label>
+                    <label className="text-sm font-medium">Price (PKR)</label>
                     <Input type="number" placeholder="99" />
                   </div>
                   <div>

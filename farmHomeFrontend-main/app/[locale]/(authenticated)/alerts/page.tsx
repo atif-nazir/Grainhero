@@ -7,6 +7,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useTranslations } from 'next-intl';
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { AnimatedBackground } from "@/components/animations/MotionGraphics";
 
 // User type
 interface User {
@@ -81,7 +82,7 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function AlertsPage() {
     setTimeout(() => {
       try {
         const userStr = localStorage.getItem("farm-home-user");
-        let idRaw = localStorage.getItem("id") || "";
+        const idRaw = localStorage.getItem("id") || "";
         let cleanId = idRaw;
         try {
           cleanId = JSON.parse(idRaw);
@@ -156,7 +157,7 @@ export default function AlertsPage() {
         setError(err.message);
       })
       .finally(() => setLoading(false));
-  }, [role, userId, creating, editingId, deleteLoadingId]);
+  }, [role, userId, editingId, deleteLoadingId]);
 
   // WebSocket for real-time alerts (admin, manager, assistant only)
   useEffect(() => {
@@ -186,34 +187,7 @@ export default function AlertsPage() {
     };
   }, [role, userId]);
 
-  // Create alert handler
-  const handleCreate = (data: Omit<Alert, '_id' | 'createdAt' | 'status'>) => {
-    setCreating(true);
-    setError(null);
-    const token = localStorage.getItem("token");
-    fetch("http://localhost:5000/alerts", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to create alert");
-        }
-        return res.json();
-      })
-      .then(() => {
-        setCreating(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setCreating(false);
-      });
-  };
+  
 
   // Edit alert handler
   const handleEdit = (id: string, data: Omit<Alert, '_id' | 'createdAt' | 'status'>) => {
@@ -281,11 +255,12 @@ export default function AlertsPage() {
     );
   }
 
-  // Print user details (id, role, token)
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+  
 
   return (
-    <div className="space-y-6">
+    <AnimatedBackground className="min-h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
       {/* Row 1: Heading/subtitle and Add Alert button */}
       <div className="flex items-center justify-between">
         <div>
@@ -379,6 +354,8 @@ export default function AlertsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+        </div>
+      </div>
+    </AnimatedBackground>
   );
 } 

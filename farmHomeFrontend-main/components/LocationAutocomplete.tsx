@@ -109,7 +109,7 @@ export default function LocationAutocomplete({ value, onChange, label = "Locatio
         onBlur={handleBlur}
         required={required}
         autoComplete="off"
-        placeholder="Type an address, business, or landmark..."
+        placeholder="Enter address, business, or landmark..."
       />
       {showDropdown && (
         <ul className="absolute z-10 bg-white border rounded shadow w-full mt-1 max-h-60 overflow-auto p-0">
@@ -119,9 +119,9 @@ export default function LocationAutocomplete({ value, onChange, label = "Locatio
           {options.map((option, idx) => {
             // Highlight matched part
             const matchIdx = option.display_name.toLowerCase().indexOf(input.toLowerCase());
-            let before = option.display_name.slice(0, matchIdx);
-            let match = option.display_name.slice(matchIdx, matchIdx + input.length);
-            let after = option.display_name.slice(matchIdx + input.length);
+            const before = option.display_name.slice(0, matchIdx);
+            const match = option.display_name.slice(matchIdx, matchIdx + input.length);
+            const after = option.display_name.slice(matchIdx + input.length);
             // Compose address details
             const addressParts = [
               option.address.road,

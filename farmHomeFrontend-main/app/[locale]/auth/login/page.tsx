@@ -83,21 +83,35 @@ export default function LoginPage() {
         setMessage(error?.message || "Login failed. Please check your credentials and try again.")
       } else {
         const data = await res.json()
-        // Update user context (this will also set farm-home-user in localStorage)
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("id", JSON.stringify(data.id))
-        localStorage.setItem("email", data.email)
-        localStorage.setItem("name", data.name)
-        localStorage.setItem("phone", data.phone)
-        localStorage.setItem("role", data.role)
-        localStorage.setItem("avatar", data.avatar)
-        console.log(data)
-        await login(normalizedEmail, password)
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('pendingSignupEmail')
+        
+        // Check if 2FA is required
+        if (data.requires2FA) {
+          // Store temporary token and user info for 2FA verification
+          localStorage.setItem("tempToken", data.tempToken)
+          localStorage.setItem("userId", data.userId)
+          localStorage.setItem("email", normalizedEmail)
+          
+          setMessage("Two-factor authentication required. Please check your email for the verification code.")
+          setTimeout(() => {
+            router.push("/auth/verify-2fa")
+          }, 1500)
+        } else {
+          // Normal login flow
+          localStorage.setItem("token", data.token)
+          localStorage.setItem("id", JSON.stringify(data.id))
+          localStorage.setItem("email", data.email)
+          localStorage.setItem("name", data.name)
+          localStorage.setItem("phone", data.phone)
+          localStorage.setItem("role", data.role)
+          localStorage.setItem("avatar", data.avatar)
+          console.log(data)
+          await login(normalizedEmail, password)
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('pendingSignupEmail')
+          }
+          setMessage("Login successful! Redirecting...")
+          setTimeout(() => router.push("/dashboard"), 1000)
         }
-        setMessage("Login successful! Redirecting...")
-        setTimeout(() => router.push("/dashboard"), 1000)
       }
     } catch (err) {
       setMessage("Network error. Please check your connection and try again.")
@@ -181,7 +195,7 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john.doe@example.com"
+                  placeholder="Enter your email address"
                   value={email}
                   onChange={(e) => handleEmailChange(e.target.value)}
                   className={`pr-10 ${fieldValidations.email.touched && !fieldValidations.email.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.email.touched && fieldValidations.email.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
@@ -211,6 +225,7 @@ export default function LoginPage() {
               <div className="relative">
                 <Input
                   id="password"
+                  placeholder="Enter your password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => handlePasswordChange(e.target.value)}

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+//import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { X, Send, Minimize2 } from "lucide-react"
 import { useChatbot } from "./chatbot-provider"
 // Remove: import { useTranslations } from "next-intl"
@@ -16,6 +16,15 @@ interface Message {
   timestamp: Date
   topic: string
   role: 'user' | 'assistant'
+}
+
+interface PredictionData {
+  _id: string;
+  batch_id?: string | { batch_id: string };
+  grain_factors?: { grain_type: string };
+  grain_type?: string;
+  silo_id?: { name: string };
+  risk_level?: string;
 }
 
 interface GrainBatch {
@@ -58,17 +67,17 @@ export function ChatbotPopup() {
         })
         if (!res.ok) throw new Error("Failed to fetch grain batches")
         const data = await res.json()
-        const batches = (data.predictions || []).map((pred: any) => ({
+        const batches = (data.predictions || []).map((pred: PredictionData) => ({
           _id: pred._id,
-          batch_id: pred.batch_id?.batch_id || pred.batch_id || 'Unknown',
+          batch_id: typeof pred.batch_id === 'object' && pred.batch_id !== null ? pred.batch_id.batch_id : pred.batch_id || 'Unknown',
           grain_type: pred.grain_factors?.grain_type || pred.grain_type || 'Rice',
-          silo_name: pred.silo_id?.name || 'Unknown Silo',
+          silo_name: pred.silo_id && typeof pred.silo_id === 'object' && 'name' in pred.silo_id ? pred.silo_id.name : 'Unknown Silo',
           quantity: Math.floor(Math.random() * 5000) + 1000, // Mock quantity
           risk_level: pred.risk_level || 'low'
         }))
-        setGrainBatches(batches)
-      } catch (err: any) {
-        setBatchError(err.message || "Failed to fetch grain batches")
+        setGrainBatches(batches as GrainBatch[])
+      } catch {
+        setBatchError("Failed to fetch grain batches");
       } finally {
         setBatchLoading(false)
       }
@@ -77,7 +86,7 @@ export function ChatbotPopup() {
   }, [isOpen])
 
   // Filtered grain batches for search
-  const filteredBatches = grainBatches.filter(batch => {
+  const filteredBatches: readonly GrainBatch[] = grainBatches.filter((batch: GrainBatch) => {
     const search = batchSearch.toLowerCase()
     return (
       (batch.batch_id && batch.batch_id.toLowerCase().includes(search)) ||
@@ -119,7 +128,7 @@ export function ChatbotPopup() {
         role: 'assistant',
       }
       setMessages(prev => [...prev, aiMessage])
-    } catch (err) {
+    } catch {
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         text: "Sorry, there was an error contacting the AI assistant.",
@@ -133,12 +142,7 @@ export function ChatbotPopup() {
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
-    }
-  }
+
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -204,7 +208,7 @@ export function ChatbotPopup() {
               <>
                 <input
                   type="text"
-                  placeholder="Search grain batch by ID, type, or silo..."
+                  placeholder="Enter batch ID, grain type, or silo to search..."
                   value={batchSearch}
                   onChange={e => setBatchSearch(e.target.value)}
                   className="w-full mb-2 px-2 py-1 border rounded"
@@ -214,26 +218,30 @@ export function ChatbotPopup() {
                   {filteredBatches.length === 0 ? (
                     <div className="text-gray-400 text-sm p-2">No grain batches found.</div>
                   ) : (
-                    filteredBatches.map(batch => (
-                      <div
-                        key={batch._id}
-                        className={`cursor-pointer px-3 py-2 hover:bg-green-50 ${selectedBatch && selectedBatch._id === batch._id ? "bg-green-100" : ""}`}
-                        onClick={() => setSelectedBatch(batch)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{batch.batch_id}</span>
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            batch.risk_level === 'critical' ? 'bg-red-100 text-red-800' :
-                            batch.risk_level === 'high' ? 'bg-orange-100 text-orange-800' :
-                            batch.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {batch.risk_level.toUpperCase()}
-                          </span>
+                    filteredBatches.map((batch: GrainBatch) => {
+                      // Type assertion to ensure TypeScript recognizes the batch type
+                      const typedBatch = batch as GrainBatch;
+                      return (
+                        <div
+                          key={typedBatch._id.toString()}
+                          className="cursor-pointer px-3 py-2 hover:bg-green-50"
+                          onClick={() => setSelectedBatch(typedBatch)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{typedBatch.batch_id}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              typedBatch.risk_level === 'critical' ? 'bg-red-100 text-red-800' :
+                              typedBatch.risk_level === 'high' ? 'bg-orange-100 text-orange-800' :
+                              typedBatch.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {typedBatch.risk_level.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500">{typedBatch.grain_type} - {typedBatch.silo_name}</div>
                         </div>
-                        <div className="text-xs text-gray-500">{batch.grain_type} - {batch.silo_name}</div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </>
@@ -301,7 +309,7 @@ export function ChatbotPopup() {
                     handleSendMessage();
                   }
                 }}
-                placeholder="Ask about grain storage, spoilage predictions, or risk analysis..."
+                placeholder="Type your question about grain storage, spoilage, or risk analysis..."
                 className="flex-1 bg-gray-50 border-0 text-gray-900 placeholder-gray-400 focus:ring-0 focus:outline-none"
                 disabled={!selectedBatch || isLoading}
               />

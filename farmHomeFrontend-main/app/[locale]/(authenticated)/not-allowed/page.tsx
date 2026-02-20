@@ -15,7 +15,7 @@ import {
   Wrench
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/auth-utils"
+import { getRoleDisplayName } from "@/lib/auth-utils"
 
 export default function NotAllowedPage() {
   const { user } = useAuth()
@@ -172,7 +172,7 @@ export default function NotAllowedPage() {
             <CardHeader>
               <CardTitle>Need Help?</CardTitle>
               <CardDescription>
-                If you're having trouble accessing the system, here are some things you can try:
+                If you are having trouble accessing the system, here are some things you can try:
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -180,7 +180,7 @@ export default function NotAllowedPage() {
                 <div className="flex items-start space-x-2">
                   <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
                   <p className="text-sm">
-                    <strong>Check your login:</strong> Make sure you're logged in with the correct account.
+                    <strong>Check your login:</strong> Make sure you are logged in with the correct account.
                   </p>
                 </div>
                 <div className="flex items-start space-x-2">

@@ -248,6 +248,8 @@ const userSchema = new mongoose.Schema(
     // Two-factor authentication
     two_factor_enabled: { type: Boolean, default: false },
     two_factor_secret: { type: String, select: false },
+    two_factor_code: { type: String, select: false },
+    two_factor_code_expires: { type: Date },
     backup_codes: [{ type: String, select: false }],
     // Audit fields
     created_by: {
@@ -309,6 +311,15 @@ userSchema.pre("save", async function (next) {
   } catch (error) {
     next(error);
   }
+});
+
+// Enable 2FA by default for superadmin, admin, and manager roles
+userSchema.pre("save", function (next) {
+  // Enable 2FA for these roles by default when creating new users
+  if (this.isNew && ["superadmin", "admin", "manager"].includes(this.role)) {
+    this.two_factor_enabled = true;
+  }
+  next();
 });
 
 // Method to compare password
@@ -375,6 +386,41 @@ userSchema.methods.softDelete = function () {
   this.deleted_at = new Date();
   this.status = USER_STATUSES.DELETED;
   return this.save();
+};
+
+// Method to generate 2FA code
+userSchema.methods.generateTwoFactorCode = function () {
+  // Generate 6-digit code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  this.two_factor_code = code;
+  this.two_factor_code_expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  return code;
+};
+
+// Method to verify 2FA code
+userSchema.methods.verifyTwoFactorCode = function (code) {
+  if (!this.two_factor_code || !this.two_factor_code_expires) {
+    return false;
+  }
+  
+  if (Date.now() > this.two_factor_code_expires) {
+    return false;
+  }
+  
+  return this.two_factor_code === code;
+};
+
+// Method to clear 2FA code
+userSchema.methods.clearTwoFactorCode = function () {
+  this.two_factor_code = undefined;
+  this.two_factor_code_expires = undefined;
+  return this.save();
+};
+
+// Method to check if user requires 2FA
+userSchema.methods.requiresTwoFactor = function () {
+  const rolesRequiring2FA = [USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN, USER_ROLES.MANAGER];
+  return rolesRequiring2FA.includes(this.role) && this.two_factor_enabled;
 };
 
 const User = mongoose.model("User", userSchema);

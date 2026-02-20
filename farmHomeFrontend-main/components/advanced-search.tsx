@@ -14,6 +14,14 @@ import { Search, X, CalendarIcon, Plus, Save, Download, Share } from "lucide-rea
 import { useLanguage } from "@/app/[locale]/providers"
 import { format } from "date-fns"
 
+interface SearchResult {
+  id: string
+  name: string
+  type: string
+  status: string
+  [key: string]: unknown
+}
+
 interface SearchFilter {
   id: string
   field: string
@@ -111,7 +119,7 @@ const savedSearches: SavedSearch[] = [
 export function AdvancedSearch() {
   const [activeModule, setActiveModule] = useState("animals")
   const [filters, setFilters] = useState<SearchFilter[]>([])
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [searchName, setSearchName] = useState("")
@@ -192,7 +200,7 @@ export function AdvancedSearch() {
             <div className="space-y-4">
               {/* Search Filters */}
               <div className="space-y-3">
-                {filters.map((filter, index) => (
+                {filters.map((filter) => (
                   <div key={filter.id} className="flex items-center space-x-2 p-3 border rounded-lg">
                     <Select
                       value={filter.field}
@@ -202,14 +210,14 @@ export function AdvancedSearch() {
                         )
                         updateFilter(filter.id, {
                           field: value,
-                          type: field?.type as any,
+                          type: field?.type as "text" | "number" | "date" | "select",
                           operator: "",
                           value: "",
                         })
                       }}
                     >
                       <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Select field" />
+                        <SelectValue placeholder="Select a field to search" />
                       </SelectTrigger>
                       <SelectContent>
                         {searchFields[activeModule as keyof typeof searchFields]?.map((field) => (
@@ -226,7 +234,7 @@ export function AdvancedSearch() {
                       disabled={!filter.field}
                     >
                       <SelectTrigger className="w-[150px]">
-                        <SelectValue placeholder="Operator" />
+                        <SelectValue placeholder="Select operator" />
                       </SelectTrigger>
                       <SelectContent>
                         {operators[filter.type]?.map((op) => (
@@ -261,7 +269,7 @@ export function AdvancedSearch() {
                       </Popover>
                     ) : (
                       <Input
-                        placeholder="Value"
+                        placeholder="Enter search value"
                         value={filter.value}
                         onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
                         className="w-[200px]"
@@ -397,7 +405,7 @@ export function AdvancedSearch() {
                     id="search-name"
                     value={searchName}
                     onChange={(e) => setSearchName(e.target.value)}
-                    placeholder="Enter search name"
+                    placeholder="Enter a name for this search"
                   />
                 </div>
                 <div>
@@ -406,7 +414,7 @@ export function AdvancedSearch() {
                     id="search-description"
                     value={searchDescription}
                     onChange={(e) => setSearchDescription(e.target.value)}
-                    placeholder="Enter description"
+                    placeholder="Enter description for this search"
                   />
                 </div>
                 <div className="flex justify-end space-x-2">

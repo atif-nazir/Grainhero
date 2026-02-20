@@ -107,7 +107,7 @@ export const TeamInvitationForm: React.FC<TeamInvitationFormProps> = ({ onInvite
                             <Input
                                 id="invite-email"
                                 type="email"
-                                placeholder="colleague@example.com"
+                                placeholder="Enter colleague's email address"
                                 value={formData.email}
                                 onChange={(e) => handleEmailChange(e.target.value)}
                                 className={`pr-10 ${emailValidation.touched && !emailValidation.isValid ? 'border-red-500 focus:border-red-500' : emailValidation.touched && emailValidation.isValid ? 'border-green-500 focus:border-green-500' : ''}`}
@@ -137,7 +137,7 @@ export const TeamInvitationForm: React.FC<TeamInvitationFormProps> = ({ onInvite
                         <Input
                             id="invite-name"
                             type="text"
-                            placeholder="John Doe"
+                            placeholder="Enter colleague's name"
                             value={formData.name}
                             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         />
