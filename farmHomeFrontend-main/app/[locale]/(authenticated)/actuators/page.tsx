@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "@/components/ui/slider"
 import { toast } from "sonner"
 import {
   Fan,
   Lightbulb,
   Volume2,
+  Thermometer,
   VolumeX,
   Power,
   PowerOff,
@@ -336,6 +338,64 @@ export default function ActuatorsPage() {
           </CardContent>
         </Card>
       </div>
+    </div>
+
+    {/* Stats Cards */}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Total Devices</CardTitle>
+          <Settings className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{devices.length}</div>
+          <p className="text-xs text-muted-foreground">
+            {sensors.length} sensors, {actuators.length} actuators
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Online Devices</CardTitle>
+          <CheckCircle className="h-4 w-4 text-green-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-green-600">{onlineDevices.length}</div>
+          <p className="text-xs text-muted-foreground">
+            {Math.round((onlineDevices.length / devices.length) * 100)}% online
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Active Actuators</CardTitle>
+          <Zap className="h-4 w-4 text-blue-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-blue-600">
+            {actuators.filter(a => a.status === 'online').length}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Currently running
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">System Health</CardTitle>
+          <Activity className="h-4 w-4 text-green-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-green-600">Good</div>
+          <p className="text-xs text-muted-foreground">
+            All systems operational
+          </p>
+        </CardContent>
+      </Card>
+    </div>
 
       {/* Control Mode & Safety Info */}
       <div className="grid gap-5 md:grid-cols-2">

@@ -114,18 +114,25 @@ router.get(
       // Super admins should have access to all data
       const isSuperAdmin = req.user?.role === 'super_admin';
 
-      let scopeConditions = [];
-      if (!isSuperAdmin) {
-        if (req.user?.tenant_id) {
-          scopeConditions.push({ tenant_id: req.user.tenant_id });
-        }
-        if (req.user?.owned_tenant_id) {
-          scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
-        }
-        if (req.user?._id) {
-          scopeConditions.push({ admin_id: req.user._id });
-          scopeConditions.push({ created_by: req.user._id });
-        }
+// Cache dashboard for 30 seconds (frequently accessed, but needs to be relatively fresh)
+router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(30 * 1000), async (req, res) => {
+  try {
+    const scopeConditions = [];
+    if (req.user?.tenant_id) {
+      scopeConditions.push({ tenant_id: req.user.tenant_id });
+    }
+    if (req.user?.owned_tenant_id) {
+      scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
+    }
+    if (req.user?._id) {
+      scopeConditions.push({ admin_id: req.user._id });
+      scopeConditions.push({ created_by: req.user._id });
+    }
+
+    // Add warehouse filter for managers and technicians
+    if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
+      scopeConditions.push(req.warehouseFilter);
+    }
 
         // Add warehouse filter for managers and technicians
         if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
@@ -743,6 +750,77 @@ router.get(
           return sum + (batch.quantity_kg || 0);
         }, 0);
       }
+    });
+
+    const analytics = {
+      monthlyIntake,
+      grainDistribution,
+      qualityMetrics: [
+        { quality: "Excellent / Safe", value: qualityBuckets.safe },
+        { quality: "Monitor / Risky", value: qualityBuckets.risky },
+        { quality: "Critical / Spoiled", value: qualityBuckets.spoiled },
+      ],
+    };
+
+    // Sensor snapshots
+    const sensorDevices = await SensorDevice.find(
+      applyScope({ status: { $ne: "retired" } })
+    )
+      .sort({ "health_metrics.last_heartbeat": -1 })
+      .limit(4)
+      .populate("silo_id", "name")
+      .lean();
+
+    const sensors = sensorDevices.map((device) => ({
+      id: device.device_id,
+      type: (device.sensor_types && device.sensor_types[0]) || "Sensor",
+      value:
+        device.health_metrics?.uptime_percentage || device.battery_level || 0,
+      unit: device.health_metrics?.uptime_percentage ? "%" : "%",
+      status: device.status,
+      location: device.silo_id?.name || "Unassigned",
+      lastReading:
+        device.health_metrics?.last_heartbeat ||
+        device.updated_at ||
+        new Date(),
+      battery: device.battery_level || 100,
+      signal: device.signal_strength || -50,
+    }));
+
+    // Business KPIs
+    const activeBuyers = await Buyer.countDocuments(
+      applyScope({ status: { $ne: "inactive" } })
+    );
+
+    const pricedBatches = grainBatches.filter(
+      (batch) => batch.purchase_price_per_kg
+    );
+    const avgPrice =
+      pricedBatches.length > 0
+        ? pricedBatches.reduce(
+          (sum, batch) => sum + (batch.purchase_price_per_kg || 0),
+          0
+        ) / pricedBatches.length
+        : 0;
+
+    const dispatchedBatches = grainBatches.filter(
+      (batch) => batch.status?.toLowerCase() === "dispatched"
+    );
+    const dispatchRate =
+      totalBatches > 0
+        ? Math.round((dispatchedBatches.length / totalBatches) * 100)
+        : 0;
+
+    const avgRiskScore =
+      totalBatches > 0
+        ? grainBatches.reduce(
+          (sum, batch) => sum + (batch.risk_score || 0),
+          0
+        ) / totalBatches
+        : 0;
+    const qualityScore = Number(
+      Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
+    );
 
       // Get current plan information for the user
       let currentPlan = 'Basic';
@@ -921,7 +999,11 @@ router.get(
               temperature: latestReading.temperature?.value,
               humidity: latestReading.humidity?.value,
               co2: latestReading.co2?.value,
+              co2: latestReading.co2?.value,
               voc: latestReading.voc?.value,
+              tvoc: latestReading.voc?.value, // Alias for frontend
+              tvoc_ppb: latestReading.voc?.value, // Alias for frontend
+              moisture: latestReading.moisture?.value,
               moisture: latestReading.moisture?.value,
               light: latestReading.light?.value,
               data_age_minutes: Math.round(
@@ -946,6 +1028,7 @@ router.get(
             storage_status: "اسٹوریج کی حالت",
             capacity: "گنجائش",
             utilization: "استعمال",
+            tvoc: "TVOC",
           }
           : {
             temperature: "Temperature",
@@ -953,6 +1036,7 @@ router.get(
             storage_status: "Storage Status",
             capacity: "Capacity",
             utilization: "Utilization",
+            tvoc: "TVOC",
           };
 
       res.json({
@@ -1032,8 +1116,7 @@ router.get(
         // Get batches in this silo
         const batches = await GrainBatch.find({
           silo_id: siloId,
-          ...req.warehouseFilter,
-          ...(isSuperAdmin ? {} : { tenant_id: req.user.tenant_id })
+          ...req.warehouseFilter
         });
         const avgRiskScore =
           batches.reduce((sum, b) => sum + (b.risk_score || 0), 0) /
