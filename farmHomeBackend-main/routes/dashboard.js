@@ -142,7 +142,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       scopeConditions.push({ admin_id: req.user._id });
       scopeConditions.push({ created_by: req.user._id });
     }
-    
+
     // Add warehouse filter for managers and technicians
     if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
       scopeConditions.push(req.warehouseFilter);
@@ -163,7 +163,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       .populate("silo_id", "name")
       .lean();
     const totalBatches = grainBatches.length;
-    
+
     // Silo stats
     const silos = await Silo.find(applyScope({ deleted_at: null })).lean();
     const totalSilos = silos.length;
@@ -171,11 +171,11 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
     let totalCurrentQuantity = 0;
     const storageStatus = { Low: 0, Medium: 0, High: 0, Critical: 0 };
     const grainTypes = {};
-    
+
     silos.forEach((silo) => {
       totalCapacity += silo.capacity_kg || 0;
       totalCurrentQuantity += silo.current_occupancy_kg || 0;
-      
+
       // Storage status
       const status = getStorageStatus(
         silo.capacity_kg || 0,
@@ -183,7 +183,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       );
       storageStatus[status] = (storageStatus[status] || 0) + 1;
     });
-    
+
     // Grain type distribution
     grainBatches.forEach((batch) => {
       if (batch.grain_type) {
@@ -208,7 +208,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
     const activeUsers = await User.countDocuments(
       applyScope({ blocked: false })
     );
-    
+
     // Active alerts
     const activeAlerts = await Alert.countDocuments(
       applyScope({ status: "active" })
@@ -219,7 +219,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       .filter((s) => {
         const utilization =
           ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
-      return utilization >= 90;
+        return utilization >= 90;
       })
       .map((s) => ({
         siloId: s._id,
@@ -231,7 +231,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       .filter((s) => {
         const utilization =
           ((s.current_occupancy_kg || 0) / (s.capacity_kg || 1)) * 100;
-      return utilization < 25;
+        return utilization < 25;
       })
       .map((s) => ({
         siloId: s._id,
@@ -258,8 +258,8 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
           batch.risk_score >= 70
             ? "High"
             : batch.risk_score >= 40
-            ? "Medium"
-            : "Low",
+              ? "Medium"
+              : "Low",
       }));
 
     // Alerts detail list
@@ -372,9 +372,9 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
     const avgPrice =
       pricedBatches.length > 0
         ? pricedBatches.reduce(
-            (sum, batch) => sum + (batch.purchase_price_per_kg || 0),
-            0
-          ) / pricedBatches.length
+          (sum, batch) => sum + (batch.purchase_price_per_kg || 0),
+          0
+        ) / pricedBatches.length
         : 0;
 
     const dispatchedBatches = grainBatches.filter(
@@ -388,9 +388,9 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
     const avgRiskScore =
       totalBatches > 0
         ? grainBatches.reduce(
-            (sum, batch) => sum + (batch.risk_score || 0),
-            0
-          ) / totalBatches
+          (sum, batch) => sum + (batch.risk_score || 0),
+          0
+        ) / totalBatches
         : 0;
     const qualityScore = Number(
       Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
@@ -513,17 +513,21 @@ router.get(
               : 0,
           latest_reading: latestReading
             ? {
-                timestamp: latestReading.timestamp,
-                temperature: latestReading.temperature?.value,
-                humidity: latestReading.humidity?.value,
-                co2: latestReading.co2?.value,
-                voc: latestReading.voc?.value,
-                moisture: latestReading.moisture?.value,
-                light: latestReading.light?.value,
-                data_age_minutes: Math.round(
-                  (Date.now() - new Date(latestReading.timestamp)) / (1000 * 60)
-                ),
-              }
+              timestamp: latestReading.timestamp,
+              temperature: latestReading.temperature?.value,
+              humidity: latestReading.humidity?.value,
+              co2: latestReading.co2?.value,
+              co2: latestReading.co2?.value,
+              voc: latestReading.voc?.value,
+              tvoc: latestReading.voc?.value, // Alias for frontend
+              tvoc_ppb: latestReading.voc?.value, // Alias for frontend
+              moisture: latestReading.moisture?.value,
+              moisture: latestReading.moisture?.value,
+              light: latestReading.light?.value,
+              data_age_minutes: Math.round(
+                (Date.now() - new Date(latestReading.timestamp)) / (1000 * 60)
+              ),
+            }
             : null,
           status: getStorageStatus(silo.capacity_kg, silo.current_quantity_kg),
           alerts_count: await Alert.countDocuments({
@@ -537,19 +541,21 @@ router.get(
       const labels =
         language === "ur"
           ? {
-              temperature: "درجہ حرارت",
-              humidity: "نمی",
-              storage_status: "اسٹوریج کی حالت",
-              capacity: "گنجائش",
-              utilization: "استعمال",
-            }
+            temperature: "درجہ حرارت",
+            humidity: "نمی",
+            storage_status: "اسٹوریج کی حالت",
+            capacity: "گنجائش",
+            utilization: "استعمال",
+            tvoc: "TVOC",
+          }
           : {
-              temperature: "Temperature",
-              humidity: "Humidity",
-              storage_status: "Storage Status",
-              capacity: "Capacity",
-              utilization: "Utilization",
-            };
+            temperature: "Temperature",
+            humidity: "Humidity",
+            storage_status: "Storage Status",
+            capacity: "Capacity",
+            utilization: "Utilization",
+            tvoc: "TVOC",
+          };
 
       res.json({
         timestamp: new Date().toISOString(),
@@ -624,9 +630,9 @@ router.get(
         }).sort({ timestamp: 1 });
 
         // Get batches in this silo
-        const batches = await GrainBatch.find({ 
-          silo_id: siloId, 
-          ...req.warehouseFilter 
+        const batches = await GrainBatch.find({
+          silo_id: siloId,
+          ...req.warehouseFilter
         });
         const avgRiskScore =
           batches.reduce((sum, b) => sum + (b.risk_score || 0), 0) /
@@ -753,14 +759,14 @@ router.get(
           avg_utilization:
             silos.length > 0
               ? Math.round(
-                  silos.reduce(
-                    (sum, s) =>
-                      sum +
-                      ((s.current_quantity_kg || 0) / (s.capacity_kg || 1)) *
-                        100,
-                    0
-                  ) / silos.length
-                )
+                silos.reduce(
+                  (sum, s) =>
+                    sum +
+                    ((s.current_quantity_kg || 0) / (s.capacity_kg || 1)) *
+                    100,
+                  0
+                ) / silos.length
+              )
               : 0,
           high_risk_batches: batches.filter((b) => (b.risk_score || 0) >= 70)
             .length,
@@ -794,8 +800,8 @@ router.get(
           type === "batches"
             ? reportData.batches
             : type === "silos"
-            ? reportData.silos
-            : [reportData.summary];
+              ? reportData.silos
+              : [reportData.summary];
 
         const csv = json2csv(csvData);
 
@@ -850,8 +856,7 @@ router.get(
           reportData.batches.forEach((batch, index) => {
             if (index > 0 && index % 20 === 0) doc.addPage();
             doc.text(
-              `${batch.batch_id} | ${batch.grain_type} | ${
-                batch.quantity_kg
+              `${batch.batch_id} | ${batch.grain_type} | ${batch.quantity_kg
               }kg | Risk: ${batch.risk_score || "N/A"}%`
             );
           });
@@ -1056,8 +1061,8 @@ router.get(
           user.active_sessions?.filter((s) => s.is_active).length || 0,
         days_since_login: user.lastLogin
           ? Math.floor(
-              (Date.now() - new Date(user.lastLogin)) / (1000 * 60 * 60 * 24)
-            )
+            (Date.now() - new Date(user.lastLogin)) / (1000 * 60 * 60 * 24)
+          )
           : "Never",
       }));
 
