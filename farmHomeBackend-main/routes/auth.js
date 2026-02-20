@@ -466,6 +466,19 @@ router.post("/signup", async (req, res) => {
           }
         }
       }
+    }
+
+    // Handle tenant association based on role
+    if (userRole === "admin") {
+      // Admin creates and owns a tenant
+      const Tenant = require("../models/Tenant");
+      const tenant = new Tenant({
+        name: `${name}'s Farm`,
+        email: email,
+        business_type: "farm",
+        created_by: null, // Will be set after user creation
+      });
+      await tenant.save();
       userData.owned_tenant_id = tenant._id;
     } else if (userRole === "manager" || userRole === "technician") {
       // Manager and Technician belong to an existing tenant
@@ -1601,16 +1614,15 @@ router.get("/profile", auth, async (req, res) => {
 // Update user profile (name, phone)
 router.patch("/profile", auth, async (req, res) => {
   try {
-    const { name, phone } = req.body;
-    if (!name && !phone) {
-      return res
-        .status(400)
-        .json({ error: "At least one of name or phone is required" });
-    }
+    const { name, phone, address, preferences, department, avatar } = req.body;
+
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: "User not found" });
+
     if (name) user.name = name;
     if (phone) user.phone = phone;
+    if (avatar) user.avatar = avatar;
+
     await user.save();
     res.json({
       id: user._id,
@@ -1646,6 +1658,303 @@ router.get("/me", auth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/me:
+ *   patch:
+ *     summary: Update current user profile or password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: object
+ *               preferences:
+ *                 type: object
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *               confirmPassword:
+ *                 type: string
+ *               avatar:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch("/me", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // CASE 1: Password Change
+    if (req.body.currentPassword) {
+      const { currentPassword, newPassword, confirmPassword } = req.body;
+
+      if (!newPassword || !confirmPassword) {
+        return res.status(400).json({ error: "New password and confirm password are required" });
+      }
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: "New passwords do not match" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ error: "Incorrect current password" });
+      }
+
+      user.password = newPassword;
+      await user.save();
+
+      return res.json({ message: "Password updated successfully" });
+    }
+
+    // CASE 2: Profile Update
+    const { name, phone, address, preferences, department, avatar } = req.body;
+
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (avatar) user.avatar = avatar;
+
+    await user.save();
+
+    // Return updated user object
+    const updatedUser = await User.findById(user._id).select("-password");
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        avatar: updatedUser.avatar,
+        role: updatedUser.role,
+      }
+    });
+
+  } catch (err) {
+    console.error("Error updating /auth/me:", err);
+    res.status(500).json({ error: "Server error: " + err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/me:
+ *   patch:
+ *     summary: Update current user profile or password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: object
+ *               preferences:
+ *                 type: object
+ *               avatar:
+ *                 type: string
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *               confirmPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch("/me", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // CASE 1: Password Change
+    if (req.body.currentPassword) {
+      const { currentPassword, newPassword, confirmPassword } = req.body;
+
+      if (!newPassword || !confirmPassword) {
+        return res.status(400).json({ error: "New password and confirm password are required" });
+      }
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: "New passwords do not match" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ error: "Incorrect current password" });
+      }
+
+      user.password = newPassword;
+      await user.save();
+
+      return res.json({ message: "Password updated successfully" });
+    }
+
+    // CASE 2: Profile Update
+    const { name, phone, address, preferences, department, avatar } = req.body;
+
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (avatar) user.avatar = avatar; // Allow updating avatar URL directly
+
+    await user.save();
+
+    // Return updated user object
+    const updatedUser = await User.findById(user._id).select("-password");
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        avatar: updatedUser.avatar,
+        role: updatedUser.role,
+      }
+    });
+
+  } catch (err) {
+    console.error("Error updating /auth/me:", err);
+    res.status(500).json({ error: "Server error: " + err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/me:
+ *   patch:
+ *     summary: Update current user profile or password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: object
+ *               preferences:
+ *                 type: object
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *               confirmPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch("/me", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // CASE 1: Password Change
+    if (req.body.currentPassword) {
+      const { currentPassword, newPassword, confirmPassword } = req.body;
+
+      if (!newPassword || !confirmPassword) {
+        return res.status(400).json({ error: "New password and confirm password are required" });
+      }
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: "New passwords do not match" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ error: "Incorrect current password" });
+      }
+
+      user.password = newPassword;
+      await user.save();
+
+      return res.json({ message: "Password updated successfully" });
+    }
+
+    // CASE 2: Profile Update
+    const { name, phone, address, preferences, department } = req.body;
+
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+
+    await user.save();
+
+    // Return updated user object
+    const updatedUser = await User.findById(user._id).select("-password");
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        avatar: updatedUser.avatar,
+        role: updatedUser.role,
+      }
+    });
+
+  } catch (err) {
+    console.error("Error updating /auth/me:", err);
+    res.status(500).json({ error: "Server error: " + err.message });
   }
 });
 

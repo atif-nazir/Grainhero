@@ -11,10 +11,10 @@ class RealTimeDataService extends EventEmitter {
         this.dataBuffer = new Map(); // For offline buffering
         this.processingQueue = [];
         this.isProcessing = false;
-        
+
         // Start processing queue
         this.startQueueProcessor();
-        
+
         // Cleanup old buffered data every hour
         setInterval(() => this.cleanupOldBufferedData(), 60 * 60 * 1000);
     }
@@ -29,7 +29,7 @@ class RealTimeDataService extends EventEmitter {
             subscribedSensors: new Set(),
             lastHeartbeat: new Date()
         });
-        
+
         console.log(`Client ${clientId} connected to real-time data service`);
         this.emit('clientConnected', clientId);
     }
@@ -142,12 +142,12 @@ class RealTimeDataService extends EventEmitter {
      */
     async startQueueProcessor() {
         if (this.isProcessing) return;
-        
+
         this.isProcessing = true;
-        
+
         while (this.processingQueue.length > 0) {
             const item = this.processingQueue.shift();
-            
+
             try {
                 switch (item.type) {
                     case 'sensor_reading':
@@ -161,9 +161,9 @@ class RealTimeDataService extends EventEmitter {
                 console.error('Queue processing error:', error);
             }
         }
-        
+
         this.isProcessing = false;
-        
+
         // Schedule next processing cycle
         setTimeout(() => this.startQueueProcessor(), 100);
     }
@@ -186,13 +186,13 @@ class RealTimeDataService extends EventEmitter {
 
             // Check for threshold violations
             const violations = await this.checkThresholdViolations(reading);
-            
+
             if (violations.length > 0) {
                 // Create alerts for violations
                 for (const violation of violations) {
                     await this.createThresholdAlert(reading, violation);
                 }
-                
+
                 // Trigger actuators if needed
                 await this.triggerActuatorsForViolations(reading, violations);
             }
@@ -219,7 +219,7 @@ class RealTimeDataService extends EventEmitter {
     async processActuatorCommandItem(commandData) {
         try {
             const { actuatorId, action, parameters } = commandData;
-            
+
             const actuator = await Actuator.findById(actuatorId);
             if (!actuator) {
                 throw new Error(`Actuator ${actuatorId} not found`);
@@ -258,7 +258,7 @@ class RealTimeDataService extends EventEmitter {
         try {
             const violations = [];
             const sensorTypes = ['temperature', 'humidity', 'voc', 'moisture'];
-            
+
             // Get sensor device to check thresholds
             const sensorDevice = await require('../models/SensorDevice').findById(reading.device_id);
             if (!sensorDevice || !sensorDevice.thresholds) {
@@ -268,7 +268,7 @@ class RealTimeDataService extends EventEmitter {
             for (const type of sensorTypes) {
                 const value = reading[type]?.value;
                 const threshold = sensorDevice.thresholds[type];
-                
+
                 if (value !== undefined && threshold) {
                     if (threshold.critical_min !== undefined && value < threshold.critical_min) {
                         violations.push({
@@ -305,7 +305,7 @@ class RealTimeDataService extends EventEmitter {
                     }
                 }
             }
-            
+
             return violations;
         } catch (error) {
             console.error('Check threshold violations error:', error);
@@ -447,7 +447,7 @@ class RealTimeDataService extends EventEmitter {
                 const shouldTrigger = actuator.shouldTrigger(reading);
                 if (shouldTrigger) {
                     const recommendedActions = actuator.getRecommendedAction(reading);
-                    
+
                     // Start actuator operation
                     await actuator.startOperation('System', 'threshold', {
                         violations,
@@ -476,7 +476,7 @@ class RealTimeDataService extends EventEmitter {
             if (!silo) return;
 
             const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
-            
+
             for (const type of sensorTypes) {
                 if (reading[type]?.value !== undefined) {
                     await silo.updateCurrentConditions(type, reading[type].value, reading.device_id);
@@ -502,7 +502,7 @@ class RealTimeDataService extends EventEmitter {
         this.connectedClients.forEach((client, clientId) => {
             if (client.subscribedSilos.has(reading.silo_id.toString()) ||
                 client.subscribedSensors.has(reading.device_id.toString())) {
-                
+
                 try {
                     client.socket.emit('sensor_reading', message);
                 } catch (error) {
@@ -542,7 +542,7 @@ class RealTimeDataService extends EventEmitter {
         if (!this.dataBuffer.has(deviceId)) {
             this.dataBuffer.set(deviceId, []);
         }
-        
+
         this.dataBuffer.get(deviceId).push({
             ...data,
             buffered_at: new Date()
@@ -583,7 +583,7 @@ class RealTimeDataService extends EventEmitter {
      */
     cleanupOldBufferedData() {
         const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
-        
+
         this.dataBuffer.forEach((buffer, deviceId) => {
             const filteredBuffer = buffer.filter(item => item.buffered_at > cutoffTime);
             if (filteredBuffer.length === 0) {
