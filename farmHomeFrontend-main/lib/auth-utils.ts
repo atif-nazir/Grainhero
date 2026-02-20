@@ -42,7 +42,7 @@ export function hasRouteAccess(userRole: string, route: string): boolean {
     // Admin and Super Admin routes
     '/users': ['super_admin', 'admin'],
     '/settings': ['super_admin', 'admin'],
-    '/insurance': ['super_admin', 'admin'],
+
     '/warehouses': ['super_admin', 'admin'], // Warehouse management
     
     // Manager, Admin, and Super Admin routes

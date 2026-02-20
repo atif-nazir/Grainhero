@@ -12,43 +12,43 @@ const PLAN_MAPPING = {
   // Checkout/Stripe plan IDs -> Plan feature keys
   basic: {
     planKey: 'basic', // Key in plan-features.js
-    brandedName: 'Grain Starter',
-    displayName: 'Grain Starter',
-    subscriptionPlanName: 'Grain Starter', // For Subscription model
-    price: 99,
+    brandedName: 'Starter',
+    displayName: 'Starter',
+    subscriptionPlanName: 'Starter', // For Subscription model
+    price: 1499,
     stripePriceId: null // Will be set dynamically
   },
   intermediate: {
     planKey: 'standard', // Maps to 'standard' in plan-features.js
-    brandedName: 'Grain Professional',
-    displayName: 'Grain Professional',
-    subscriptionPlanName: 'Grain Professional',
-    price: 299,
+    brandedName: 'Professional',
+    displayName: 'Professional',
+    subscriptionPlanName: 'Professional',
+    price: 3899,
     stripePriceId: null
   },
   pro: {
     planKey: 'professional', // Maps to 'professional' in plan-features.js
-    brandedName: 'Grain Enterprise',
-    displayName: 'Grain Enterprise',
-    subscriptionPlanName: 'Grain Enterprise',
-    price: 999,
+    brandedName: 'Enterprise',
+    displayName: 'Enterprise',
+    subscriptionPlanName: 'Enterprise',
+    price: 5999,
     stripePriceId: null
   },
   // For future use or manual assignments
   standard: {
     planKey: 'standard',
-    brandedName: 'Grain Professional',
-    displayName: 'Grain Professional',
-    subscriptionPlanName: 'Grain Professional',
-    price: 299,
+    brandedName: 'Professional',
+    displayName: 'Professional',
+    subscriptionPlanName: 'Professional',
+    price: 3899,
     stripePriceId: null
   },
   professional: {
     planKey: 'professional',
-    brandedName: 'Grain Enterprise',
-    displayName: 'Grain Enterprise',
-    subscriptionPlanName: 'Grain Enterprise',
-    price: 999,
+    brandedName: 'Enterprise',
+    displayName: 'Enterprise',
+    subscriptionPlanName: 'Enterprise',
+    price: 5999,
     stripePriceId: null
   },
   enterprise: {

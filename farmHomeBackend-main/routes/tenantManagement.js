@@ -3,6 +3,7 @@ const router = express.Router();
 const Tenant = require('../models/Tenant');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
+const Invoice = require('../models/Invoice');
 const { auth } = require('../middleware/auth');
 const { superAdminOnly } = require('../middleware/permission');
 
@@ -137,7 +138,7 @@ router.get('/tenants', auth, superAdminOnly, async (req, res) => {
 
     // Build filter object
     const filter = {};
-    
+
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -171,7 +172,7 @@ router.get('/tenants', auth, superAdminOnly, async (req, res) => {
     // Enhance tenant data with subscription info
     const enhancedTenants = await Promise.all(tenants.map(async (tenant) => {
       const subscription = await Subscription.findOne({ tenant_id: tenant._id });
-      const userCount = await User.countDocuments({ 
+      const userCount = await User.countDocuments({
         $or: [
           { tenant_id: tenant._id },
           { owned_tenant_id: tenant._id }
@@ -249,7 +250,7 @@ router.get('/tenants/:id', auth, superAdminOnly, async (req, res) => {
     }
 
     // Get additional tenant statistics
-    const userCount = await User.countDocuments({ 
+    const userCount = await User.countDocuments({
       $or: [
         { tenant_id: tenant._id },
         { owned_tenant_id: tenant._id }
@@ -263,9 +264,9 @@ router.get('/tenants/:id', auth, superAdminOnly, async (req, res) => {
         { owned_tenant_id: tenant._id }
       ]
     })
-    .sort({ lastLogin: -1 })
-    .limit(5)
-    .select('name email lastLogin role');
+      .sort({ lastLogin: -1 })
+      .limit(5)
+      .select('name email lastLogin role');
 
     res.json({
       success: true,
@@ -336,13 +337,23 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
       name,
       email,
       phone,
+      password, // Password is now required to create the admin user
       business_type,
       plan_name,
       address,
       notes
     } = req.body;
 
-    // Check if tenant with email already exists
+    // Check if user with email already exists (User determines tenant uniqueness mostly)
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Check if tenant with email already exists (though above check covers commonly)
     const existingTenant = await Tenant.findOne({ email });
     if (existingTenant) {
       return res.status(400).json({
@@ -351,20 +362,53 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
       });
     }
 
-    // Create tenant
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required to create the tenant admin account'
+      });
+    }
+
+    // 1. Create the Admin User first (so we have ID for created_by)
+    // Actually, auth.js creates user then tenant. But to link `created_by` and `owned_tenant_id` properly we need somewhat circular or update.
+    // Auth.js logic:
+    // 1. Create Tenant (without created_by)
+    // 2. Create User (with owned_tenant_id)
+    // 3. Update Tenant (set created_by)
+
+    // Create Tenant
     const tenant = new Tenant({
-      name,
       email,
       phone,
-      business_type: business_type || 'farm',
+      business_type: business_type || 'warehouse',
       address,
       notes,
-      created_by: req.user.id,
+      created_by: null, // Will set below
       is_active: true,
-      is_verified: false
+      is_verified: true // Super admin created, so verified
     });
 
     await tenant.save();
+
+    // Create User (Admin)
+    const user = new User({
+      name,
+      email,
+      phone,
+      password,
+      role: 'admin',
+      owned_tenant_id: tenant._id,
+      // hasAccess is for subscription permissions, usually mapped from plan
+      hasAccess: plan_name ? (plan_name === 'Basic' ? 'basic' : plan_name === 'Pro' ? 'pro' : 'enterprise') : 'basic',
+      emailVerified: true
+    });
+
+    await user.save();
+
+    // Update Tenant with created_by
+    tenant.created_by = user._id;
+    await tenant.save();
+
 
     // Create subscription if plan is provided
     if (plan_name) {
@@ -376,15 +420,18 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
 
       const plan = planPricing[plan_name];
       if (plan) {
+        // Manual creation by Super Admin defaults to "Comp" or "Manual" payment with 0 amount charged
+        // But we want to reflect valid plan features
         const subscription = new Subscription({
           tenant_id: tenant._id,
           plan_name,
-          price_per_month: plan.price,
-          price_per_year: plan.price * 10, // 2 months free for yearly
+          price_per_month: 0, // Recorded as 0 for manual creation as per user request
+          price_per_year: 0,
           billing_cycle: 'monthly',
           start_date: new Date(),
           end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
           status: 'active',
+          payment_status: 'paid', // Mark as paid since admin created it
           features: {
             max_users: plan.users,
             max_devices: plan.devices,
@@ -395,22 +442,42 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
             custom_integrations: plan_name === 'Enterprise',
             advanced_analytics: plan_name !== 'Basic'
           },
-          created_by: req.user.id
+          created_by: user._id
         });
 
         await subscription.save();
         tenant.subscription_id = subscription._id;
         await tenant.save();
+
+        // Update user subscription plan key
+        user.subscription_plan = plan_name.toLowerCase();
+        await user.save();
+
+        // Create a 0-amount Invoice to record this "transaction"
+        const invoice = new Invoice({
+          tenant_id: tenant._id,
+          subscription_id: subscription._id,
+          amount: 0,
+          currency: 'USD', // Or default
+          status: 'paid', // Immediately paid
+          billing_date: new Date(),
+          due_date: new Date(),
+          paid_at: new Date(),
+          invoice_number: `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+        });
+        await invoice.save();
       }
     }
 
     res.status(201).json({
       success: true,
-      message: 'Tenant created successfully',
-      data: { tenant }
+      message: 'Tenant and Admin User created successfully',
+      data: { tenant, user } // Return both
     });
   } catch (error) {
     console.error('Error creating tenant:', error);
+    // Log stack trace for deeper debugging
+    console.error(error.stack);
     res.status(500).json({
       success: false,
       message: 'Error creating tenant',
@@ -589,7 +656,7 @@ router.get('/statistics', auth, superAdminOnly, async (req, res) => {
   try {
     const totalTenants = await Tenant.countDocuments();
     const activeTenants = await Tenant.countDocuments({ is_active: true });
-    
+
     // Get trial tenants (active subscriptions with trial end date in future)
     const trialSubscriptions = await Subscription.find({
       status: 'active',
@@ -607,15 +674,15 @@ router.get('/statistics', auth, superAdminOnly, async (req, res) => {
     // Calculate growth rate (tenants created in last 30 days vs previous 30 days)
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-    
+
     const recentTenants = await Tenant.countDocuments({
       created_at: { $gte: thirtyDaysAgo }
     });
     const previousTenants = await Tenant.countDocuments({
       created_at: { $gte: sixtyDaysAgo, $lt: thirtyDaysAgo }
     });
-    
-    const growthRate = previousTenants > 0 ? 
+
+    const growthRate = previousTenants > 0 ?
       ((recentTenants - previousTenants) / previousTenants) * 100 : 0;
 
     res.json({

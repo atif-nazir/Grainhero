@@ -13,8 +13,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/[locale]/providers";
 import { useTranslations } from "next-intl";
 import { usePlan } from "@/app/[locale]/providers";
-import { CheckCircle2 } from "lucide-react";
-import { useEffect } from "react";
+import { CheckCircle2, Cpu } from "lucide-react";
+import { useEffect, useState } from "react";
 import { config } from "@/config";
 
 function encryptAccess(access: string): string {
@@ -22,13 +22,14 @@ function encryptAccess(access: string): string {
 }
 export default function PlansPage() {
   const router = useRouter();
-
+  const [isLoading, setIsLoading] = useState(true);
   const { logout, user } = useAuth();
   const t = useTranslations("PricingPage");
   const { plan } = usePlan();
   const email = localStorage.getItem("email");
   useEffect(() => {
     (async () => {
+      setIsLoading(true);
       try {
         const token =
           typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -67,6 +68,7 @@ export default function PlansPage() {
       } catch {
         // Optionally handle error
       }
+      setIsLoading(false);
     })();
   }, []);
   return (
@@ -77,20 +79,17 @@ export default function PlansPage() {
         </h1>
         <p className="text-center text-gray-600 mb-12">
           {t("subtitle", {
-            defaultMessage: "Choose the grain management plan that fits your operation best.",
+            defaultMessage: "Choose the grain management plan that fits your operation best. All prices in PKR.",
           })}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {pricingData.map((p) => (
             <Card
               key={p.id}
-              className={`flex flex-col h-full relative ${
-                plan === p.id ? "ring-2 ring-green-500" : ""
-              } ${
-                p.id === 'custom' ? "border-2 border-purple-200 bg-gradient-to-b from-purple-50 to-white" : ""
-              } ${
-                p.id === 'pro' ? "border-2 border-blue-200 bg-gradient-to-b from-blue-50 to-white" : ""
-              }`}
+              className={`flex flex-col h-full relative ${plan === p.id ? "ring-2 ring-green-500" : ""
+                } ${p.id === 'custom' ? "border-2 border-purple-200 bg-gradient-to-b from-purple-50 to-white" : ""
+                } ${p.popular ? "border-2 border-blue-200 bg-gradient-to-b from-blue-50 to-white" : ""
+                }`}
             >
               <CardHeader>
                 {p.id === 'custom' && (
@@ -100,7 +99,7 @@ export default function PlansPage() {
                     </span>
                   </div>
                 )}
-                {p.id === 'pro' && (
+                {p.popular && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
                       Most Popular
@@ -113,7 +112,7 @@ export default function PlansPage() {
                     <CheckCircle2 className="text-green-600 w-6 h-6" />
                   )}
                 </CardTitle>
-                <div className="text-3xl font-bold text-center mt-2">
+                <div className="text-3xl font-bold text-center mt-2 text-[#00a63e]">
                   {p.priceFrontend}
                 </div>
               </CardHeader>
@@ -121,6 +120,15 @@ export default function PlansPage() {
                 <CardDescription className="text-center mb-4">
                   {p.description}
                 </CardDescription>
+
+                {/* IoT Charge Badge */}
+                {p.iotChargeLabel && (
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-4">
+                    <Cpu className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{p.iotChargeLabel}</span>
+                  </div>
+                )}
+
                 <ul className="mb-6 space-y-2">
                   {p.features.map((feature, idx) => (
                     <li key={idx} className="flex items-center gap-2">
@@ -149,10 +157,17 @@ export default function PlansPage() {
                     <Button
                       className="w-full"
                       variant={user?.hasAccess === p.id ? "outline" : "default"}
-                      onClick={() =>
-                        router.push(p.link + "?prefilled_email=" + email)
-                      }
                       disabled={user?.hasAccess === p.id}
+                      onClick={() => {
+                        if (user?.hasAccess !== p.id) {
+                          // Prefill email if available
+                          if (email) {
+                            try { localStorage.setItem('signupEmail', email) } catch { }
+                          }
+                          try { localStorage.setItem('selectedPlanId', p.id) } catch { }
+                          router.push('/checkout')
+                        }
+                      }}
                     >
                       {user?.hasAccess === p.id ? "Subscribed" : "Get Started"}
                     </Button>

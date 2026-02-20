@@ -4,16 +4,16 @@
 const PLAN_FEATURES = {
   basic: {
     name: "Basic Plan",
-    price: 99,
-    currency: "USD",
+    price: 1499,
+    currency: "PKR",
     billingCycle: "monthly",
     description: "Perfect for small farms getting started with grain management",
-    
+
     limits: {
       users: {
         managers: 2,
-        technicians: 5,
-        total: 7
+        technicians: 3,
+        total: 5
       },
       grain_batches: 50,
       sensors: 10,
@@ -23,7 +23,7 @@ const PLAN_FEATURES = {
       api_calls_per_month: 10000,
       reports_per_month: 5
     },
-    
+
     features: {
       grain_management: true,
       basic_analytics: true,
@@ -38,7 +38,7 @@ const PLAN_FEATURES = {
       api_access: false,
       white_label: false
     },
-    
+
     permissions: [
       'grain.read',
       'grain.create',
@@ -53,29 +53,29 @@ const PLAN_FEATURES = {
       'analytics.read.basic'
     ]
   },
-  
+
   standard: {
     name: "Standard Plan",
-    price: 199,
-    currency: "USD",
+    price: 3899,
+    currency: "PKR",
     billingCycle: "monthly",
     description: "Ideal for growing farms with more complex operations",
-    
+
     limits: {
       users: {
-        managers: 5,
-        technicians: 15,
-        total: 20
+        managers: 4,
+        technicians: 6,
+        total: 10
       },
       grain_batches: 200,
       sensors: 25,
-      silos: 10,
-      warehouses: 3,
+      silos: 6,
+      warehouses: 2,
       storage_gb: 5,
       api_calls_per_month: 50000,
       reports_per_month: 25
     },
-    
+
     features: {
       grain_management: true,
       basic_analytics: true,
@@ -90,7 +90,7 @@ const PLAN_FEATURES = {
       api_access: true,
       white_label: false
     },
-    
+
     permissions: [
       'grain.read',
       'grain.create',
@@ -111,29 +111,29 @@ const PLAN_FEATURES = {
       'analytics.advanced'
     ]
   },
-  
+
   professional: {
     name: "Professional Plan",
-    price: 399,
-    currency: "USD",
+    price: 5999,
+    currency: "PKR",
     billingCycle: "monthly",
     description: "Advanced features for professional grain operations",
-    
+
     limits: {
       users: {
-        managers: 10,
-        technicians: 50,
-        total: 60
+        managers: -1,
+        technicians: -1,
+        total: -1
       },
       grain_batches: 1000,
       sensors: 100,
-      silos: 25,
+      silos: 15,
       warehouses: 5,
       storage_gb: 20,
       api_calls_per_month: 200000,
       reports_per_month: 100
     },
-    
+
     features: {
       grain_management: true,
       basic_analytics: true,
@@ -148,7 +148,7 @@ const PLAN_FEATURES = {
       api_access: true,
       white_label: false
     },
-    
+
     permissions: [
       'grain.read',
       'grain.create',
@@ -188,14 +188,14 @@ const PLAN_FEATURES = {
       'spoilage.analysis'
     ]
   },
-  
+
   enterprise: {
     name: "Enterprise Plan",
     price: 799,
     currency: "USD",
     billingCycle: "monthly",
     description: "Complete solution for large-scale grain operations",
-    
+
     limits: {
       users: {
         managers: 50,
@@ -210,7 +210,7 @@ const PLAN_FEATURES = {
       api_calls_per_month: -1, // Unlimited
       reports_per_month: -1 // Unlimited
     },
-    
+
     features: {
       grain_management: true,
       basic_analytics: true,
@@ -225,7 +225,7 @@ const PLAN_FEATURES = {
       api_access: true,
       white_label: true
     },
-    
+
     permissions: [
       'grain.read',
       'grain.create',
@@ -294,10 +294,10 @@ function hasFeatureAccess(planName, feature) {
 function isWithinLimits(planName, limitType, currentCount) {
   const plan = getPlanFeatures(planName)
   const limit = plan.limits[limitType]
-  
+
   // -1 means unlimited
   if (limit === -1) return true
-  
+
   return currentCount <= limit
 }
 
@@ -305,10 +305,10 @@ function isWithinLimits(planName, limitType, currentCount) {
 function getRemainingLimit(planName, limitType, currentCount) {
   const plan = getPlanFeatures(planName)
   const limit = plan.limits[limitType]
-  
+
   // -1 means unlimited
   if (limit === -1) return "Unlimited"
-  
+
   return Math.max(0, limit - currentCount)
 }
 
@@ -316,23 +316,23 @@ function getRemainingLimit(planName, limitType, currentCount) {
 function getUsagePercentage(planName, limitType, currentCount) {
   const plan = getPlanFeatures(planName)
   const limit = plan.limits[limitType]
-  
+
   // -1 means unlimited
   if (limit === -1) return 0
-  
+
   return Math.min(100, Math.round((currentCount / limit) * 100))
 }
 
 // Helper function to check if user can create a specific role
 function canCreateRole(planName, role, currentCounts) {
   const plan = getPlanFeatures(planName)
-  
+
   if (role === 'manager') {
     return isWithinLimits(planName, 'users.managers', currentCounts.managers + 1)
   } else if (role === 'technician') {
     return isWithinLimits(planName, 'users.technicians', currentCounts.technicians + 1)
   }
-  
+
   return false
 }
 
@@ -340,7 +340,7 @@ function canCreateRole(planName, role, currentCounts) {
 function getUpgradeSuggestions(planName, currentCounts) {
   const suggestions = []
   const plan = getPlanFeatures(planName)
-  
+
   // Check user limits
   const totalUsers = currentCounts.managers + currentCounts.technicians
   if (!isWithinLimits(planName, 'users.total', totalUsers + 1)) {
@@ -351,7 +351,7 @@ function getUpgradeSuggestions(planName, currentCounts) {
       limit: plan.limits.users.total
     })
   }
-  
+
   // Check grain batch limits
   if (!isWithinLimits(planName, 'grain_batches', currentCounts.grain_batches + 1)) {
     suggestions.push({
@@ -361,7 +361,7 @@ function getUpgradeSuggestions(planName, currentCounts) {
       limit: plan.limits.grain_batches
     })
   }
-  
+
   // Check sensor limits
   if (!isWithinLimits(planName, 'sensors', currentCounts.sensors + 1)) {
     suggestions.push({
@@ -371,7 +371,7 @@ function getUpgradeSuggestions(planName, currentCounts) {
       limit: plan.limits.sensors
     })
   }
-  
+
   return suggestions
 }
 

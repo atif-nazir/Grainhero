@@ -85,6 +85,47 @@ export default function SensorsPage() {
     }
   }, [])
 
+  // Module 2: Sensor Registration Dialog State
+  const [isRegisterDialogOpen, setIsRegisterDialogOpen] = useState(false)
+  const [silos, setSilos] = useState<Silo[]>([])
+  const [registerFormData, setRegisterFormData] = useState({
+    device_id: '',
+    device_name: '',
+    silo_id: '',
+    device_type: 'sensor' as 'sensor' | 'actuator',
+    category: 'probe_core', // probe_core, probe_ambient, sensor_array, actuator
+    sensor_types: [] as string[],
+    mac_address: '',
+    model: '',
+    manufacturer: '',
+    firmware_version: '',
+    // Probe deployment
+    probe_type: 'core' as 'core' | 'ambient',
+    // Actuator setup
+    capabilities: {
+      fan: false,
+      dehumidifier: false,
+      vent: false,
+      alarm: false
+    }
+  })
+
+  // Fetch silos for registration
+  useEffect(() => {
+    ; (async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const res = await fetch(`${backendUrl}/api/silos?limit=100`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        if (res.ok) {
+          const data = await res.json()
+          setSilos((data.silos || []).map((s: any) => ({ _id: s._id, name: s.name, silo_id: s.silo_id })))
+        }
+      } catch (error) {
+        console.error('Error fetching silos:', error)
+      }
+    })()
+  }, [])
+
   // Load sensors from backend
   useEffect(() => {
     let mounted = true
@@ -636,7 +677,175 @@ export default function SensorsPage() {
                     {sensor.status.charAt(0).toUpperCase() + sensor.status.slice(1)}
                   </Badge>
                 </div>
-                <CardDescription>{sensor.device_id}</CardDescription>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsRegisterDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!registerFormData.device_id || !registerFormData.device_name || !registerFormData.silo_id || registerFormData.sensor_types.length === 0) {
+                        toast.error('Please fill all required fields')
+                        return
+                      }
+                      try {
+                        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+                        const res = await fetch(`${backendUrl}/api/sensors/register`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                          },
+                          body: JSON.stringify({
+                            ...registerFormData,
+                            capabilities: registerFormData.device_type === 'actuator' ? registerFormData.capabilities : undefined
+                          })
+                        })
+                        if (res.ok) {
+                          toast.success('Device registered successfully')
+                          setIsRegisterDialogOpen(false)
+                          setRegisterFormData({
+                            device_id: '',
+                            device_name: '',
+                            silo_id: '',
+                            device_type: 'sensor',
+                            category: 'probe_core',
+                            sensor_types: [],
+                            mac_address: '',
+                            model: '',
+                            manufacturer: '',
+                            firmware_version: '',
+                            probe_type: 'core',
+                            capabilities: { fan: false, dehumidifier: false, vent: false, alarm: false }
+                          })
+                          // Reload sensors
+                          window.location.reload()
+                        } else {
+                          const error = await res.json()
+                          toast.error(error.error || 'Failed to register device')
+                        }
+                      } catch (error) {
+                        console.error('Error registering device:', error)
+                        toast.error('Failed to register device')
+                      }
+                    }}
+                    className="bg-black hover:bg-gray-800 text-white"
+                  >
+                    Register Device
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Live Environmental Snapshot</CardTitle>
+              <CardDescription>
+                {latest ? `Last reading ${new Date(latest.timestamp).toLocaleString()}` : 'Waiting for telemetry'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-4 text-sm">
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Core Temp</div>
+                <div className="text-lg font-semibold">
+                  {(latest?.temperature?.value ??
+                    latest?.environmental_context?.weather?.temperature ??
+                    '--') + '°C'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Core RH</div>
+                <div className="text-lg font-semibold">
+                  {(latest?.humidity?.value ??
+                    latest?.environmental_context?.weather?.humidity ??
+                    '--') + '%'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Fan Duty</div>
+                <div className="text-lg font-semibold">
+                  {latest?.actuation_state?.fan_duty_cycle?.toFixed(0) ?? 0}%
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">VOC Relative</div>
+                <div className="text-lg font-semibold">
+                  {latest?.derived_metrics?.voc_relative?.toFixed(1) ?? '0'}%
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Live Telemetry</CardTitle>
+              <CardDescription>
+                {telemetry ? `Last update ${new Date(telemetry.timestamp).toLocaleString()}` : 'Data unavailable'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-4 text-sm">
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Temperature</div>
+                <div className="text-lg font-semibold">
+                  {telemetry ? `${telemetry.temperature.toFixed(1)}°C` : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Humidity</div>
+                <div className="text-lg font-semibold">
+                  {telemetry ? `${telemetry.humidity.toFixed(1)}%` : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">TVOC</div>
+                <div className="text-lg font-semibold">
+                  {telemetry ? `${telemetry.tvoc}` : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-muted-foreground">Actuators</div>
+                <div className="text-lg font-semibold">
+                  {telemetry ? `${telemetry.fanState.toUpperCase()} / ${telemetry.lidState.toUpperCase()}` : '--'}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>ML & Guardrails</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className={`border rounded-lg p-4 ${telemetry?.mlDecision === 'fan_on' ? 'bg-green-50' : ''}`}>
+                  <div className="text-xs uppercase text-muted-foreground">ML Decision</div>
+                  <div className="text-lg font-semibold">
+                    {telemetry ? telemetry.mlDecision : '--'}
+                  </div>
+                </div>
+                <div className={`border rounded-lg p-4 ${telemetry?.humanOverride ? 'bg-yellow-50' : ''}`}>
+                  <div className="text-xs uppercase text-muted-foreground">Human Override</div>
+                  <div className="text-lg font-semibold">
+                    {telemetry ? (telemetry.humanOverride ? 'Active' : 'None') : '--'}
+                  </div>
+                </div>
+                <div className={`border rounded-lg p-4 ${telemetry && telemetry.guardrails.length ? 'bg-red-50' : ''}`}>
+                  <div className="text-xs uppercase text-muted-foreground">Guardrails</div>
+                  <div className="text-lg font-semibold">
+                    {telemetry ? (telemetry.guardrails.length ? telemetry.guardrails.join(', ') : 'None') : '--'}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <ActuatorQuickActions />
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Sensors</CardTitle>
+                <Smartphone className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-lg">
@@ -708,18 +917,200 @@ export default function SensorsPage() {
                 </div>
               </CardContent>
             </Card>
-          )
-        })}
-      </div>
 
-      {filteredSensors.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Smartphone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500">No sensors found matching your filters</p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Sensors</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {sensors.filter(s => s.status === 'active').length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Currently online
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Offline Sensors</CardTitle>
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {sensors.filter(s => s.status === 'offline').length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Need attention
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Avg Uptime</CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {Math.round(sensors.reduce((sum, s) => sum + s.health_metrics.uptime_percentage, 0) / sensors.length)}%
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  System reliability
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filters */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Filter Sensors</CardTitle>
+              <CardDescription>Search and filter IoT sensor devices</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 flex-wrap">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Enter sensor name or device ID to search..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="offline">Offline</SelectItem>
+                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    <SelectItem value="error">Error</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sensors Grid */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredSensors.map((sensor) => {
+              const statusConfig = getStatusBadge(sensor.status)
+              const StatusIcon = statusConfig.icon
+
+              return (
+                <Card key={sensor._id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{sensor.device_name}</CardTitle>
+                      <Badge className={statusConfig.color}>
+                        <StatusIcon className="h-3 w-3 mr-1" />
+                        {sensor.status.charAt(0).toUpperCase() + sensor.status.slice(1)}
+                      </Badge>
+                    </div>
+                    <CardDescription>{sensor.device_id}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Location */}
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="text-sm font-medium text-blue-900">Location</div>
+                      <div className="text-sm text-blue-700">{sensor.silo_id.name}</div>
+                    </div>
+
+                    {/* Sensor Types */}
+                    <div>
+                      <div className="text-sm font-medium mb-2">Sensor Types</div>
+                      <div className="flex flex-wrap gap-1">
+                        {sensor.sensor_types.map((type) => (
+                          <Badge key={type} variant="outline" className="text-xs">
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Health Metrics */}
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Device Health</div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Battery className="h-4 w-4" />
+                          <span>Battery</span>
+                        </div>
+                        <span className={getBatteryColor(sensor.battery_level)}>
+                          {sensor.battery_level}%
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Wifi className="h-4 w-4" />
+                          <span>Signal</span>
+                        </div>
+                        <span className={getSignalColor(sensor.signal_strength)}>
+                          {sensor.signal_strength} dBm
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Uptime</span>
+                        <span className="font-medium">{sensor.health_metrics.uptime_percentage}%</span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Errors</span>
+                        <span className={sensor.health_metrics.error_count > 0 ? 'text-red-600' : 'text-green-600'}>
+                          {sensor.health_metrics.error_count}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Last Reading */}
+                    <div className="text-xs text-muted-foreground">
+                      Last reading: {new Date(sensor.last_reading).toLocaleString()}
+                    </div>
+
+                    {/* Health Status */}
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm">Status:</div>
+                      <Badge variant={sensor.status === 'active' ? 'default' : 'destructive'}>
+                        {getHealthStatus(sensor)}
+                      </Badge>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-2">
+                      <Button variant="outline" size="sm" className="flex-1">
+                        View Data
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1">
+                        Configure
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+
+          {filteredSensors.length === 0 && (
+            <Card>
+              <CardContent className="text-center py-12">
+                <Smartphone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-gray-500">No sensors found matching your filters</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </AnimatedBackground>
   )
 }

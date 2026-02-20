@@ -32,12 +32,23 @@ const insuranceRoute = require("./routes/insurance");
 const buyersRoute = require("./routes/buyers");
 const environmentalRoute = require("./routes/environmental");
 
+// Logging & Transparency Module routes
+const activityLogsRoute = require("./routes/activityLogs");
+const notificationsRoute = require("./routes/notifications");
+const loggingRoute = require("./routes/logging");
+const paymentsRoute = require("./routes/payments");
+const reportsRoute = require("./routes/reports");
+
 // Super Admin routes
 const tenantManagementRoute = require("./routes/tenantManagement");
 const planManagementRoute = require("./routes/planManagement");
+const superAdminRoute = require("./routes/superAdmin");
 
 // User Management routes
 const userManagementRoute = require("./routes/userManagement");
+
+// Tenant Settings routes
+const tenantSettingsRoute = require("./routes/tenantSettings");
 
 const Alert = require("./models/Alert");
 const environmentalDataService = require("./services/environmentalDataService");
@@ -134,10 +145,19 @@ app.use("/api/data-viz", dataVisualizationRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
 app.use("/api/buyers", buyersRoute);
+app.use("/api/environmental", environmentalRoute);
+
+// Logging & Transparency Module
+app.use("/api/activity-logs", activityLogsRoute);
+app.use("/api/notifications", notificationsRoute);
+app.use("/api/logging", loggingRoute);
+app.use("/api/payments", paymentsRoute);
+app.use("/api/reports", reportsRoute);
 
 // Super Admin routes
 app.use("/api/tenant-management", tenantManagementRoute);
 app.use("/api/plan-management", planManagementRoute);
+app.use("/api/super-admin", superAdminRoute);
 
 // Subscription Analytics routes
 const subscriptionAnalyticsRoute = require("./routes/subscriptionAnalytics");
@@ -145,6 +165,9 @@ app.use("/api/subscription-analytics", subscriptionAnalyticsRoute);
 
 // User Management routes
 app.use("/api/user-management", userManagementRoute);
+
+// Tenant Settings routes
+app.use("/api", tenantSettingsRoute);
 
 // Warehouse Management routes
 const warehousesRoute = require("./routes/warehouses");

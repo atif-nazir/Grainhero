@@ -280,6 +280,11 @@ export default function BuyersPage() {
       setFormState(initialFormState)
       setIsDialogOpen(false)
       fetchDashboard()
+      
+      // Trigger buyers page refresh for other components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('buyers-refresh'))
+      }
     } catch (err) {
       setFormError((err as Error).message || "Unable to save buyer")
     } finally {
@@ -343,6 +348,11 @@ export default function BuyersPage() {
       setSelectedBuyer(null)
       setIsEditDialogOpen(false)
       fetchDashboard()
+      
+      // Trigger buyers page refresh for other components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('buyers-refresh'))
+      }
     } catch (err) {
       setFormError((err as Error).message || "Unable to update buyer")
     } finally {
@@ -371,6 +381,11 @@ export default function BuyersPage() {
       setSelectedBuyer(null)
       setIsDeleteDialogOpen(false)
       fetchDashboard()
+      
+      // Trigger buyers page refresh for other components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('buyers-refresh'))
+      }
     } catch (err) {
       setFormError((err as Error).message || "Unable to delete buyer")
     } finally {
@@ -427,7 +442,7 @@ export default function BuyersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Buyers Management</h1>
           <p className="text-muted-foreground">
-            Central registry of grain buyers, contracts and dispatches
+            Manage grain buyers, contracts and dispatches
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -435,7 +450,7 @@ export default function BuyersPage() {
             <Plus className="h-4 w-4 mr-2" />
             Add Buyer
           </Button>
-          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+          <DialogContent className="max-w-2xl p-0 overflow-hidden">
             <div className="max-h-[80vh] overflow-y-auto">
               <div className="border-b px-6 py-4">
                 <DialogHeader className="space-y-2">
@@ -444,136 +459,106 @@ export default function BuyersPage() {
                     Add New Buyer
                   </DialogTitle>
                   <DialogDescription>
-                    Capture buyer details so your operations and dispatch teams stay in sync.
+                    Capture buyer details.
                   </DialogDescription>
                 </DialogHeader>
               </div>
-              <form className="space-y-6 p-6" onSubmit={handleAddBuyer}>
-                <section className="rounded-2xl border bg-white p-4 space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Basic Information</h4>
-                    <p className="text-sm text-muted-foreground">Buyer identity and brand</p>
+              <form className="p-6 space-y-4" onSubmit={handleAddBuyer}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="buyer-name">Buyer name *</Label>
+                    <Input
+                      id="buyer-name"
+                      value={formState.name}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter buyer or company name"
+                      required
+                    />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="buyer-name">Buyer name *</Label>
-                      <Input
-                        id="buyer-name"
-                        value={formState.name}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
-                        placeholder="Enter buyer or company name"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="company-name">Company / Brand</Label>
-                      <Input
-                        id="company-name"
-                        value={formState.companyName}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, companyName: e.target.value }))}
-                        placeholder="Enter brand name"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company-name">Company / Brand</Label>
+                    <Input
+                      id="company-name"
+                      value={formState.companyName}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, companyName: e.target.value }))}
+                      placeholder="Enter brand name"
+                    />
                   </div>
-                </section>
-
-                <section className="rounded-2xl border bg-white p-4 space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Contact Information</h4>
-                    <p className="text-sm text-muted-foreground">Primary contact details</p>
+                  <div className="space-y-2">
+                    <Label>Contact person *</Label>
+                    <Input
+                      value={formState.contactName}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, contactName: e.target.value }))}
+                      placeholder="Full name"
+                      required
+                    />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Contact person *</Label>
-                      <Input
-                        value={formState.contactName}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, contactName: e.target.value }))}
-                        placeholder="Full name"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Phone</Label>
-                      <Input
-                        value={formState.contactPhone}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, contactPhone: e.target.value }))}
-                        placeholder="+92 300 0000000"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input
+                      value={formState.contactPhone}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, contactPhone: e.target.value }))}
+                      placeholder="+92 300 0000000"
+                    />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input
-                        type="email"
-                        value={formState.contactEmail}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, contactEmail: e.target.value }))}
-                        placeholder="contact@company.com"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>City</Label>
-                      <Input
-                        value={formState.city}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, city: e.target.value }))}
-                        placeholder="Lahore, Karachi..."
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={formState.contactEmail}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                      placeholder="contact@company.com"
+                    />
                   </div>
-                </section>
-
-                <section className="rounded-2xl border bg-white p-4 space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Status & Rating</h4>
-                    <p className="text-sm text-muted-foreground">Operational state and quality score</p>
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    <Input
+                      value={formState.city}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, city: e.target.value }))}
+                      placeholder="Lahore, Karachi..."
+                    />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Status</Label>
-                      <Select
-                        value={formState.status}
-                        onValueChange={(value) => setFormState((prev) => ({ ...prev, status: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Active" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions
-                            .filter((option) => option.value !== "all")
-                            .map((option) => (
-                              <SelectItem value={option.value} key={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Rating (0-5)</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="5"
-                        step="0.1"
-                        value={formState.rating}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, rating: e.target.value }))}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={formState.status}
+                      onValueChange={(value) => setFormState((prev) => ({ ...prev, status: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Active" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions
+                          .filter((option) => option.value !== "all")
+                          .map((option) => (
+                            <SelectItem value={option.value} key={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </section>
-
-                <section className="rounded-2xl border bg-white p-4 space-y-2">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Notes</h4>
-                    <p className="text-sm text-muted-foreground">Internal notes for your team</p>
+                  <div className="space-y-2">
+                    <Label>Rating (0-5)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      value={formState.rating}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, rating: e.target.value }))}
+                    />
                   </div>
+                </div>
+                <div className="col-span-full space-y-2">
+                  <Label>Notes</Label>
                   <Textarea
                     rows={3}
                     value={formState.notes}
                     onChange={(e) => setFormState((prev) => ({ ...prev, notes: e.target.value }))}
                     placeholder="Add preferences, payment terms, or reminders"
                   />
-                </section>
+                </div>
 
                 {formError && <p className="text-sm text-red-600">{formError}</p>}
                 <DialogFooter className="flex justify-end gap-2">
@@ -604,16 +589,16 @@ export default function BuyersPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.totalBuyers}</div>
-              <p className="text-xs text-muted-foreground">Across this tenant</p>
+              <p className="text-xs text-muted-foreground">Across this Admin</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Contracts</CardTitle>
+              <CardTitle className="text-sm font-medium">Contracts</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.activeContracts}</div>
-              <p className="text-xs text-muted-foreground">Running & negotiating</p>
+              <p className="text-xs text-muted-foreground">Running</p>
             </CardContent>
           </Card>
           <Card>
@@ -653,7 +638,7 @@ export default function BuyersPage() {
                 <Input
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search by buyer, contact, email or phone"
+                  placeholder="Search by buyer, email or phone "
                   className="pl-8"
                 />
               </div>
@@ -858,7 +843,7 @@ export default function BuyersPage() {
 
       {/* Edit Buyer Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-3xl p-0 overflow-hidden">
+        <DialogContent className="max-w-2xl p-0 overflow-hidden">
           <div className="max-h-[80vh] overflow-y-auto">
             <div className="border-b px-6 py-4">
               <DialogHeader className="space-y-2">
@@ -871,86 +856,61 @@ export default function BuyersPage() {
                 </DialogDescription>
               </DialogHeader>
             </div>
-            <form className="space-y-6 p-6" onSubmit={handleUpdateBuyer}>
-              <section className="rounded-2xl border bg-white p-4 space-y-4">
-                <div>
-                  <h4 className="font-semibold text-gray-900">Basic Information</h4>
-                  <p className="text-sm text-muted-foreground">Buyer identity and brand</p>
+            <form className="p-6 space-y-4" onSubmit={handleUpdateBuyer}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-buyer-name">Buyer name *</Label>
+                  <Input
+                    id="edit-buyer-name"
+                    value={formState.name}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter buyer or company name"
+                    required
+                  />
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-buyer-name">Buyer name *</Label>
-                    <Input
-                      id="edit-buyer-name"
-                      value={formState.name}
-                      onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="Enter buyer or company name"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-company-name">Company / Brand</Label>
-                    <Input
-                      id="edit-company-name"
-                      value={formState.companyName}
-                      onChange={(e) => setFormState((prev) => ({ ...prev, companyName: e.target.value }))}
-                      placeholder="Enter brand name"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-company-name">Company / Brand</Label>
+                  <Input
+                    id="edit-company-name"
+                    value={formState.companyName}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, companyName: e.target.value }))}
+                    placeholder="Enter brand name"
+                  /></div>
+                <div className="space-y-2">
+                  <Label>Contact person *</Label>
+                  <Input
+                    value={formState.contactName}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, contactName: e.target.value }))}
+                    placeholder="Full name"
+                    required
+                  />
                 </div>
-              </section>
-
-              <section className="rounded-2xl border bg-white p-4 space-y-4">
-                <div>
-                  <h4 className="font-semibold text-gray-900">Contact Information</h4>
-                  <p className="text-sm text-muted-foreground">Primary contact details</p>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={formState.contactPhone}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, contactPhone: e.target.value }))}
+                    placeholder="+92 300 0000000"
+                  />
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Contact person *</Label>
-                    <Input
-                      value={formState.contactName}
-                      onChange={(e) => setFormState((prev) => ({ ...prev, contactName: e.target.value }))}
-                      placeholder="Full name"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input
-                      value={formState.contactPhone}
-                      onChange={(e) => setFormState((prev) => ({ ...prev, contactPhone: e.target.value }))}
-                      placeholder="+92 300 0000000"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={formState.contactEmail}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                    placeholder="contact@company.com"
+                  />
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      value={formState.contactEmail}
-                      onChange={(e) => setFormState((prev) => ({ ...prev, contactEmail: e.target.value }))}
-                      placeholder="contact@company.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>City</Label>
-                    <Input
-                      value={formState.city}
-                      onChange={(e) => setFormState((prev) => ({ ...prev, city: e.target.value }))}
-                      placeholder="Lahore, Karachi..."
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label>City</Label>
+                  <Input
+                    value={formState.city}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, city: e.target.value }))}
+                    placeholder="Lahore, Karachi..."
+                  />
                 </div>
-              </section>
-
-              <section className="rounded-2xl border bg-white p-4 space-y-4">
-                <div>
-                  <h4 className="font-semibold text-gray-900">Status & Rating</h4>
-                  <p className="text-sm text-muted-foreground">Operational state and quality score</p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Status</Label>
                     <Select
@@ -983,8 +943,16 @@ export default function BuyersPage() {
                     />
                   </div>
                 </div>
-              </section>
-
+              </div>
+              <div className="col-span-full space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  rows={3}
+                  value={formState.notes}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Add preferences, payment terms, or reminders"
+                />
+              </div>
               {formError && <p className="text-sm text-red-600">{formError}</p>}
               <DialogFooter className="flex justify-end gap-2">
                 <Button

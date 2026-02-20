@@ -16,15 +16,15 @@ export default function RevenueManagementPage() {
   ]
 
   const subscribersData = [
-    { plan: 'Basic', users: 0 },
-    { plan: 'Intermediate', users: 0 },
-    { plan: 'Pro', users: 0 },
+    { plan: 'Starter', users: 0 },
+    { plan: 'Professional', users: 0 },
+    { plan: 'Enterprise', users: 0 },
   ]
 
   const planSplit = [
-    { name: 'Basic', value: 1, color: 'hsl(var(--chart-1))' },
-    { name: 'Intermediate', value: 1, color: 'hsl(var(--chart-2))' },
-    { name: 'Pro', value: 1, color: 'hsl(var(--chart-3))' },
+    { name: 'Starter', value: 1, color: 'hsl(var(--chart-1))' },
+    { name: 'Professional', value: 1, color: 'hsl(var(--chart-2))' },
+    { name: 'Enterprise', value: 1, color: 'hsl(var(--chart-3))' },
   ]
 
   return (
@@ -37,7 +37,7 @@ export default function RevenueManagementPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="p-4 border rounded-lg bg-white">
           <h2 className="font-medium mb-2">MRR</h2>
-          <p className="text-3xl font-semibold">$0</p>
+          <p className="text-3xl font-semibold">Rs. 0</p>
         </div>
         <div className="p-4 border rounded-lg bg-white">
           <h2 className="font-medium mb-2">Active Subscribers</h2>
@@ -49,7 +49,7 @@ export default function RevenueManagementPage() {
         </div>
         <div className="p-4 border rounded-lg bg-white">
           <h2 className="font-medium mb-2">ARPU</h2>
-          <p className="text-3xl font-semibold">$0</p>
+          <p className="text-3xl font-semibold">Rs. 0</p>
         </div>
       </div>
 
@@ -109,8 +109,8 @@ export default function RevenueManagementPage() {
       <div className="bg-white border rounded-lg">
         <div className="px-4 py-3 border-b font-medium">Recent Subscriptions</div>
         <div className="divide-y text-sm">
-          <div className="px-4 py-3 flex justify-between"><span>Acme Farm</span><span className="text-gray-500">Pro • $99/mo</span></div>
-          <div className="px-4 py-3 flex justify-between"><span>Green Co-op</span><span className="text-gray-500">Basic • $9/mo</span></div>
+          <div className="px-4 py-3 flex justify-between"><span>Acme Farm</span><span className="text-gray-500">Enterprise • Rs. 5,999/mo</span></div>
+          <div className="px-4 py-3 flex justify-between"><span>Green Co-op</span><span className="text-gray-500">Starter • Rs. 1,499/mo</span></div>
         </div>
       </div>
     </div>
