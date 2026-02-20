@@ -32,12 +32,8 @@ import {
   DollarSign,
   Brain,
   Zap,
-<<<<<<< HEAD
   ClipboardList,
 } from "lucide-react"
-=======
-  } from "lucide-react"
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { LanguageSelector } from "@/components/language-selector"
@@ -143,69 +139,6 @@ const iotMonitoringNav = [
 // AI and Analytics features - CORE MODULES ONLY
 const aiAnalyticsNav = [
   {
-<<<<<<< HEAD
-    name: "ai-spoilage",
-    label: "Spoilage Prediction & Advisory",
-    href: "/ai-spoilage",
-    icon: Sparkles,
-    roles: ["super_admin", "admin", "manager", "technician"],
-    badge: "AI"
-  },
-  {
-    name: "risk-assessment",
-    label: "Risk Assessment",
-    href: "/risk-assessment",
-    icon: BarChart3,
-    roles: ["super_admin", "admin", "manager"],
-    badge: "AI"
-  },
-  // COMMENTED OUT - Not in core 10 modules
-  // {
-  //   name: "ai-predictions",
-  //   label: "AI Predictions",
-  //   href: "/ai-predictions",
-  //   icon: Sparkles,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "AI"
-  // },
-  // {
-  //   name: "spoilage-analysis",
-  //   label: "Spoilage Analysis",
-  //   href: "/spoilage-analysis",
-  //   icon: TrendingUp,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "AI"
-  // },
-  // {
-  //   name: "model-performance",
-  //   href: "/model-performance",
-  //   icon: Brain,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "ML"
-  // },
-  // {
-  //   name: "data-management",
-  //   href: "/data-management",
-  //   icon: Database,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "ML"
-  // },
-  // {
-  //   name: "environmental-data",
-  //   label: "Environmental Data",
-  //   href: "/environmental-data",
-  //   icon: BarChart3,
-  //   roles: ["super_admin", "admin", "manager", "technician"],
-  //   badge: undefined
-  // },
-  // {
-  //   name: "data-visualization",
-  //   href: "/data-visualization",
-  //   icon: BarChart3,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "NEW"
-  // },
-=======
     name: "ai-predictions",
     label: "AI Predictions",
     href: "/ai-predictions",
@@ -227,7 +160,6 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "NEW"
   },
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
 ]
 
 // Business & Finance - CORE MODULES ONLY
@@ -277,11 +209,6 @@ const businessNav = [
 
 // System Administration - MINIMAL (Settings only for core functionality)
 const systemNav = [
-<<<<<<< HEAD
-  // COMMENTED OUT - Not in core 10 modules
-  // { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
-=======
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 
@@ -350,18 +277,6 @@ const superAdminNav: NavItem[] = [
   */
 ]
 
-<<<<<<< HEAD
-// COMMENTED OUT - Not in core 10 modules
-// const milestone2Navigation = [
-//   { name: "analytics", href: "/analytics", icon: BarChart3, badge: "New" },
-//   { name: "reports", href: "/reports", icon: FileText, badge: "New" },
-//   { name: "notifications", href: "/notifications", icon: Bell, badge: "New" },
-//   { name: "mobile", href: "/mobile", icon: Smartphone, badge: "New" },
-// ]
-
-
-=======
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
 export function Sidebar() {
   const pathname = usePathname()
   const t = useTranslations('Sidebar')
@@ -381,7 +296,6 @@ export function Sidebar() {
     return item.roles.includes(userRole);
   };
 
-<<<<<<< HEAD
   const showOnlySuperAdmin = userRole === "super_admin";
   const showOnlyAdmin = userRole === "admin";
   const showOnlyManager = userRole === "manager" || userRole === "admin";
@@ -392,14 +306,6 @@ export function Sidebar() {
   const visibleDashboardNav = dashboardNav.filter(hasAccess);
   const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : [];
   const visibleIoTNav = showIoTSections ? iotMonitoringNav.filter(hasAccess) : [];
-=======
-  const showOnlyAdmin = userRole === "admin" || userRole === "super_admin";
-  const showOnlyManager = userRole === "manager" || userRole === "admin" || userRole === "super_admin";
-
-  const visibleDashboardNav = dashboardNav.filter(hasAccess);
-  const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : [];
-  const visibleIoTNav = iotMonitoringNav.filter(hasAccess);
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
   const visibleAINav = showOnlyManager ? aiAnalyticsNav.filter(hasAccess) : [];
   const visibleBusinessNav = showBusinessSections ? businessNav.filter(hasAccess) : [];
   const visibleSystemNav = showSystemSections ? systemNav.filter(hasAccess) : [];
@@ -645,11 +551,7 @@ export function Sidebar() {
             </div>
           )}
 
-<<<<<<< HEAD
-
-=======
           {/* Advanced Features removed */}
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
         </nav>
       </ScrollArea>
 

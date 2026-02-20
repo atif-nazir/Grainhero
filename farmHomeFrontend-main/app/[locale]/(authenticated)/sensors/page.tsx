@@ -6,31 +6,16 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-<<<<<<< HEAD
-//import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
-import { api } from '@/lib/api'
-=======
 import {
   Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle,
   Thermometer, Activity, Sun, Droplets, Wind, Eye, Gauge, Bug, Fan
 } from 'lucide-react'
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
 import { toast } from 'sonner'
 import { useLanguage } from '@/app/[locale]/providers'
-<<<<<<< HEAD
-import { AnimatedBackground } from "@/components/animations/MotionGraphics"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { toast } from 'sonner'
-import { Checkbox } from "@/components/ui/checkbox"
-=======
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import type { Socket } from 'socket.io-client'
 let ioClient: typeof import('socket.io-client').io | null = null
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
 
 interface SensorDevice {
   _id: string
@@ -52,12 +37,6 @@ interface SensorDevice {
   }
 }
 
-<<<<<<< HEAD
-interface Silo {
-  _id: string
-  name: string
-  silo_id: string
-=======
 interface TelemetryData {
   temperature: number
   humidity: number
@@ -75,7 +54,6 @@ interface TelemetryData {
   pestRiskScore: number | null
   riskIndex: number | null
   timestamp: number
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
 }
 
 export default function SensorsPage() {
@@ -158,10 +136,6 @@ export default function SensorsPage() {
           if (!mounted) return
           if (res.ok) {
             const data = await res.json()
-<<<<<<< HEAD
-            // Define type for raw API response
-=======
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
             interface RawSensorData {
               _id?: string;
               device_id?: string;
@@ -171,28 +145,10 @@ export default function SensorsPage() {
               sensor_types?: string[];
               battery_level?: number;
               signal_strength?: number;
-<<<<<<< HEAD
-              device_metrics?: {
-                battery_level?: number;
-                signal_strength?: number;
-              };
-              silo_id?: {
-                name?: string;
-                _id?: string;
-              };
-              health_metrics?: {
-                uptime_percentage?: number;
-                error_count?: number;
-                last_heartbeat?: string;
-              };
-            }
-
-=======
               device_metrics?: { battery_level?: number; signal_strength?: number; };
               silo_id?: { name?: string; _id?: string; };
               health_metrics?: { uptime_percentage?: number; error_count?: number; last_heartbeat?: string; };
             }
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
             const mapped: SensorDevice[] = (data.sensors || []).map((s: RawSensorData) => ({
               _id: s._id || '',
               device_id: s.device_id || s._id || '',
@@ -360,294 +316,6 @@ export default function SensorsPage() {
   }
 
   return (
-<<<<<<< HEAD
-    <AnimatedBackground className="min-h-screen">
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">{t('sensors')}</h1>
-              <p className="text-muted-foreground">
-                Monitor and manage IoT sensor devices for environmental tracking
-              </p>
-            </div>
-            <Dialog open={isRegisterDialogOpen} onOpenChange={setIsRegisterDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Register Sensor/Actuator
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Module 2: Sensor & Actuator Registration</DialogTitle>
-                  <DialogDescription>
-                    Register new IoT device with probe deployment and sensor array setup
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-6">
-                  {/* Device Identification */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Device Identification</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="device_id">Device ID / QR Code *</Label>
-                          <Input
-                            id="device_id"
-                            value={registerFormData.device_id}
-                            onChange={(e) => setRegisterFormData({ ...registerFormData, device_id: e.target.value })}
-                            placeholder="Scan QR or enter device ID"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="device_name">Device Name *</Label>
-                          <Input
-                            id="device_name"
-                            value={registerFormData.device_name}
-                            onChange={(e) => setRegisterFormData({ ...registerFormData, device_name: e.target.value })}
-                            placeholder="e.g., Silo 3 Core Probe"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="device_type">Device Type *</Label>
-                          <Select
-                            value={registerFormData.device_type}
-                            onValueChange={(value: 'sensor' | 'actuator') => setRegisterFormData({ ...registerFormData, device_type: value })}
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sensor">Sensor</SelectItem>
-                              <SelectItem value="actuator">Actuator</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="silo_id">Silo Assignment *</Label>
-                          <Select
-                            value={registerFormData.silo_id}
-                            onValueChange={(value) => setRegisterFormData({ ...registerFormData, silo_id: value })}
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select silo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {silos.map((silo) => (
-                                <SelectItem key={silo._id} value={silo._id}>
-                                  {silo.name} ({silo.silo_id})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="category">Device Category *</Label>
-                          <Select
-                            value={registerFormData.category}
-                            onValueChange={(value) => setRegisterFormData({ ...registerFormData, category: value })}
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="probe_core">Probe (Core - into grain)</SelectItem>
-                              <SelectItem value="probe_ambient">Probe (Ambient - above grain)</SelectItem>
-                              <SelectItem value="sensor_array">Sensor Array</SelectItem>
-                              <SelectItem value="actuator">Actuator</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="mac_address">MAC Address</Label>
-                          <Input
-                            id="mac_address"
-                            value={registerFormData.mac_address}
-                            onChange={(e) => setRegisterFormData({ ...registerFormData, mac_address: e.target.value })}
-                            placeholder="AA:BB:CC:DD:EE:FF"
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Probe Deployment */}
-                  {(registerFormData.category === 'probe_core' || registerFormData.category === 'probe_ambient') && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Probe Deployment</CardTitle>
-                        <CardDescription>
-                          {registerFormData.category === 'probe_core'
-                            ? 'One probe into grain (core)'
-                            : 'One ambient probe above grain'}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <Label>Probe Type</Label>
-                            <div className="mt-2 p-3 bg-blue-50 rounded-lg">
-                              <p className="text-sm font-medium">
-                                {registerFormData.category === 'probe_core' ? 'Core Probe' : 'Ambient Probe'}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {registerFormData.category === 'probe_core'
-                                  ? 'Deployed into grain core for internal monitoring'
-                                  : 'Deployed above grain for ambient conditions'}
-                              </p>
-                            </div>
-                          </div>
-                          <div>
-                            <Label htmlFor="sensor_types_probe">Sensor Types *</Label>
-                            <div className="mt-2 space-y-2">
-                              {['temperature', 'humidity', 'moisture'].map((type) => (
-                                <label key={type} className="flex items-center space-x-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={registerFormData.sensor_types.includes(type)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setRegisterFormData({
-                                          ...registerFormData,
-                                          sensor_types: [...registerFormData.sensor_types, type]
-                                        })
-                                      } else {
-                                        setRegisterFormData({
-                                          ...registerFormData,
-                                          sensor_types: registerFormData.sensor_types.filter(t => t !== type)
-                                        })
-                                      }
-                                    }}
-                                    className="rounded"
-                                  />
-                                  <span className="text-sm capitalize">{type}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Sensor Array */}
-                  {registerFormData.category === 'sensor_array' && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Sensor Array Configuration</CardTitle>
-                        <CardDescription>Temp, humidity, CO₂, VOC, moisture, light</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                          {['temperature', 'humidity', 'co2', 'voc', 'moisture', 'light'].map((type) => (
-                            <label key={type} className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={registerFormData.sensor_types.includes(type)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setRegisterFormData({
-                                      ...registerFormData,
-                                      sensor_types: [...registerFormData.sensor_types, type]
-                                    })
-                                  } else {
-                                    setRegisterFormData({
-                                      ...registerFormData,
-                                      sensor_types: registerFormData.sensor_types.filter(t => t !== type)
-                                    })
-                                  }
-                                }}
-                                className="rounded"
-                              />
-                              <span className="text-sm capitalize">{type}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Actuator Setup */}
-                  {registerFormData.device_type === 'actuator' && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Actuator Setup</CardTitle>
-                        <CardDescription>Install: fans, dehumidifiers, vents, alarms</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {['fan', 'dehumidifier', 'vent', 'alarm'].map((cap) => (
-                            <label key={cap} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={registerFormData.capabilities[cap as keyof typeof registerFormData.capabilities]}
-                                onChange={(e) => {
-                                  setRegisterFormData({
-                                    ...registerFormData,
-                                    capabilities: {
-                                      ...registerFormData.capabilities,
-                                      [cap]: e.target.checked
-                                    }
-                                  })
-                                }}
-                                className="rounded"
-                              />
-                              <span className="text-sm capitalize">{cap}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Device Specifications */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Device Specifications</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="model">Model</Label>
-                          <Input
-                            id="model"
-                            value={registerFormData.model}
-                            onChange={(e) => setRegisterFormData({ ...registerFormData, model: e.target.value })}
-                            placeholder="Device model"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="manufacturer">Manufacturer</Label>
-                          <Input
-                            id="manufacturer"
-                            value={registerFormData.manufacturer}
-                            onChange={(e) => setRegisterFormData({ ...registerFormData, manufacturer: e.target.value })}
-                            placeholder="Manufacturer name"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="firmware_version">Firmware Version</Label>
-                          <Input
-                            id="firmware_version"
-                            value={registerFormData.firmware_version}
-                            onChange={(e) => setRegisterFormData({ ...registerFormData, firmware_version: e.target.value })}
-                            placeholder="e.g., 1.0.0"
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-=======
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1008,7 +676,6 @@ export default function SensorsPage() {
                     <StatusIcon className="h-3 w-3 mr-1" />
                     {sensor.status.charAt(0).toUpperCase() + sensor.status.slice(1)}
                   </Badge>
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsRegisterDialogOpen(false)}>
@@ -1180,13 +847,6 @@ export default function SensorsPage() {
                 <CardTitle className="text-sm font-medium">Total Sensors</CardTitle>
                 <Smartphone className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-<<<<<<< HEAD
-              <CardContent>
-                <div className="text-2xl font-bold">{sensors.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  IoT devices deployed
-                </p>
-=======
               <CardContent className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="text-sm font-medium text-blue-900">Location</div>
@@ -1255,7 +915,6 @@ export default function SensorsPage() {
                     Configure
                   </Button>
                 </div>
->>>>>>> 8d30aa4943d7cb485d45113110b807247a59d091
               </CardContent>
             </Card>
 
