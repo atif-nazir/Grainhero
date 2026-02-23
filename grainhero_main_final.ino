@@ -680,15 +680,120 @@ float calculateDewPoint(float temperature, float humidity) {
   return dewPoint;
 }
 
+/**
+ * Multi-factor pest/mold risk inference for stored grain.
+ *
+ * Rationale & references:
+ *   TVOC: Bosch BSEC IAQ classification - in a sealed grain silo,
+ *         baseline TVOC should be <100 ppb. Rise above baseline
+ *         indicates biological VOC emission (fungi metabolism,
+ *         insect pheromones, fermentation). The BME680 cannot
+ *         distinguish specific compounds — we use BSEC-aligned
+ *         IAQ tiers as a proxy for aggregate biological activity.
+ *         (Bosch Sensortec BME680 Datasheet & BSEC Integration Guide)
+ *
+ *   Humidity: Fungal colonisation of stored grain requires
+ *         water activity (aw) ≥ 0.65–0.70 → corresponds to
+ *         ~65–70% ERH (Equilibrium Relative Humidity).
+ *         (Magan & Aldred, 2007, "Post-Harvest Control Strategies…",
+ *          Int. J. Food Microbiology, 119(1-2), 131-139)
+ *
+ *   Temperature: Optimal range for storage Aspergillus/Penicillium
+ *         is 25–35 °C. Below 15 °C, fungal growth is negligible.
+ *         (ASABE Standard D245.6 — Moisture Relationships of Plant-Based
+ *          Agricultural Products)
+ *
+ *   Grain Moisture: Safe MC for rough rice ≤ 13%. Risk zone = 13–14%.
+ *         Critical (active spoilage) ≥ 15%.
+ *         (FAO — "Grain Storage Techniques", Chapter 4; IRRI
+ *          Rice Knowledge Bank — Safe Moisture Content for Storage)
+ *
+ * Returns: { score (0.0-1.0), label (None/Low/Medium/High) }
+ */
+float pestRiskScore = 0.0; // global, accessible for Firebase/backend
+String pestRiskLabel = "None";
+
+void computePestMoldRisk(float tvoc, float humidity, float temperature,
+                         int soilPercent) {
+  float score = 0.0; // accumulates 0.0 – 1.0
+
+  // ──── Factor 1: TVOC level (Bosch BSEC IAQ scale) ────
+  // Weight: up to 0.40 of total score
+  // In a clean sealed silo, TVOC should be < 100 ppb.
+  // Biological activity (fungi, insects) elevates VOCs.
+  if (tvoc > 1000)
+    score += 0.40; // IAQ: Unhealthy — strong biological emission
+  else if (tvoc > 500)
+    score += 0.30; // IAQ: Poor — significant VOC elevation
+  else if (tvoc > 250)
+    score += 0.20; // IAQ: Moderate — possible early biological activity
+  else if (tvoc > 100)
+    score += 0.08; // IAQ: Good — minor elevation above clean baseline
+  // else: Excellent (<100 ppb) — no contribution
+
+  // ──── Factor 2: Relative Humidity (Magan & Aldred, 2007) ────
+  // Weight: up to 0.25 of total score
+  // aw ≥ 0.70 (~70% RH) = active fungal colonisation possible
+  // aw ≥ 0.65 (~65% RH) = risk of xerophilic Aspergillus spp.
+  if (humidity > 80)
+    score += 0.25; // Active colonisation conditions
+  else if (humidity > 70)
+    score += 0.18; // aw ~ 0.70+, fungi can grow
+  else if (humidity > 65)
+    score += 0.10; // aw ~ 0.65, xerophilic risk
+  // else: below fungal colonisation threshold
+
+  // ──── Factor 3: Temperature (ASABE D245.6) ────
+  // Weight: up to 0.20 of total score
+  // Optimal for storage fungi: 25–35 °C. Below 15 °C: negligible.
+  if (temperature > 35)
+    score += 0.18; // Very high — accelerated growth
+  else if (temperature > 30)
+    score += 0.20; // Peak fungal growth zone
+  else if (temperature > 25)
+    score += 0.12; // Lower optimal range
+  else if (temperature > 20)
+    score += 0.05; // Slow growth possible
+  // else: < 20 °C — minimal fungal growth
+
+  // ──── Factor 4: Grain Moisture Content (FAO / IRRI) ────
+  // Weight: up to 0.15 of total score
+  // Note: soilPercent is capacitive probe reading (100=dry, 0=wet)
+  // Estimated grain MC: ~8% (very dry) to ~25% (very wet)
+  float grainMC = 25.0 - (soilPercent / 100.0) * 17.0;
+  if (grainMC > 18)
+    score += 0.15; // Far above safe storage limit
+  else if (grainMC > 15)
+    score += 0.12; // Active spoilage zone
+  else if (grainMC > 14)
+    score += 0.08; // Risk zone (should dry immediately)
+  else if (grainMC > 13)
+    score += 0.03; // Borderline — monitor closely
+  // else: ≤ 13% — safe for long-term rice storage
+
+  // Clamp to 0.0 – 1.0
+  score = constrain(score, 0.0, 1.0);
+
+  // Assign label
+  String label;
+  if (score >= 0.6)
+    label = "High";
+  else if (score >= 0.35)
+    label = "Medium";
+  else if (score >= 0.15)
+    label = "Low";
+  else
+    label = "None";
+
+  // Store globally
+  pestRiskScore = score;
+  pestRiskLabel = label;
+}
+
+// Legacy wrapper (called from processTVOCData)
 String detectPestPresence(float tvoc, float humidity, int soilPercent) {
-  // Simple heuristic
-  if (tvoc > 800 || humidity > 75 || soilPercent < 30) {
-    return "High";
-  } else if (tvoc > 400 || humidity > 60) {
-    return "Medium";
-  } else {
-    return "Low";
-  }
+  computePestMoldRisk(tvoc, humidity, currentData.temperature, soilPercent);
+  return pestRiskLabel;
 }
 
 void requestFanOn(int speed = 60) {
@@ -1483,13 +1588,22 @@ void publishToFirebaseREST() {
           http.setTimeout(5000);
 
           http.addHeader("Content-Type", "application/json");
-          DynamicJsonDocument ingestDoc(512);
+          DynamicJsonDocument ingestDoc(1024);
           ingestDoc["device_id"] = currentData.deviceID;
           ingestDoc["timestamp"] = currentData.timestamp;
           JsonObject ingestReadings = ingestDoc.createNestedObject("readings");
           ingestReadings["temperature"] = currentData.temperature;
           ingestReadings["humidity"] = currentData.humidity;
           ingestReadings["tvoc"] = currentData.tvoc_approx;
+          ingestReadings["pressure"] = currentData.pressure;
+          ingestReadings["gas_resistance"] =
+              currentData.gas_resistance / 1000.0;
+          ingestReadings["altitude"] = currentData.altitude;
+          ingestReadings["air_quality"] = currentData.air_quality;
+          ingestReadings["soil_moisture_raw"] = currentData.soil_raw;
+          ingestReadings["soil_moisture_pct"] = currentData.soil_percentage;
+          ingestReadings["light_raw"] = currentData.ldr_raw;
+          ingestReadings["light_pct"] = currentData.light_percentage;
           ingestReadings["pwm_speed"] = pwmSpeed;
           ingestReadings["servo_state"] = servoState;
           ingestReadings["alarm_state"] = alarmState ? "on" : "off";

@@ -25,8 +25,12 @@ import {
   Timer,
   ShieldCheck,
   Loader2,
+  Sun,
+  Bug,
+  Database,
+  Info,
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 /* ─── Types ─── */
 interface LivePrediction {
@@ -38,10 +42,14 @@ interface LivePrediction {
   risk_level: string
   time_to_spoilage_hours: number
   days_until_spoilage: number
+  time_to_spoilage_method?: string
+  class_probabilities?: Record<string, number>
+  severity_factor?: number
   key_risk_factors: string[]
   model_used: string
   input_features: Record<string, number>
-  live_sensor_data: Record<string, number>
+  data_sources?: Record<string, string>
+  live_sensor_data: Record<string, number | string | null | undefined>
   recommendations: string[]
   grain_type: string
   storage_days: number
@@ -75,6 +83,51 @@ interface PredictionHistory {
   classification: string
 }
 
+/* ─── Feature display config ─── */
+const FEATURE_CONFIG: Record<string, {
+  label: string
+  unit: string
+  icon: string
+  max: number
+  safe: [number, number]
+  gradient: string
+  border: string
+  barColor: string
+  iconBg: string
+  iconColor: string
+}> = {
+  temperature: { label: 'Temperature', unit: '°C', icon: 'thermometer', max: 50, safe: [15, 25], gradient: 'from-orange-50 to-orange-100', border: 'border-orange-200', barColor: 'from-orange-400 to-orange-600', iconBg: 'bg-orange-500', iconColor: 'text-orange-600' },
+  humidity: { label: 'Humidity', unit: '%', icon: 'droplets', max: 100, safe: [40, 70], gradient: 'from-blue-50 to-blue-100', border: 'border-blue-200', barColor: 'from-blue-400 to-blue-600', iconBg: 'bg-blue-500', iconColor: 'text-blue-600' },
+  grain_moisture: { label: 'Grain Moisture', unit: '%', icon: 'gauge', max: 30, safe: [10, 16], gradient: 'from-emerald-50 to-emerald-100', border: 'border-emerald-200', barColor: 'from-emerald-400 to-emerald-600', iconBg: 'bg-emerald-500', iconColor: 'text-emerald-600' },
+  dew_point: { label: 'Dew Point', unit: '°C', icon: 'cloud', max: 40, safe: [5, 20], gradient: 'from-cyan-50 to-cyan-100', border: 'border-cyan-200', barColor: 'from-cyan-400 to-cyan-600', iconBg: 'bg-cyan-500', iconColor: 'text-cyan-600' },
+  storage_days: { label: 'Storage Days', unit: 'days', icon: 'timer', max: 180, safe: [0, 60], gradient: 'from-amber-50 to-amber-100', border: 'border-amber-200', barColor: 'from-amber-400 to-amber-600', iconBg: 'bg-amber-500', iconColor: 'text-amber-600' },
+  airflow: { label: 'Airflow', unit: '', icon: 'wind', max: 1, safe: [0.3, 1], gradient: 'from-teal-50 to-teal-100', border: 'border-teal-200', barColor: 'from-teal-400 to-teal-600', iconBg: 'bg-teal-500', iconColor: 'text-teal-600' },
+  ambient_light: { label: 'Ambient Light', unit: '%', icon: 'sun', max: 100, safe: [0, 100], gradient: 'from-yellow-50 to-yellow-100', border: 'border-yellow-200', barColor: 'from-yellow-400 to-yellow-600', iconBg: 'bg-yellow-500', iconColor: 'text-yellow-600' },
+  pest_presence: { label: 'Pest Presence', unit: '', icon: 'bug', max: 1, safe: [0, 0], gradient: 'from-rose-50 to-rose-100', border: 'border-rose-200', barColor: 'from-rose-400 to-rose-600', iconBg: 'bg-rose-500', iconColor: 'text-rose-600' },
+  rainfall: { label: 'Rainfall', unit: 'mm', icon: 'rain', max: 50, safe: [0, 5], gradient: 'from-indigo-50 to-indigo-100', border: 'border-indigo-200', barColor: 'from-indigo-400 to-indigo-600', iconBg: 'bg-indigo-500', iconColor: 'text-indigo-600' },
+}
+
+const DATA_SOURCE_LABELS: Record<string, { label: string, color: string }> = {
+  firebase_bme680: { label: 'BME680 Sensor', color: 'bg-green-100 text-green-700' },
+  capacitive_probe: { label: 'Moisture Probe', color: 'bg-green-100 text-green-700' },
+  fan_pwm_telemetry: { label: 'Fan PWM', color: 'bg-green-100 text-green-700' },
+  ldr_sensor: { label: 'LDR Sensor', color: 'bg-green-100 text-green-700' },
+  tvoc_inference: { label: 'TVOC Inferred', color: 'bg-blue-100 text-blue-700' },
+  multi_factor_inference: { label: 'Multi-Factor (TVOC+RH+T+MC)', color: 'bg-green-100 text-green-700' },
+  openweather_api: { label: 'OpenWeather API', color: 'bg-blue-100 text-blue-700' },
+  openweather_api_zero: { label: 'OpenWeather API', color: 'bg-blue-100 text-blue-700' },
+  grain_batch_db: { label: 'Grain Batch DB', color: 'bg-purple-100 text-purple-700' },
+  firebase_sensor: { label: 'Firebase Sensor', color: 'bg-green-100 text-green-700' },
+  magnus_formula: { label: 'Calculated', color: 'bg-gray-100 text-gray-600' },
+  humidity_estimate: { label: 'Estimated', color: 'bg-yellow-100 text-yellow-700' },
+  manual_override: { label: 'Manual', color: 'bg-orange-100 text-orange-700' },
+  fan_state_binary: { label: 'Fan State', color: 'bg-gray-100 text-gray-600' },
+  default: { label: 'Default', color: 'bg-red-100 text-red-600' },
+  default_30d: { label: 'Default (30d)', color: 'bg-red-100 text-red-600' },
+  default_off: { label: 'No Data', color: 'bg-red-100 text-red-600' },
+  default_none: { label: 'No Data', color: 'bg-red-100 text-red-600' },
+}
+
 /* ─── Component ─── */
 export default function AIPredictionsPage() {
   const [livePrediction, setLivePrediction] = useState<LivePrediction | null>(null)
@@ -82,7 +135,6 @@ export default function AIPredictionsPage() {
   const [predictionHistory, setPredictionHistory] = useState<PredictionHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [predicting, setPredicting] = useState(false)
-  const [retraining, setRetraining] = useState(false)
   const [activeTab, setActiveTab] = useState('live')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [telemetry, setTelemetry] = useState<Record<string, number | string> | null>(null)
@@ -105,7 +157,8 @@ export default function AIPredictionsPage() {
   const runLivePrediction = useCallback(async () => {
     try {
       setPredicting(true)
-      const body = { device_id: deviceId, grain_type: 'Rice', storage_days: 30 }
+      // Don't send storage_days — let the backend compute it from GrainBatch
+      const body = { device_id: deviceId, grain_type: 'Rice' }
       const r = await fetch(`${backendUrl}/api/ai-spoilage/predict-live`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,31 +196,6 @@ export default function AIPredictionsPage() {
       }
     } catch { /* ignore */ }
   }, [backendUrl, deviceId])
-
-  /* ── Retrain model ── */
-  const retrainModel = async () => {
-    try {
-      setRetraining(true)
-      const r = await fetch(`${backendUrl}/api/ai-spoilage/retrain-public`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_retrain: true }),
-      })
-      if (r.ok) {
-        const data = await r.json()
-        const acc = data.performance_metrics?.accuracy ?? 0
-        const f1 = data.performance_metrics?.f1_score ?? 0
-        alert(`Model retrained successfully!\nAccuracy: ${(acc * 100).toFixed(1)}%\nF1 Score: ${(f1 * 100).toFixed(1)}%`)
-      } else {
-        const err = await r.json().catch(() => ({}))
-        alert(`Retrain failed: ${err.error || 'Unknown error'}`)
-      }
-    } catch (e) {
-      alert(`Retrain error: ${e instanceof Error ? e.message : 'unknown'}`)
-    } finally {
-      setRetraining(false)
-    }
-  }
 
   /* ── Initial load ── */
   useEffect(() => {
@@ -214,6 +242,27 @@ export default function AIPredictionsPage() {
     return <ShieldCheck className="h-6 w-6 text-green-600" />
   }
 
+  const getFeatureIcon = (key: string) => {
+    const iconMap: Record<string, React.ReactNode> = {
+      thermometer: <Thermometer className="h-5 w-5 text-white" />,
+      droplets: <Droplets className="h-5 w-5 text-white" />,
+      gauge: <Gauge className="h-5 w-5 text-white" />,
+      cloud: <CloudRain className="h-5 w-5 text-white" />,
+      timer: <Timer className="h-5 w-5 text-white" />,
+      wind: <Wind className="h-5 w-5 text-white" />,
+      sun: <Sun className="h-5 w-5 text-white" />,
+      bug: <Bug className="h-5 w-5 text-white" />,
+      rain: <CloudRain className="h-5 w-5 text-white" />,
+    }
+    return iconMap[key] || <Activity className="h-5 w-5 text-white" />
+  }
+
+  /* ── Check if a data source is "real" vs "default/no data" ── */
+  const isRealDataSource = (source: string | undefined) => {
+    if (!source) return false
+    return !source.startsWith('default') && source !== 'humidity_estimate'
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -237,7 +286,7 @@ export default function AIPredictionsPage() {
             AI Predictions
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Real-time ML-powered grain spoilage prediction • SmartBin Model • Device {deviceId}
+            Real-time ML-powered grain spoilage prediction • SmartBin XGBoost Model • Device {deviceId}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -258,15 +307,6 @@ export default function AIPredictionsPage() {
           >
             {predicting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
             Run Prediction
-          </Button>
-          <Button
-            size="sm"
-            onClick={retrainModel}
-            disabled={retraining}
-            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
-          >
-            {retraining ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Brain className="h-4 w-4 mr-1" />}
-            Retrain Model
           </Button>
         </div>
       </div>
@@ -304,6 +344,17 @@ export default function AIPredictionsPage() {
               <div className="text-center p-3 bg-white/60 rounded-xl border">
                 <div className="text-3xl font-bold">{livePrediction.days_until_spoilage}d</div>
                 <div className="text-xs text-gray-500 mt-1">Days to Spoilage</div>
+                {livePrediction.time_to_spoilage_method && (
+                  <div className="text-[10px] text-gray-400 mt-0.5 flex items-center justify-center gap-0.5">
+                    <Info className="h-2.5 w-2.5" />
+                    {livePrediction.time_to_spoilage_method === 'probability_weighted_survival'
+                      ? 'Probability-Weighted'
+                      : livePrediction.time_to_spoilage_method}
+                    {livePrediction.severity_factor !== undefined && (
+                      <span> • SF: {livePrediction.severity_factor}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="text-center p-3 bg-white/60 rounded-xl border">
                 <div className="text-3xl font-bold capitalize">{livePrediction.risk_level}</div>
@@ -315,16 +366,51 @@ export default function AIPredictionsPage() {
               </div>
             </div>
 
-            {/* Sensor values used by ML */}
+            {/* Class probabilities */}
+            {livePrediction.class_probabilities && Object.keys(livePrediction.class_probabilities).length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Class Probabilities</h4>
+                <div className="flex gap-3">
+                  {Object.entries(livePrediction.class_probabilities).map(([cls, prob]) => (
+                    <div key={cls} className="flex-1 p-2 bg-white/70 rounded-lg border text-center">
+                      <div className="text-xs text-gray-500 capitalize">{cls}</div>
+                      <div className="text-lg font-bold">{(prob * 100).toFixed(1)}%</div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                        <div
+                          className={`h-1.5 rounded-full ${cls === 'Safe' ? 'bg-green-500' : cls === 'Risky' ? 'bg-orange-500' : 'bg-red-500'}`}
+                          style={{ width: `${prob * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Input features with data source indicators */}
             <div className="mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Input Features (from live sensors)</h4>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Input Features (from live sensors)
+              </h4>
               <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-sm">
-                {Object.entries(livePrediction.input_features).map(([k, v]) => (
-                  <div key={k} className="p-2 bg-white/70 rounded-lg border">
-                    <div className="text-xs text-gray-500 capitalize">{k.replace(/_/g, ' ')}</div>
-                    <div className="font-semibold">{typeof v === 'number' ? v.toFixed(1) : v}</div>
-                  </div>
-                ))}
+                {Object.entries(livePrediction.input_features).map(([k, v]) => {
+                  const source = livePrediction.data_sources?.[k]
+                  const isReal = isRealDataSource(source)
+                  const sourceInfo = source ? DATA_SOURCE_LABELS[source] || DATA_SOURCE_LABELS['default'] : DATA_SOURCE_LABELS['default']
+
+                  return (
+                    <div key={k} className={`p-2 rounded-lg border ${isReal ? 'bg-white/70' : 'bg-gray-50/70 border-dashed'}`}>
+                      <div className="text-xs text-gray-500 capitalize">{k.replace(/_/g, ' ')}</div>
+                      <div className={`font-semibold ${!isReal ? 'text-gray-400' : ''}`}>
+                        {typeof v === 'number' ? v.toFixed(1) : v}
+                      </div>
+                      <div className={`text-[9px] px-1 py-0.5 rounded mt-0.5 inline-block ${sourceInfo.color}`}>
+                        {sourceInfo.label}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -380,7 +466,7 @@ export default function AIPredictionsPage() {
               </div>
               <div className="text-right">
                 <div className={`text-2xl font-bold ${livePrediction && livePrediction.risk_score >= 60 ? 'text-red-700' : 'text-green-700'}`}>
-                  {livePrediction?.risk_score ?? 0}%
+                  {livePrediction?.risk_score ?? '--'}%
                 </div>
                 <div className="text-xs text-gray-600">Current Risk</div>
               </div>
@@ -420,6 +506,11 @@ export default function AIPredictionsPage() {
             <div className="w-full bg-amber-200/50 rounded-full h-1.5">
               <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${Math.min((livePrediction?.days_until_spoilage || 0) / 30 * 100, 100)}%` }} />
             </div>
+            {livePrediction?.time_to_spoilage_method && (
+              <div className="text-[10px] text-amber-500 mt-1">
+                Method: {livePrediction.time_to_spoilage_method === 'probability_weighted_survival' ? 'Prob-Weighted Survival' : livePrediction.time_to_spoilage_method}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -448,20 +539,25 @@ export default function AIPredictionsPage() {
               {telemetry ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                   {[
-                    { label: 'Temp', value: `${Number(telemetry.temperature).toFixed(1)}°C`, icon: <Thermometer className="h-4 w-4" />, color: 'text-orange-600 bg-orange-50' },
-                    { label: 'Humidity', value: `${Number(telemetry.humidity).toFixed(1)}%`, icon: <Droplets className="h-4 w-4" />, color: 'text-blue-600 bg-blue-50' },
-                    { label: 'TVOC', value: `${telemetry.tvoc ?? 0} ppb`, icon: <Wind className="h-4 w-4" />, color: 'text-violet-600 bg-violet-50' },
-                    { label: 'Dew Point', value: telemetry.dewPoint ? `${telemetry.dewPoint}°C` : '--', icon: <CloudRain className="h-4 w-4" />, color: 'text-cyan-600 bg-cyan-50' },
-                    { label: 'Pressure', value: telemetry.pressure ? `${telemetry.pressure} hPa` : '--', icon: <Gauge className="h-4 w-4" />, color: 'text-purple-600 bg-purple-50' },
-                    { label: 'Risk Index', value: `${telemetry.riskIndex ?? 0}/100`, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-red-600 bg-red-50' },
+                    { label: 'Temp', value: telemetry.temperature !== undefined ? `${Number(telemetry.temperature).toFixed(1)}°C` : null, icon: <Thermometer className="h-4 w-4" />, color: 'text-orange-600 bg-orange-50' },
+                    { label: 'Humidity', value: telemetry.humidity !== undefined ? `${Number(telemetry.humidity).toFixed(1)}%` : null, icon: <Droplets className="h-4 w-4" />, color: 'text-blue-600 bg-blue-50' },
+                    { label: 'TVOC', value: telemetry.tvoc !== undefined ? `${telemetry.tvoc} ppb` : null, icon: <Wind className="h-4 w-4" />, color: 'text-violet-600 bg-violet-50' },
+                    { label: 'Dew Point', value: telemetry.dewPoint !== undefined && telemetry.dewPoint !== null ? `${telemetry.dewPoint}°C` : null, icon: <CloudRain className="h-4 w-4" />, color: 'text-cyan-600 bg-cyan-50' },
+                    { label: 'Pressure', value: telemetry.pressure !== undefined && telemetry.pressure !== null ? `${telemetry.pressure} hPa` : null, icon: <Gauge className="h-4 w-4" />, color: 'text-purple-600 bg-purple-50' },
+                    { label: 'Light', value: telemetry.light !== undefined && telemetry.light !== null ? `${telemetry.light}%` : null, icon: <Sun className="h-4 w-4" />, color: 'text-yellow-600 bg-yellow-50' },
+                    { label: 'Soil Moisture', value: telemetry.soilMoisture !== undefined && telemetry.soilMoisture !== null ? `${telemetry.soilMoisture}%` : null, icon: <Gauge className="h-4 w-4" />, color: 'text-emerald-600 bg-emerald-50' },
+                    { label: 'Risk Index', value: telemetry.riskIndex !== undefined ? `${telemetry.riskIndex}/100` : null, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-red-600 bg-red-50' },
                     { label: 'Fan', value: String(telemetry.fanState ?? 'off').toUpperCase(), icon: <Settings className="h-4 w-4" />, color: 'text-amber-600 bg-amber-50' },
+                    { label: 'PWM', value: telemetry.pwm_speed !== undefined ? `${telemetry.pwm_speed}%` : null, icon: <Wind className="h-4 w-4" />, color: 'text-teal-600 bg-teal-50' },
                     { label: 'Lid', value: String(telemetry.lidState ?? 'closed').toUpperCase(), icon: <Eye className="h-4 w-4" />, color: 'text-sky-600 bg-sky-50' },
                     { label: 'ML', value: String(telemetry.mlDecision ?? 'idle'), icon: <Brain className="h-4 w-4" />, color: 'text-indigo-600 bg-indigo-50' },
                   ].map(({ label, value, icon, color }) => (
                     <div key={label} className={`p-3 rounded-xl border text-center ${color}`}>
                       <div className="flex justify-center mb-1">{icon}</div>
                       <div className="text-xs uppercase opacity-70">{label}</div>
-                      <div className="text-lg font-bold">{value}</div>
+                      <div className={`text-lg font-bold ${value === null ? 'text-gray-300' : ''}`}>
+                        {value ?? 'No Data'}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -512,62 +608,40 @@ export default function AIPredictionsPage() {
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-blue-600" /> Environmental Factor Analysis
               </CardTitle>
-              <CardDescription>How current sensor values influence the ML prediction</CardDescription>
+              <CardDescription>How current sensor values influence the ML prediction — real data sources indicated</CardDescription>
             </CardHeader>
             <CardContent>
               {livePrediction ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[
-                    {
-                      label: 'Temperature', value: livePrediction.input_features.temperature,
-                      unit: '°C', max: 50, safe: [15, 25], icon: <Thermometer className="h-5 w-5 text-white" />,
-                      gradient: 'from-orange-50 to-orange-100', border: 'border-orange-200',
-                      barColor: 'from-orange-400 to-orange-600', iconBg: 'bg-orange-500'
-                    },
-                    {
-                      label: 'Humidity', value: livePrediction.input_features.humidity,
-                      unit: '%', max: 100, safe: [40, 70], icon: <Droplets className="h-5 w-5 text-white" />,
-                      gradient: 'from-blue-50 to-blue-100', border: 'border-blue-200',
-                      barColor: 'from-blue-400 to-blue-600', iconBg: 'bg-blue-500'
-                    },
-                    {
-                      label: 'Grain Moisture', value: livePrediction.input_features.grain_moisture,
-                      unit: '%', max: 30, safe: [10, 16], icon: <Gauge className="h-5 w-5 text-white" />,
-                      gradient: 'from-emerald-50 to-emerald-100', border: 'border-emerald-200',
-                      barColor: 'from-emerald-400 to-emerald-600', iconBg: 'bg-emerald-500'
-                    },
-                    {
-                      label: 'Dew Point', value: livePrediction.input_features.dew_point,
-                      unit: '°C', max: 40, safe: [5, 20], icon: <CloudRain className="h-5 w-5 text-white" />,
-                      gradient: 'from-cyan-50 to-cyan-100', border: 'border-cyan-200',
-                      barColor: 'from-cyan-400 to-cyan-600', iconBg: 'bg-cyan-500'
-                    },
-                    {
-                      label: 'Storage Days', value: livePrediction.input_features.storage_days,
-                      unit: 'days', max: 180, safe: [0, 60], icon: <Timer className="h-5 w-5 text-white" />,
-                      gradient: 'from-amber-50 to-amber-100', border: 'border-amber-200',
-                      barColor: 'from-amber-400 to-amber-600', iconBg: 'bg-amber-500'
-                    },
-                    {
-                      label: 'Rainfall', value: livePrediction.input_features.rainfall,
-                      unit: 'mm', max: 100, safe: [0, 10], icon: <CloudRain className="h-5 w-5 text-white" />,
-                      gradient: 'from-indigo-50 to-indigo-100', border: 'border-indigo-200',
-                      barColor: 'from-indigo-400 to-indigo-600', iconBg: 'bg-indigo-500'
-                    },
-                  ].map(({ label, value, unit, max, safe, icon, gradient, border, barColor, iconBg }) => {
-                    const pct = Math.min((value / max) * 100, 100)
-                    const inSafe = value >= safe[0] && value <= safe[1]
+                  {Object.entries(livePrediction.input_features).map(([key, value]) => {
+                    const config = FEATURE_CONFIG[key]
+                    if (!config) return null
+                    const source = livePrediction.data_sources?.[key]
+                    const isReal = isRealDataSource(source)
+                    const sourceInfo = source ? DATA_SOURCE_LABELS[source] || DATA_SOURCE_LABELS['default'] : DATA_SOURCE_LABELS['default']
+                    const pct = Math.min((value / config.max) * 100, 100)
+                    const inSafe = value >= config.safe[0] && value <= config.safe[1]
+
                     return (
-                      <div key={label} className={`p-4 bg-gradient-to-br ${gradient} rounded-xl border ${border}`}>
+                      <div key={key} className={`p-4 bg-gradient-to-br ${config.gradient} rounded-xl border ${config.border} ${!isReal ? 'opacity-60 border-dashed' : ''}`}>
                         <div className="flex items-center gap-2 mb-3">
-                          <div className={`p-1.5 rounded-lg ${iconBg}`}>{icon}</div>
-                          <span className="font-semibold text-gray-800">{label}</span>
+                          <div className={`p-1.5 rounded-lg ${config.iconBg}`}>{getFeatureIcon(FEATURE_CONFIG[key]?.icon ?? 'activity')}</div>
+                          <span className="font-semibold text-gray-800">{config.label}</span>
                           {!inSafe && <Badge variant="destructive" className="ml-auto text-[10px] px-1.5">⚠</Badge>}
                         </div>
-                        <div className="text-2xl font-bold text-gray-900 mb-1">{value.toFixed(1)} <span className="text-sm font-normal text-gray-500">{unit}</span></div>
-                        <div className="text-xs text-gray-500 mb-2">Safe: {safe[0]}–{safe[1]} {unit}</div>
+                        <div className="text-2xl font-bold text-gray-900 mb-1">
+                          {isReal ? (
+                            <>{value.toFixed(key === 'pest_presence' ? 0 : 1)} <span className="text-sm font-normal text-gray-500">{config.unit}</span></>
+                          ) : (
+                            <span className="text-gray-400">No Live Data</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                          <span>Safe: {config.safe[0]}–{config.safe[1]} {config.unit}</span>
+                          <span className={`px-1.5 py-0.5 rounded ${sourceInfo.color}`}>{sourceInfo.label}</span>
+                        </div>
                         <div className="w-full bg-white rounded-full h-2.5 shadow-inner">
-                          <div className={`bg-gradient-to-r ${barColor} h-2.5 rounded-full shadow-sm transition-all`} style={{ width: `${pct}%` }} />
+                          <div className={`bg-gradient-to-r ${config.barColor} h-2.5 rounded-full shadow-sm transition-all`} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     )
@@ -621,7 +695,7 @@ export default function AIPredictionsPage() {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {livePrediction.recommendations.map((rec, i) => {
                     const isUrgent = rec.includes('URGENT') || rec.includes('CRITICAL')
-                    const isWarning = rec.includes('Monitor') || rec.includes('approaching')
+                    const isWarning = rec.includes('Monitor') || rec.includes('approaching') || rec.includes('elevated') || rec.includes('Rainfall')
                     return (
                       <div key={i} className={`p-4 rounded-xl border ${isUrgent ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
                         <div className="flex items-center gap-2 mb-2">

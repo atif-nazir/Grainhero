@@ -59,46 +59,109 @@ def predict_spoilage(input_data):
         # Calculate risk score
         risk_score = int(probabilities[prediction] * 100)
         
-        # Calculate time to spoilage
-        base_times = {0: 720, 1: 168, 2: 24}  # Safe: 30 days, Risky: 7 days, Spoiled: 1 day
-        base_time = base_times.get(prediction, 720)
+        # ─── Probability-weighted time-to-spoilage estimate ───
+        # Base survival hours per class (empirical grain storage literature):
+        #   Safe   = 720 h (30 days)  — grain in good condition
+        #   Risky  = 168 h ( 7 days)  — conditions degrading
+        #   Spoiled =  24 h ( 1 day)  — already compromised
+        base_survival = {0: 720, 1: 168, 2: 24}
         
-        # Adjust based on environmental factors
+        # Weighted estimate: ΣPᵢ × base_hours_i
+        weighted_hours = sum(
+            probabilities[cls] * base_survival.get(cls, 720)
+            for cls in range(len(probabilities))
+        )
+        
+        # Environmental severity adjustment factors
         temp = input_data.get('temperature', 25)
         humidity = input_data.get('humidity', 60)
+        grain_moist = input_data.get('grain_moisture', 14)
+        airflow_val = input_data.get('airflow', 1.0)
+        pest = input_data.get('pest_presence', 0)
+        storage = input_data.get('storage_days', 1)
         
-        temp_factor = 1.0
-        if temp > 30:
-            temp_factor = 0.5
-        elif temp > 25:
-            temp_factor = 0.7
+        severity_factor = 1.0
         
-        humidity_factor = 1.0
-        if humidity > 80:
-            humidity_factor = 0.4
+        # Temperature penalty (exponential decay above 28 °C)
+        if temp > 35:
+            severity_factor *= 0.35
+        elif temp > 30:
+            severity_factor *= 0.55
+        elif temp > 28:
+            severity_factor *= 0.75
+        
+        # Humidity penalty
+        if humidity > 85:
+            severity_factor *= 0.35
+        elif humidity > 80:
+            severity_factor *= 0.50
         elif humidity > 70:
-            humidity_factor = 0.6
+            severity_factor *= 0.70
         
-        time_to_spoilage = int(base_time * temp_factor * humidity_factor)
+        # Grain moisture penalty
+        if grain_moist > 20:
+            severity_factor *= 0.40
+        elif grain_moist > 18:
+            severity_factor *= 0.60
+        elif grain_moist > 16:
+            severity_factor *= 0.80
         
-        # Identify key risk factors
+        # Pest presence penalty
+        if pest > 0:
+            severity_factor *= 0.65
+        
+        # Low airflow penalty (0 = no ventilation)
+        if airflow_val < 0.2:
+            severity_factor *= 0.80
+        
+        # Long storage penalty (grain degrades over time)
+        if storage > 90:
+            severity_factor *= 0.70
+        elif storage > 60:
+            severity_factor *= 0.85
+        
+        # Final estimate (clamp to 1 h minimum)
+        time_to_spoilage = max(1, int(weighted_hours * severity_factor))
+        
+        # ─── Key risk factors ───
         risk_factors = []
         if temp > 30:
             risk_factors.append('high_temperature')
+        elif temp > 28:
+            risk_factors.append('elevated_temperature')
         if humidity > 80:
             risk_factors.append('high_humidity')
-        if input_data.get('grain_moisture', 15) > 18:
-            risk_factors.append('high_moisture')
-        if input_data.get('pest_presence', 0) > 0:
+        elif humidity > 70:
+            risk_factors.append('elevated_humidity')
+        if grain_moist > 18:
+            risk_factors.append('high_grain_moisture')
+        elif grain_moist > 16:
+            risk_factors.append('elevated_grain_moisture')
+        if pest > 0:
             risk_factors.append('pest_presence')
+        if airflow_val < 0.2:
+            risk_factors.append('low_airflow')
+        if storage > 60:
+            risk_factors.append('long_storage_duration')
+        
+        # Per-class probabilities for transparency
+        class_probs = {}
+        for cls_idx, cls_label in label_map.items():
+            if cls_idx < len(probabilities):
+                class_probs[cls_label] = round(float(probabilities[cls_idx]), 4)
         
         return {
             'prediction': prediction_label,
             'confidence': float(confidence),
             'risk_score': risk_score,
             'time_to_spoilage_hours': time_to_spoilage,
+            'time_to_spoilage_method': 'probability_weighted_survival',
+            'class_probabilities': class_probs,
             'key_risk_factors': risk_factors,
-            'model_used': 'SmartBin-RiceSpoilage',
+            'severity_factor': round(severity_factor, 3),
+            'weighted_base_hours': round(weighted_hours, 1),
+            'model_used': 'SmartBin-RiceSpoilage-XGBoost',
+            'features_used': 9,
             'timestamp': datetime.now().isoformat()
         }
         

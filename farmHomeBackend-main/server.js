@@ -66,11 +66,22 @@ console.log(
 mongoose.connect(connectionString, {
   serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
   socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+}).catch((err) => {
+  console.error("❌ MongoDB initial connection failed:", err.message || err);
+  console.warn("⚠️  Server will continue running — ML endpoints and MQTT still functional.");
+  console.warn("⚠️  Features requiring MongoDB (batches, predictions history) will be unavailable.");
+});
+
+// Catch unhandled promise rejections globally so the server doesn't crash
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️  Unhandled Rejection at:', promise, 'reason:', reason?.message || reason);
 });
 
 const db = mongoose.connection;
 
-db.on("error", console.error.bind(console, "connection error: "));
+db.on("error", (err) => {
+  console.error("MongoDB connection error:", err.message || err);
+});
 db.once("open", () => {
   console.log("MongoDB Connection Successfull");
 
