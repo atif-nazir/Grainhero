@@ -202,7 +202,16 @@ export default function SignUpPage() {
           return
         }
 
-        // User has payment, proceed with signup
+        // Check if user already exists as admin (completed signup)
+        if (paymentData.user && paymentData.user.role === 'admin') {
+          setMessage("Account already exists! Redirecting you to login.")
+          setTimeout(() => {
+            router.push(`/auth/login?prefill=${encodeURIComponent(formData.email)}`)
+          }, 1500)
+          return
+        }
+
+        // User has payment and is not yet an admin, proceed with signup
         const signupData = {
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
@@ -217,11 +226,20 @@ export default function SignUpPage() {
           body: JSON.stringify(signupData),
         })
 
+        const result = await res.json()
+        
         if (!res.ok) {
-          const error = await res.json().catch(() => ({}))
-          setMessage(error?.message || "Signup failed. Please try again.")
+          setMessage(result?.message || result?.error || "Signup failed. Please try again.")
         } else {
-          handlePostSignupRedirect(formData.email)
+          // Check if this is an existing user message
+          if (result?.message?.includes("already exists")) {
+            setMessage("Account already exists! Redirecting you to login.")
+            setTimeout(() => {
+              router.push(`/auth/login?prefill=${encodeURIComponent(formData.email)}`)
+            }, 1500)
+          } else {
+            handlePostSignupRedirect(formData.email)
+          }
         }
       }
     } catch {
@@ -350,8 +368,8 @@ export default function SignUpPage() {
                     placeholder="Enter your email address"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
-                    className={`pr-10 ${fieldValidations.email.touched && !fieldValidations.email.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.email.touched && fieldValidations.email.isValid ? 'border-green-500 focus:border-green-500' : ''} ${invitationData ? 'bg-gray-50' : ''}`}
-                    readOnly={!!invitationData}
+                    className={`pr-10 ${fieldValidations.email.touched && !fieldValidations.email.isValid ? 'border-red-500 focus:border-red-500' : fieldValidations.email.touched && fieldValidations.email.isValid ? 'border-green-500 focus:border-green-500' : ''} ${invitationData || searchParams.get('payment') === 'success' ? 'bg-gray-50' : ''}`}
+                    readOnly={!!invitationData || searchParams.get('payment') === 'success'}
                     required
                   />
                   {fieldValidations.email.touched && (

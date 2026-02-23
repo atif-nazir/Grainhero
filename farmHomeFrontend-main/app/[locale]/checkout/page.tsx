@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Check, CreditCard, Shield, Clock, Users, Zap, Globe } from "lucide-react"
+import { Check, CreditCard, Shield, Clock, Users, Zap, Globe, Cpu, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react"
 import pricingData from '../pricing-data.js'
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function CheckoutPage() {
     const searchParams = useSearchParams()
-    const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
-    const [isProcessing, setIsProcessing] = useState(false)
+    const [selectedPlan, setSelectedPlan] = useState<string | null>('intermediate')
+    const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({})
     const [userEmail, setUserEmail] = useState<string>('')
+    const [isProcessing, setIsProcessing] = useState(false)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const router = useRouter()
 
     useEffect(() => {
@@ -21,7 +24,6 @@ export default function CheckoutPage() {
         const email = searchParams.get('email') || localStorage.getItem('signupEmail')
         if (email) {
             setUserEmail(email)
-            localStorage.setItem('signupEmail', email)
         }
 
         // Pre-select plan if coming from pricing page
@@ -40,6 +42,8 @@ export default function CheckoutPage() {
         if (!selectedPlan || !userEmail) return
 
         setIsProcessing(true)
+        setErrorMessage(null)
+
         try {
             const plan = pricingData.find(p => p.id === selectedPlan)
 
@@ -50,7 +54,6 @@ export default function CheckoutPage() {
             }
 
             if (plan.id === 'custom') {
-                // Handle custom/contact plans - redirect to contact form
                 router.push('/contact?plan=custom')
                 return
             }
@@ -62,14 +65,14 @@ export default function CheckoutPage() {
                 timestamp: new Date().toISOString()
             }))
 
-            // Use dynamic checkout only (no static links)
+            // Call backend to create Stripe Checkout Session
             const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/api/create-checkout-session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    priceId: plan.priceId,
+                    priceId: plan.priceId, // Included for reference, but backend uses planId
                     userEmail: userEmail,
                     planId: selectedPlan
                 })
@@ -82,20 +85,13 @@ export default function CheckoutPage() {
                 window.location.href = data.checkoutUrl
             } else {
                 console.error('Failed to create checkout session:', data.message)
+                setErrorMessage(data.message || 'Payment initialization failed. Please try again.')
                 setIsProcessing(false)
-
-                // Show user-friendly error messages
-                let errorMessage = data.message || 'Please try again.'
-                if (data.message && data.message.includes('already have an active subscription')) {
-                    errorMessage = 'You already have an active subscription. Please contact us to upgrade or change your plan.'
-                }
-
-                alert(`Failed to create checkout session: ${errorMessage}`)
             }
         } catch (error) {
             console.error('Checkout error:', error)
+            setErrorMessage('Network error. Please try again later.')
             setIsProcessing(false)
-            alert('Checkout failed. Please try again.')
         }
     }
 
@@ -110,7 +106,7 @@ export default function CheckoutPage() {
                         Choose Your Plan
                     </h1>
                     <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                        Select the perfect plan for your grain storage needs and complete your subscription
+                        Choose a plan that best fit your needs
                     </p>
                 </div>
 
@@ -129,7 +125,7 @@ export default function CheckoutPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
-                                    {pricingData.map((plan) => (
+                                    {pricingData.filter(p => p.id !== 'custom').map((plan) => (
                                         <label
                                             key={plan.id}
                                             className={`block rounded-xl border-2 p-6 cursor-pointer transition-all duration-200 hover:shadow-lg ${selectedPlan === plan.id
@@ -137,68 +133,88 @@ export default function CheckoutPage() {
                                                 : 'border-gray-200 bg-white hover:border-green-300'
                                                 }`}
                                         >
-                                            <div className="flex items-start justify-between">
+                                            <div className="flex items-start gap-4">
+                                                <input
+                                                    type="radio"
+                                                    name="plan"
+                                                    value={plan.id}
+                                                    checked={selectedPlan === plan.id}
+                                                    onChange={() => handlePlanSelect(plan.id)}
+                                                    className="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 flex-shrink-0"
+                                                />
                                                 <div className="flex-1">
-                                                    <div className="flex items-center gap-3 mb-2">
-                                                        <input
-                                                            type="radio"
-                                                            name="plan"
-                                                            value={plan.id}
-                                                            checked={selectedPlan === plan.id}
-                                                            onChange={() => handlePlanSelect(plan.id)}
-                                                            className="h-4 w-4 text-green-600 focus:ring-green-500"
-                                                        />
+                                                    <div className="flex justify-between items-start mb-2">
                                                         <div>
-                                                            <h3 className="text-xl font-semibold text-gray-900">
+                                                            <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                                                                 {plan.name}
+                                                                {plan.popular && (
+                                                                    <Badge className="bg-green-600 text-white text-xs">
+                                                                        Most Popular
+                                                                    </Badge>
+                                                                )}
                                                             </h3>
-                                                            {plan.popular && (
-                                                                <Badge className="bg-green-600 text-white ml-2">
-                                                                    Most Popular
-                                                                </Badge>
+                                                            <p className="text-sm text-gray-600 mt-1">
+                                                                {plan.description}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex justify-between items-end mb-4">
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                                                <Users className="h-4 w-4 text-green-600" />
+                                                                <span>{plan.limits?.users === -1 ? 'Unlimited' : plan.limits?.users} Staff</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                                                <Globe className="h-4 w-4 text-green-600" />
+                                                                <span>{plan.limits?.warehouses} Warehouse{plan.limits?.warehouses > 1 ? 's' : ''}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-2xl font-bold text-gray-900">
+                                                                Rs. {plan.price?.toLocaleString()}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500">
+                                                                per {plan.interval}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Collapsible Features */}
+                                                    <div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault()
+                                                                e.stopPropagation()
+                                                                setExpandedPlans(prev => ({ ...prev, [plan.id]: !prev[plan.id] }))
+                                                            }}
+                                                            className="flex items-center gap-1 text-sm text-green-600 font-medium hover:text-green-700 transition-colors"
+                                                        >
+                                                            {expandedPlans[plan.id] ? (
+                                                                <>Hide Features <ChevronUp className="h-3 w-3" /></>
+                                                            ) : (
+                                                                <>View Features <ChevronDown className="h-3 w-3" /></>
                                                             )}
-                                                        </div>
-                                                    </div>
+                                                        </button>
 
-                                                    <p className="text-gray-600 mb-4">
-                                                        {plan.description}
-                                                    </p>
-
-                                                    <div className="grid grid-cols-2 gap-4 mb-4">
-                                                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                                                            <Users className="h-4 w-4 text-green-600" />
-                                                            <span>{plan.limits.users} Users</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                                                            <Globe className="h-4 w-4 text-green-600" />
-                                                            <span>{plan.limits.storage}GB Storage</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                                                            <Zap className="h-4 w-4 text-green-600" />
-                                                            <span>AI Insights</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                                                            <Shield className="h-4 w-4 text-green-600" />
-                                                            <span>24/7 Support</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <ul className="space-y-2">
-                                                        {plan.features.map((feature, index) => (
-                                                            <li key={index} className="flex items-center gap-2 text-sm text-gray-700">
-                                                                <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
-                                                                <span>{feature}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-
-                                                <div className="text-right ml-6">
-                                                    <div className="text-3xl font-bold text-gray-900 mb-1">
-                                                        ${plan.price}
-                                                    </div>
-                                                    <div className="text-sm text-gray-600">
-                                                        per {plan.interval}
+                                                        {expandedPlans[plan.id] && (
+                                                            <div className="mt-3 pt-3 border-t border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                {plan.iotChargeLabel && (
+                                                                    <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-2 w-fit">
+                                                                        <Cpu className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                        <span>{plan.iotChargeLabel}</span>
+                                                                    </div>
+                                                                )}
+                                                                <ul className="space-y-2">
+                                                                    {plan.features.map((feature, index) => (
+                                                                        <li key={index} className="flex items-center gap-2 text-sm text-gray-700">
+                                                                            <Check className="h-3 w-3 text-green-600 flex-shrink-0" />
+                                                                            <span>{feature}</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -264,7 +280,7 @@ export default function CheckoutPage() {
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-xl font-bold text-gray-900">
-                                                        ${selectedPlanData.price}
+                                                        Rs. {selectedPlanData.price?.toLocaleString()}
                                                     </div>
                                                     <div className="text-sm text-gray-600">
                                                         per {selectedPlanData.interval}
@@ -298,18 +314,28 @@ export default function CheckoutPage() {
                                         {/* Pricing Breakdown */}
                                         <div className="space-y-3">
                                             <div className="flex justify-between text-sm">
-                                                <span>Plan Price</span>
-                                                <span>${selectedPlanData.price}</span>
+                                                <span>Monthly Plan Price</span>
+                                                <span>Rs. {selectedPlanData.price?.toLocaleString()}</span>
                                             </div>
+                                            {selectedPlanData.iotCharge && (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="flex items-center gap-1">
+                                                        <Cpu className="w-3 h-3 text-amber-600" />
+                                                        One-time IoT Setup
+                                                    </span>
+                                                    <span>Rs. {selectedPlanData.iotCharge?.toLocaleString()}</span>
+                                                </div>
+                                            )}
                                             <div className="flex justify-between text-sm">
                                                 <span>Billing Cycle</span>
                                                 <span>{selectedPlanData.interval}</span>
                                             </div>
                                             <Separator />
                                             <div className="flex justify-between font-semibold text-lg">
-                                                <span>Total</span>
-                                                <span>${selectedPlanData.price}</span>
+                                                <span>Monthly Total</span>
+                                                <span>Rs. {selectedPlanData.price?.toLocaleString()}</span>
                                             </div>
+
                                         </div>
 
                                         <Separator />
@@ -318,17 +344,22 @@ export default function CheckoutPage() {
                                         <div className="space-y-3">
                                             <div className="flex items-center gap-2 text-sm text-gray-600">
                                                 <Shield className="h-4 w-4 text-green-600" />
-                                                <span>256-bit SSL encryption</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                <CreditCard className="h-4 w-4 text-green-600" />
                                                 <span>Secure payment processing</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm text-gray-600">
                                                 <Clock className="h-4 w-4 text-green-600" />
-                                                <span>Instant activation</span>
+                                                <span>Instant activation after setup</span>
                                             </div>
                                         </div>
+
+                                        {errorMessage && (
+                                            <Alert variant="destructive">
+                                                <AlertTitle>Error</AlertTitle>
+                                                <AlertDescription>
+                                                    {errorMessage}
+                                                </AlertDescription>
+                                            </Alert>
+                                        )}
 
                                         {/* Checkout Button */}
                                         <Button
@@ -340,19 +371,8 @@ export default function CheckoutPage() {
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
-                                                {selectedPlan === 'custom' ? (
-                                                    <>
-                                                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                        </svg>
-                                                        {isProcessing ? 'Redirecting...' : 'Contact Us'}
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <CreditCard className="h-5 w-5" />
-                                                        {isProcessing ? 'Processing...' : 'Proceed to Payment'}
-                                                    </>
-                                                )}
+                                                <CreditCard className="h-5 w-5" />
+                                                {isProcessing ? 'Processing...' : 'Proceed to Payment'}
                                             </div>
                                         </Button>
 
@@ -368,7 +388,7 @@ export default function CheckoutPage() {
                                         )}
 
                                         <p className="text-xs text-gray-500 text-center">
-                                            By proceeding, you agree to our Terms of Service and Privacy Policy.
+                                            By proceeding, you agree to our Terms of Service.
                                             You can cancel anytime.
                                         </p>
                                     </>
@@ -383,6 +403,18 @@ export default function CheckoutPage() {
                             </CardContent>
                         </Card>
                     </div>
+                </div>
+
+                {/* Back to Pricing */}
+                <div className="mt-8 text-center">
+                    <Button
+                        variant="outline"
+                        onClick={() => router.push('/pricing')}
+                        className="gap-2"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Back to Pricing
+                    </Button>
                 </div>
             </div>
         </div>

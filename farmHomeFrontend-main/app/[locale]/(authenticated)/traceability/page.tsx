@@ -18,12 +18,14 @@ import {
   Thermometer,
   AlertTriangle,
   CheckCircle,
-  Calendar
+  Calendar,
+  FileText
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import QRCodeDisplay from "@/components/QRCodeDisplay"
+import { config } from "@/config"
 
 interface GrainBatch {
   _id: string
@@ -200,6 +202,27 @@ export default function TraceabilityPage() {
     }
   }
 
+  const handleDownloadPDF = async (batchId: string, batch_id_string: string) => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${config.backendUrl}/api/logging/batches/${batchId}/report`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Failed to download')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `traceability-report-${batch_id_string}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('PDF report downloaded!')
+    } catch (error) {
+      console.error('Error downloading PDF:', error)
+      toast.error('Failed to download PDF report')
+    }
+  }
+
   const handleScanQRCode = () => {
     // For now, show a modal with instructions for QR scanning
     // In a real implementation, this would integrate with device camera
@@ -252,7 +275,20 @@ export default function TraceabilityPage() {
             onClick={handleExportReport}
           >
             <Download className="mr-2 h-4 w-4" />
-            Export Report
+            Export CSV
+          </Button>
+          <Button
+            className="bg-[#00a63e] hover:bg-[#008a33] text-white"
+            onClick={() => {
+              if (selectedBatch) {
+                handleDownloadPDF(selectedBatch._id, selectedBatch.batch_id)
+              } else {
+                toast.info('Please select a batch to download a detailed PDF report')
+              }
+            }}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Download PDF
           </Button>
           <Button
             variant="outline"
@@ -432,10 +468,30 @@ export default function TraceabilityPage() {
                 </div>
               )}
 
-              <Button variant="outline" className="w-full border-[#00a63e] text-[#00a63e] hover:bg-[#00a63e] hover:text-white">
-                <Eye className="mr-2 h-4 w-4" />
-                View Full Traceability
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-[#00a63e] text-[#00a63e] hover:bg-[#00a63e] hover:text-white"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleViewBatch(batch)
+                  }}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  View History
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDownloadPDF(batch._id, batch.batch_id)
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  PDF
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

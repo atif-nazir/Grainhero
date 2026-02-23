@@ -61,9 +61,13 @@ router.get(
         }
       );
 
-      // Ops metrics (batches, silos)
-      const batches = await GrainBatch.find(scope.tenant_id ? { admin_id: req.user._id } : {});
-      const silos = await Silo.find(scope.tenant_id ? { admin_id: req.user._id } : {});
+      // Ops metrics (batches, silos) - always scoped to admin for non-super-admins
+      const isSuperAdmin = req.user.role === USER_ROLES.SUPER_ADMIN;
+      const adminId = req.user.admin_id || req.user._id;
+      const batchFilter = isSuperAdmin ? {} : { admin_id: adminId };
+      const siloFilter = isSuperAdmin ? {} : { admin_id: adminId };
+      const batches = await GrainBatch.find(batchFilter);
+      const silos = await Silo.find(siloFilter);
       const ops = {
         total_batches: batches.length,
         total_silos: silos.length,

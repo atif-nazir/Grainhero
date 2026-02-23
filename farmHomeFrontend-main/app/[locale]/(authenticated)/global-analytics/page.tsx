@@ -91,7 +91,7 @@ export default function GlobalAnalyticsPage() {
       value: 1250000,
       change: 15.8,
       trend: "up",
-      unit: "$",
+      unit: "PKR",
       icon: DollarSign
     },
     {

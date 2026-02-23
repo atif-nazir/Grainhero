@@ -59,7 +59,7 @@ router.get('/policies', [
     const filter = req.user.role === 'super_admin'
       ? (req.query.tenant_id ? { tenant_id: req.query.tenant_id } : {})
       : { tenant_id: req.user.tenant_id };
-    
+
     if (req.query.status) filter.status = req.query.status;
     if (req.query.provider) filter.provider_name = { $regex: req.query.provider, $options: 'i' };
 
@@ -155,13 +155,13 @@ router.get('/policies/:id', [
   param('id').isMongoId().withMessage('Valid policy ID is required')
 ], async (req, res) => {
   try {
-    const filter = req.user.role === 'super_admin'
+    const filter = req.user.role === 'superadmin'
       ? { _id: req.params.id }
       : { _id: req.params.id, tenant_id: req.user.tenant_id };
 
     const policy = await InsurancePolicy.findOne(filter)
-    .populate('covered_batches.batch_id')
-    .populate('created_by', 'name email');
+      .populate('covered_batches.batch_id')
+      .populate('created_by', 'name email');
 
     if (!policy) {
       return res.status(404).json({ error: 'Policy not found' });
@@ -310,7 +310,7 @@ router.get('/claims', [
     const skip = (page - 1) * limit;
 
     const filter = { tenant_id: req.user.tenant_id };
-    
+
     if (req.query.status) filter.status = req.query.status;
     if (req.query.claim_type) filter.claim_type = req.query.claim_type;
 
@@ -436,7 +436,7 @@ router.get('/statistics', [
       total_claims: claims.length,
       approved_claims: claims.filter(c => c.status === 'approved').length,
       total_claims_amount: claims.reduce((sum, c) => sum + c.amount_approved, 0),
-      average_risk_score: policies.length > 0 ? 
+      average_risk_score: policies.length > 0 ?
         Math.round(policies.reduce((sum, p) => sum + p.overall_risk_score, 0) / policies.length) : 0
     };
 
@@ -448,4 +448,78 @@ router.get('/statistics', [
   }
 });
 
+// POST /insurance/request-coverage - Admin requests insurance from super admin
+router.post('/request-coverage',
+  auth,
+  [
+    body('preferred_provider').isString().withMessage('Provider is required'),
+    body('coverage_type').isString().withMessage('Coverage type is required'),
+    body('message').isString().notEmpty().withMessage('Message is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const User = require('../models/User');
+      const sendEmail = require('../utils/emailHelper');
+
+      // Find all super admins
+      const superAdmins = await User.find({ role: 'super_admin' }).select('email name');
+      if (!superAdmins.length) {
+        return res.status(404).json({ error: 'No system administrators found' });
+      }
+
+      const { preferred_provider, coverage_type, message } = req.body;
+      const requesterName = req.user.name || req.user.email;
+      const requesterEmail = req.user.email;
+
+      const subject = `Insurance Coverage Request from ${requesterName}`;
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 20px; border-radius: 12px 12px 0 0;">
+            <h2 style="color: white; margin: 0;">🛡️ Insurance Coverage Request</h2>
+          </div>
+          <div style="border: 1px solid #e5e7eb; border-top: none; padding: 24px; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;"><strong>${requesterName}</strong> (${requesterEmail}) has requested insurance coverage.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr>
+                <td style="padding: 8px 12px; background: #fef3c7; border-radius: 4px; font-weight: 600;">Preferred Provider</td>
+                <td style="padding: 8px 12px;">${preferred_provider}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; background: #fef3c7; border-radius: 4px; font-weight: 600;">Coverage Type</td>
+                <td style="padding: 8px 12px;">${coverage_type}</td>
+              </tr>
+            </table>
+            <div style="background: #f9fafb; padding: 16px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+              <p style="margin: 0 0 4px; font-weight: 600; color: #374151;">Message:</p>
+              <p style="margin: 0; color: #6b7280;">${message}</p>
+            </div>
+            <p style="margin-top: 20px; color: #9ca3af; font-size: 12px;">This request was sent from GrainHero Insurance module.</p>
+          </div>
+        </div>
+      `;
+
+      // Send email to all super admins
+      for (const admin of superAdmins) {
+        try {
+          await sendEmail(admin.email, subject, message, html);
+        } catch (emailErr) {
+          console.error(`Failed to send email to ${admin.email}:`, emailErr.message);
+        }
+      }
+
+      res.json({ success: true, message: 'Request sent to system administrator(s)' });
+
+    } catch (error) {
+      console.error('Request coverage error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 module.exports = router;
+

@@ -32,7 +32,8 @@ import {
   DollarSign,
   Brain,
   Zap,
-  } from "lucide-react"
+  ClipboardList,
+} from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { LanguageSelector } from "@/components/language-selector"
@@ -40,6 +41,16 @@ import { useAuth } from "@/app/[locale]/providers"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/app/[locale]/providers"
 // Removed usePlan import
+
+// Navigation Item Type Definition
+interface NavItem {
+  name: string;
+  label: string;
+  href: string;
+  icon: any;
+  roles: string[];
+  badge?: string;
+}
 
 // Helper to humanize route keys when translations are missing
 function humanizeName(key: string) {
@@ -53,19 +64,19 @@ const dashboardNav = [
   { name: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
 ]
 
-// Grain Operations & Management
+// Grain Operations & Management - CORE MODULES ONLY
 const grainOperationsNav = [
   {
     name: "grain-batches",
-    label: "Grain Batches",
+    label: "Grain Procurement & Intake",
     href: "/grain-batches",
     icon: Package,
-    roles: ["super_admin", "admin", "manager"],
+    roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
   {
     name: "silos",
-    label: "Silos",
+    label: "Storage Assignment",
     href: "/silos",
     icon: Package,
     roles: ["super_admin", "admin", "manager", "technician"],
@@ -73,7 +84,7 @@ const grainOperationsNav = [
   },
   {
     name: "buyers",
-    label: "Buyers",
+    label: "Buyers & Dispatch",
     href: "/buyers",
     icon: Users,
     roles: ["super_admin", "admin", "manager"],
@@ -84,16 +95,16 @@ const grainOperationsNav = [
     label: "Traceability",
     href: "/traceability",
     icon: QrCode,
-    roles: ["super_admin", "admin", "manager"],
+    roles: ["super_admin", "admin", "manager", "technician"],
     badge: undefined
   },
 ]
 
-// IoT Monitoring & Control
+// IoT Monitoring & Control - CORE MODULES ONLY
 const iotMonitoringNav = [
   {
     name: "sensors",
-    label: "Sensors",
+    label: "Sensor & Actuator Setup",
     href: "/sensors",
     icon: Smartphone,
     roles: ["super_admin", "admin", "manager", "technician"],
@@ -109,7 +120,7 @@ const iotMonitoringNav = [
   },
   {
     name: "environmental",
-    label: "Environmental Data",
+    label: "Environmental Data (PMD/Weather)",
     href: "/environmental",
     icon: Cloud,
     roles: ["super_admin", "admin", "manager", "technician"],
@@ -117,7 +128,7 @@ const iotMonitoringNav = [
   },
   {
     name: "grain-alerts",
-    label: "Grain Alerts",
+    label: "Alerts & Notifications",
     href: "/grain-alerts",
     icon: OctagonAlert,
     roles: ["super_admin", "admin", "manager", "technician"],
@@ -125,8 +136,25 @@ const iotMonitoringNav = [
   },
 ]
 
-// AI and Analytics features
+// AI and Analytics features - CORE MODULES ONLY
 const aiAnalyticsNav = [
+  {
+    name: "ai-spoilage",
+    label: "Spoilage Prediction & Advisory",
+    href: "/ai-spoilage",
+    icon: Sparkles,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: "AI"
+  },
+  {
+    name: "risk-assessment",
+    label: "Risk Assessment",
+    href: "/risk-assessment",
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "AI"
+  },
+  // COMMENTED OUT - Not in core 10 modules
   {
     name: "ai-predictions",
     label: "AI Predictions",
@@ -135,35 +163,51 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  {
-    name: "model-performance",
-    href: "/model-performance",
-    icon: Brain,
-    roles: ["super_admin", "admin", "manager"],
-    badge: "ML"
-  },
-  {
-    name: "data-visualization",
-    href: "/data-visualization",
-    icon: BarChart3,
-    roles: ["super_admin", "admin", "manager"],
-    badge: "NEW"
-  },
+  // {
+  //   name: "spoilage-analysis",
+  //   label: "Spoilage Analysis",
+  //   href: "/spoilage-analysis",
+  //   icon: TrendingUp,
+  //   roles: ["super_admin", "admin", "manager"],
+  //   badge: "AI"
+  // },
+  // {
+  //   name: "model-performance",
+  //   href: "/model-performance",
+  //   icon: Brain,
+  //   roles: ["super_admin", "admin", "manager"],
+  //   badge: "ML"
+  // },
+  // {
+  //   name: "data-management",
+  //   href: "/data-management",
+  //   icon: Database,
+  //   roles: ["super_admin", "admin", "manager"],
+  //   badge: "ML"
+  // },
+  // {
+  //   name: "environmental-data",
+  //   label: "Environmental Data",
+  //   href: "/environmental-data",
+  //   icon: BarChart3,
+  //   roles: ["super_admin", "admin", "manager", "technician"],
+  //   badge: undefined
+  // },
+  // {
+  //   name: "data-visualization",
+  //   href: "/data-visualization",
+  //   icon: BarChart3,
+  //   roles: ["super_admin", "admin", "manager"],
+  //   badge: "NEW"
+  // },
 ]
 
-// Business & Finance
+// Business & Finance - CORE MODULES ONLY
 const businessNav = [
-  {
-    name: "insurance",
-    label: "Insurance",
-    href: "/insurance",
-    icon: FileText,
-    roles: ["super_admin", "admin"],
-    badge: undefined
-  },
+
   {
     name: "payments",
-    label: "Payments",
+    label: "Payments & Invoices",
     href: "/payments",
     icon: CreditCard,
     roles: ["super_admin", "admin", "manager"],
@@ -171,86 +215,118 @@ const businessNav = [
   },
   {
     name: "reports",
-    label: "Reports",
+    label: "Reports & Analytics",
     href: "/reports",
     icon: BarChart3,
     roles: ["super_admin", "admin", "manager"],
     badge: undefined
   },
+  {
+    name: "analytics",
+    label: "Analytics Dashboard",
+    href: "/analytics",
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+    badge: undefined
+  },
+  {
+    name: "activity-logs",
+    label: "Activity Logs",
+    href: "/activity-logs",
+    icon: ClipboardList,
+    roles: ["super_admin", "admin", "manager", "technician"],
+    badge: "NEW"
+  },
+  {
+    name: "insurance",
+    label: "Insurance & Loss Claims",
+    href: "/insurance",
+    icon: Shield,
+    roles: ["super_admin", "admin", "manager"],
+    badge: undefined
+  },
 ]
 
-// System Administration
+// System Administration - MINIMAL (Settings only for core functionality)
 const systemNav = [
+  // COMMENTED OUT - Not in core 10 modules
+  // { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 
+// Super Admin Exclusive Features - COMMENTED OUT (Not in core 10 modules)
 // Super Admin Exclusive Features
-const superAdminNav = [
+// Super Admin Exclusive Features
+const superAdminNav: NavItem[] = [
+  // Consolidated into main Dashboard
+  /*
+  {
+    name: "super-admin-dashboard",
+    label: "Overview",
+    href: "/super-admin/dashboard",
+    icon: LayoutDashboard,
+    roles: ["super_admin"],
+    badge: undefined
+  },
   {
     name: "tenant-management",
-    label: "Tenant Management",
-    href: "/tenant-management",
+    label: "Tenants",
+    href: "/super-admin/tenants",
     icon: Building2,
     roles: ["super_admin"],
-    badge: "Super Admin"
+    badge: undefined
   },
   {
     name: "plan-management",
-    label: "Plan Management",
-    href: "/plan-management",
-    icon: Crown,
+    label: "Subscriptions",
+    href: "/super-admin/subscriptions",
+    icon: CreditCard,
     roles: ["super_admin"],
-    badge: "Super Admin"
+    badge: undefined
   },
   {
-    name: "system-health",
-    label: "System Health",
-    href: "/system-health",
-    icon: Activity,
+    name: "user-management",
+    label: "Users",
+    href: "/super-admin/users",
+    icon: Users,
     roles: ["super_admin"],
-    badge: "Super Admin"
+    badge: undefined
   },
   {
     name: "global-analytics",
-    label: "Global Analytics",
-    href: "/global-analytics",
-    icon: Globe,
+    label: "Platform Analytics",
+    href: "/super-admin/analytics",
+    icon: BarChart3,
     roles: ["super_admin"],
-    badge: "Super Admin"
+    badge: undefined
   },
   {
-    name: "security-center",
-    label: "Security Center",
-    href: "/security-center",
-    icon: Shield,
+    name: "system-health",
+    label: "System Monitoring",
+    href: "/super-admin/monitoring",
+    icon: Activity,
     roles: ["super_admin"],
-    badge: "Super Admin"
+    badge: undefined
   },
   {
-    name: "revenue-management",
-    label: "Revenue Management",
-    href: "/revenue-management",
-    icon: DollarSign,
+    name: "super-admin-reports",
+    label: "Reports",
+    href: "/super-admin/reports",
+    icon: FileText,
     roles: ["super_admin"],
-    badge: "Super Admin"
+    badge: undefined
   },
-  {
-    name: "system-logs",
-    label: "System Logs",
-    href: "/system-logs",
-    icon: Database,
-    roles: ["super_admin"],
-    badge: "Super Admin"
-  },
-  {
-    name: "server-monitoring",
-    label: "Server Monitoring",
-    href: "/server-monitoring",
-    icon: Server,
-    roles: ["super_admin"],
-    badge: "Super Admin"
-  },
+  */
 ]
+
+// COMMENTED OUT - Not in core 10 modules
+// const milestone2Navigation = [
+//   { name: "analytics", href: "/analytics", icon: BarChart3, badge: "New" },
+//   { name: "reports", href: "/reports", icon: FileText, badge: "New" },
+//   { name: "notifications", href: "/notifications", icon: Bell, badge: "New" },
+//   { name: "mobile", href: "/mobile", icon: Smartphone, badge: "New" },
+// ]
+
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -271,15 +347,19 @@ export function Sidebar() {
     return item.roles.includes(userRole);
   };
 
-  const showOnlyAdmin = userRole === "admin" || userRole === "super_admin";
-  const showOnlyManager = userRole === "manager" || userRole === "admin" || userRole === "super_admin";
+  const showOnlySuperAdmin = userRole === "super_admin";
+  const showOnlyAdmin = userRole === "admin";
+  const showOnlyManager = userRole === "manager" || userRole === "admin";
+  const showIoTSections = userRole === "admin" || userRole === "manager" || userRole === "technician";
+  const showBusinessSections = userRole === "admin" || userRole === "manager" || userRole === "super_admin";
+  const showSystemSections = userRole === "admin" || userRole === "super_admin";
 
   const visibleDashboardNav = dashboardNav.filter(hasAccess);
   const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : [];
-  const visibleIoTNav = iotMonitoringNav.filter(hasAccess);
+  const visibleIoTNav = showIoTSections ? iotMonitoringNav.filter(hasAccess) : [];
   const visibleAINav = showOnlyManager ? aiAnalyticsNav.filter(hasAccess) : [];
-  const visibleBusinessNav = showOnlyAdmin ? businessNav.filter(hasAccess) : [];
-  const visibleSystemNav = showOnlyAdmin ? systemNav.filter(hasAccess) : [];
+  const visibleBusinessNav = showBusinessSections ? businessNav.filter(hasAccess) : [];
+  const visibleSystemNav = showSystemSections ? systemNav.filter(hasAccess) : [];
   const visibleSuperAdminNav = superAdminNav.filter(hasAccess);
 
   return (
@@ -522,7 +602,7 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Advanced Features removed */}
+
         </nav>
       </ScrollArea>
 
@@ -534,9 +614,18 @@ export function Sidebar() {
           role="button"
           tabIndex={0}
         >
-          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium text-blue-600">{user?.name?.[0] || "U"}</span>
-          </div>
+          {/* Avatar or fallback */}
+          {user?.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={user.name || "User"}
+              className="w-8 h-8 rounded-full object-cover border border-gray-200"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <span className="text-sm font-medium text-blue-600">{user?.name?.[0] || "U"}</span>
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">{user?.name || "User"}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role || "Role"}</p>

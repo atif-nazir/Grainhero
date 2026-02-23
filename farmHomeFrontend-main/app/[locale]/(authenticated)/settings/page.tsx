@@ -85,6 +85,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [initialTwoFactorState, setInitialTwoFactorState] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -93,37 +94,22 @@ export default function SettingsPage() {
   const loadSettings = async () => {
     try {
       setLoading(true)
-      // Fetch current user data
-      const userRes = await api.get('/api/user-management/users/profile')
-
-      if (userRes.ok && userRes.data) {
-        // Define type for user data from API response
-        interface UserData {
-          user?: {
-            organization_name?: string;
-            name?: string;
-            email?: string;
-            phone?: string;
-            business_type?: string;
-            address?: string;
-            city?: string;
-            country?: string;
-          };
-          organization_name?: string;
-          name?: string;
-          email?: string;
-          phone?: string;
-          business_type?: string;
-          address?: string;
-          city?: string;
-          country?: string;
+      // Fetch current user data from auth/profile
+      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || '/api'}/auth/profile`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
-        
-        const userData: UserData = userRes.data;
-        const user = userData.user || userData;
-        
+      });
+      
+      let user = null;
+      if (userResponse.ok) {
+        user = await userResponse.json();
+      }
+
+      if (user) {
         // Define type for tenant settings response
         interface TenantSettingsResponse {
+          business_type?: string;
           location?: {
             address?: string;
             city?: string;
@@ -152,15 +138,15 @@ export default function SettingsPage() {
         const tenantRes = await api.get('/api/tenant/settings').catch(() => null)
         const tenantData: TenantSettingsResponse | null = tenantRes?.data || null;
         
-        setSettings({
-          name: user.organization_name || user.name || '',
+        const loadedSettings = {
+          name: user.name || '',
           email: user.email || '',
           phone: user.phone || '',
-          business_type: user.business_type || 'farm',
+          business_type: tenantData?.business_type || 'farm',
           location: {
-            address: user.address || tenantData?.location?.address || '',
-            city: user.city || tenantData?.location?.city || '',
-            country: user.country || tenantData?.location?.country || 'Pakistan'
+            address: tenantData?.location?.address || '',
+            city: tenantData?.location?.city || '',
+            country: tenantData?.location?.country || 'Pakistan'
           },
           notifications: tenantData?.notifications || {
             email_alerts: true,
@@ -180,10 +166,14 @@ export default function SettingsPage() {
             market_prices: true,
             government_data: false
           }
-        })
+        };
+        
+        setSettings(loadedSettings);
+        // Set the initial 2FA state
+        setInitialTwoFactorState(loadedSettings.system.two_factor_auth);
       } else {
         // Fallback to default settings if API fails
-        setSettings({
+        const defaultSettings = {
           name: '',
           email: '',
           phone: '',
@@ -207,7 +197,10 @@ export default function SettingsPage() {
             market_prices: true,
             government_data: false
           }
-        })
+        };
+        
+        setSettings(defaultSettings);
+        setInitialTwoFactorState(defaultSettings.system.two_factor_auth);
       }
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -219,21 +212,51 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Save user profile data
-      const profileRes = await api.put('/api/user-management/users/profile', {
-        name: settings.name,
-        email: settings.email,
-        phone: settings.phone,
-        business_type: settings.business_type,
-        address: settings.location.address,
-        city: settings.location.city,
-        country: settings.location.country
-      })
+      // Handle 2FA toggle separately if changed
+      if (settings.system.two_factor_auth !== initialTwoFactorState) {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || '/api'}/auth/toggle-2fa`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update 2FA settings');
+        }
+      }
 
-      // Save tenant settings if available
+      // Save user profile data (only name and phone are allowed on the profile endpoint)
+      let profileRes;
+      try {
+        const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || '/api'}/auth/profile`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            name: settings.name,
+            phone: settings.phone
+          })
+        });
+        
+        profileRes = { 
+          ok: profileResponse.ok, 
+          data: profileResponse.ok ? await profileResponse.json() : null 
+        };
+      } catch (error) {
+        console.error('Profile update failed:', error);
+        profileRes = { ok: false, data: null };
+      }
+
+      // Save tenant settings if available (excluding two_factor_auth since it's handled separately)
+      const { two_factor_auth, ...systemWithout2FA } = settings.system;
       await api.put('/api/tenant/settings', {
         notifications: settings.notifications,
-        system: settings.system,
+        system: systemWithout2FA,
         integrations: settings.integrations,
         location: settings.location
       }).catch(() => {
@@ -241,11 +264,20 @@ export default function SettingsPage() {
         console.log('Tenant settings endpoint not available')
       })
 
-      if (profileRes.ok) {
+      // Check if profile update was successful
+      if (profileRes && profileRes.ok) {
         setSaveStatus('success')
         setTimeout(() => setSaveStatus('idle'), 3000)
       } else {
-        throw new Error('Failed to save settings')
+        // If profile update failed, but 2FA was toggled successfully, we can still consider it a success
+        // or at least show a partial success message
+        if (settings.system.two_factor_auth !== initialTwoFactorState) {
+          // 2FA was toggled, so it's a partial success
+          setSaveStatus('success')
+          setTimeout(() => setSaveStatus('idle'), 3000)
+        } else {
+          throw new Error('Failed to save profile settings')
+        }
       }
     } catch (error) {
       console.error('Failed to save settings:', error)

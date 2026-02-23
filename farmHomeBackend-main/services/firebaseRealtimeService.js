@@ -1,5 +1,6 @@
 const admin = require('firebase-admin')
 const SensorDevice = require('../models/SensorDevice')
+const Silo = require('../models/Silo')
 const realTimeDataService = require('./realTimeDataService')
 
 let initialized = false
@@ -34,6 +35,8 @@ function init() {
 async function handleLatest(deviceId, snapshot, io) {
   try {
     const payload = snapshot.val() || {}
+    console.log(`[Firebase] Received data for ${deviceId}:`, JSON.stringify(payload));
+
     const device = await SensorDevice.findOne({ device_id: deviceId })
     // Use DB record if available, otherwise fallback to raw deviceId
     const effectiveDeviceId = device ? device._id : deviceId
@@ -51,9 +54,13 @@ async function handleLatest(deviceId, snapshot, io) {
     if (payload.humidity !== undefined) {
       reading.humidity = { value: Number(payload.humidity), unit: 'percent' }
     }
-    if (payload.voc !== undefined || payload.tvoc !== undefined) {
-      reading.voc = { value: Number(payload.voc ?? payload.tvoc ?? 0), unit: 'ppb' }
+    // Handle VOC/TVOC mapping
+    if (payload.tvoc_ppb !== undefined) {
+      reading.voc = { value: Number(payload.tvoc_ppb), unit: 'ppb' }
+    } else if (payload.voc !== undefined) {
+      reading.voc = { value: Number(payload.voc), unit: 'ppb' }
     }
+
     if (payload.moisture !== undefined) {
       reading.moisture = { value: Number(payload.moisture), unit: 'percent' }
     }
@@ -75,6 +82,62 @@ async function handleLatest(deviceId, snapshot, io) {
         reading.ambient.light = { value: Number(payload.ambient.light), unit: 'lux' }
       }
     }
+
+    console.log(`[Firebase] Processing reading for ${deviceId}...`);
+
+    // *** DIRECT Silo update — guarantee current_conditions are persisted ***
+    try {
+      const mongoose = require('mongoose');
+      const siloIdStr = device.silo_id.toString();
+      console.log(`[Firebase] Looking up silo with ID: ${siloIdStr}`);
+
+      let silo = await Silo.findById(siloIdStr);
+      if (!silo) {
+        // SensorDevice has a stale silo_id — find the correct silo and fix the reference
+        console.log(`[Firebase] Silo ${siloIdStr} not found. Looking for available silos...`);
+        const allSilos = await Silo.find({}).lean();
+        if (allSilos.length > 0) {
+          // Use the first silo (or the one matching the admin)
+          const matchingSilo = allSilos.find(s => s.admin_id?.toString() === device.admin_id?.toString()) || allSilos[0];
+          console.log(`[Firebase] Auto-fixing SensorDevice ${deviceId}: silo_id ${siloIdStr} → ${matchingSilo._id}`);
+
+          // Fix the SensorDevice so future lookups work
+          await SensorDevice.updateOne({ _id: device._id }, { $set: { silo_id: matchingSilo._id } });
+
+          // Now load the silo properly
+          silo = await Silo.findById(matchingSilo._id);
+        } else {
+          console.log(`[Firebase] ⚠️ No silos exist in DB at all.`);
+        }
+      }
+
+      if (silo) {
+        // Also update reading.silo_id to the correct one
+        reading.silo_id = silo._id;
+
+        const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
+        for (const type of sensorTypes) {
+          if (reading[type]?.value !== undefined) {
+            if (!silo.current_conditions) silo.current_conditions = {};
+            silo.current_conditions[type] = {
+              value: reading[type].value,
+              timestamp: new Date(),
+              sensor_id: device._id
+            };
+          }
+        }
+        silo.current_conditions.last_updated = new Date();
+        await silo.save({ validateBeforeSave: false });
+        console.log(`[Firebase] ✅ Silo ${silo._id} (${silo.name}) updated: temp=${reading.temperature?.value}, hum=${reading.humidity?.value}, voc=${reading.voc?.value}`);
+      }
+    } catch (siloErr) {
+      console.error(`[Firebase] ❌ Direct silo update failed:`, siloErr.message);
+    }
+
+    // Also queue for full processing (historical readings, alerts, anomaly detection)
+    await realTimeDataService.processSensorReading(reading)
+    console.log(`[Firebase] Reading processed for ${deviceId}.`);
+
     // Add actuator states
     reading.fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off')
     reading.lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed')
@@ -108,7 +171,10 @@ function subscribeDevice(deviceId, io) {
 
 function discoverDevices(io) {
   const ref = database.ref('sensor_data')
-  const onAdded = snap => subscribeDevice(snap.key, io)
+  const onAdded = snap => {
+    console.log(`[Firebase] Discovered device: ${snap.key}`);
+    subscribeDevice(snap.key, io)
+  }
   const onChanged = snap => subscribeDevice(snap.key, io)
   ref.on('child_added', onAdded)
   ref.on('child_changed', onChanged)
@@ -160,6 +226,36 @@ async function writeControlState(deviceId, state) {
   }
 }
 
+async function getLatestReadings() {
+  if (!initialized) {
+    if (process.env.FIREBASE_ENABLED !== 'true') return {}
+    init()
+  }
+  try {
+    const snapshot = await database.ref('sensor_data').once('value')
+    const val = snapshot.val()
+    if (!val || typeof val !== 'object') return {}
+
+    const result = {}
+    for (const deviceId of Object.keys(val)) {
+      const latest = val[deviceId]?.latest || val[deviceId]
+      if (latest && typeof latest === 'object') {
+        result[deviceId] = {
+          temperature: latest.temperature ?? null,
+          humidity: latest.humidity ?? null,
+          tvoc_ppb: latest.tvoc_ppb ?? latest.voc ?? null,
+          timestamp: latest.timestamp || null,
+        }
+      }
+    }
+    return result
+  } catch (err) {
+    console.error('Firebase getLatestReadings error:', err.message)
+    return {}
+  }
+}
+
+module.exports = { start, stop, writeControlState, getLatestReadings }
 async function readTelemetry(deviceId) {
   if (!initialized) init()
   try {

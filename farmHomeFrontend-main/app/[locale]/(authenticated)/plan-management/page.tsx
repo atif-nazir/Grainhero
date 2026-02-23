@@ -7,15 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { 
-  Crown, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  DollarSign, 
-  Users, 
-  HardDrive, 
+import {
+  Crown,
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  DollarSign,
+  Users,
+  HardDrive,
   Smartphone,
   CheckCircle,
   XCircle,
@@ -93,8 +93,8 @@ interface SubscriptionAnalyticsRow {
   [key: string]: unknown
 }
 
-const formatCurrency = (value: number, currency = "USD") => {
-  if (Number.isNaN(value)) return "$0"
+const formatCurrency = (value: number, currency = "PKR") => {
+  if (Number.isNaN(value)) return "PKR 0"
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -286,7 +286,7 @@ export default function PlanManagementPage() {
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Users</span>
             <span>{row.usage.users}/{formatLimit(row.limits.users, "", "∞")}</span>
-        </div>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Devices</span>
             <span>{row.usage.devices}/{formatLimit(row.limits.devices, "", "∞")}</span>
@@ -428,7 +428,7 @@ export default function PlanManagementPage() {
                 <div className="text-center">
                   <div className="text-3xl font-bold">
                     {formatCurrency(plan.price, plan.currency)}
-                </div>
+                  </div>
                   <div className="text-sm text-muted-foreground">per {plan.billingCycle}</div>
                 </div>
 
@@ -534,7 +534,7 @@ export default function PlanManagementPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium">Price ($)</label>
+                    <label className="text-sm font-medium">Price (PKR)</label>
                     <Input type="number" placeholder="99" />
                   </div>
                   <div>

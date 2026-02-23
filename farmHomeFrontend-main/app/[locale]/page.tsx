@@ -1,5 +1,5 @@
 'use client'
-import { Wheat as WheatIcon, Menu, X, BarChart3, Brain, Thermometer, TrendingUp, Bell, Check } from "lucide-react"
+import { Wheat as WheatIcon, Menu, X, BarChart3, Brain, Thermometer, TrendingUp, Bell, Check, Cpu } from "lucide-react"
 import { Link } from '@/i18n/navigation'
 import { useState, useEffect } from 'react'
 import pricingData from './pricing-data.js'
@@ -22,8 +22,10 @@ type Plan = {
   link?: string
   price?: number
   duration?: string
+  popular?: boolean
+  iotChargeLabel?: string
 }
-  
+
 export default function HomePage() {
   return (
     <AnimatedBackground className="min-h-screen">
@@ -71,7 +73,7 @@ function Navigation() {
           <Link href="/" className="flex items-center space-x-2 mr-6">
             <WheatIcon className="w-8 h-8 text-[#00a63e]" />
             <span className="text-xl font-bold">GrainHero</span>
-              </Link>
+          </Link>
           {/* Middle: Tabs */}
           <div className="hidden md:flex items-center gap-6">
             {navItems.map((item) => (
@@ -97,14 +99,14 @@ function Navigation() {
               {navItems.map((item) => (
                 <Link key={item.href} href={item.href} className="block text-gray-700 hover:text-[#00a63e] py-2" onClick={() => setMobileMenuOpen(false)}>
                   {item.label}
-              </Link>
+                </Link>
               ))}
               <div className="flex items-center gap-3 pt-2">
                 <Link href="/auth/login" className="text-gray-700 hover:text-[#00a63e]" onClick={() => setMobileMenuOpen(false)}>Login</Link>
                 <Link href="/checkout" className="bg-[#00a63e] hover:bg-[#029238] text-white px-5 py-2 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
+              </div>
             </div>
           </div>
-        </div>
         )}
       </div>
     </nav>
@@ -119,7 +121,7 @@ function Highlights() {
     {
       title: "Plans and prices",
       description: "Explore packages full of tools, services and bonus features.",
-      button: "From $99/mo",
+      button: "From Rs. 1,499/mo",
       link: "#plans",
       icon: <BarChart3 className="w-6 h-6" />,
       color: "bg-[#00a63e]"
@@ -157,8 +159,8 @@ function Highlights() {
               <p className="text-gray-600 mb-4 text-sm leading-relaxed">{highlight.description}</p>
               <Link href={highlight.link} className={`inline-block ${highlight.color} text-white px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 group-hover:scale-105`}>
                 {highlight.button}
-            </Link>
-          </div>
+              </Link>
+            </div>
           ))}
         </div>
       </div>
@@ -218,7 +220,7 @@ function Features() {
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">Comprehensive tools to optimize your grain storage, reduce losses, and maximize profitability.</p>
         </div>
         <AnimatedFeatureCards features={features} />
-        </div>
+      </div>
     </section>
   )
 }
@@ -234,22 +236,28 @@ function PricingShowcase() {
           <span className="text-sm md:text-base font-medium text-[#00a63e]">Plans and pricing</span>
           <h3 className="text-3xl md:text-5xl font-bold mt-2">Pick the plan that checks your boxes</h3>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="flex flex-wrap justify-center gap-6">
           {pricingData.map((p: Plan) => {
-            const priceText = p.priceFrontend ?? `$${p.price}${p.duration ?? ''}`
+            const priceText = p.priceFrontend ?? `Rs. ${p.price?.toLocaleString()}${p.duration ?? ''}`
             const isSelected = selectedPlanId === p.id
             return (
-              <label key={p.id} className={`cursor-pointer text-left rounded-2xl bg-white border p-6 shadow-sm transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.03] ${isSelected ? 'border-[#00a63e] ring-2 ring-[#00a63e]/20' : 'border-gray-200 hover:border-[#00a63e]/60'}`}>
+              <label key={p.id} className={`cursor-pointer text-left w-full max-w-sm rounded-2xl bg-white border p-6 shadow-sm transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.03] ${isSelected ? 'border-[#00a63e] ring-2 ring-[#00a63e]/20' : 'border-gray-200 hover:border-[#00a63e]/60'}`}>
                 <input type="radio" name="landing-plan" value={p.id} checked={isSelected} onChange={() => setSelectedPlanId(p.id)} className="sr-only" />
-                {p.id === 'intermediate' && <div className="mb-3 text-xs font-semibold text-white inline-block bg-[#00a63e] px-3 py-1 rounded-full">Most Popular</div>}
+                {p.popular && <div className="mb-3 text-xs font-semibold text-white inline-block bg-[#00a63e] px-3 py-1 rounded-full">Most Popular</div>}
                 <h4 className="text-xl font-semibold">{p.name}</h4>
-                <p className="text-3xl font-bold mt-2">{priceText}</p>
+                <p className="text-3xl font-bold mt-2 text-[#00a63e]">{priceText}</p>
+                {p.iotChargeLabel && (
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mt-2">
+                    <Cpu className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{p.iotChargeLabel}</span>
+                  </div>
+                )}
                 <ul className="mt-4 space-y-2 text-sm text-gray-700">
                   {p.features.map((f: string, idx: number) => (
                     <li key={idx} className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00a63e]" />{f}</li>
                   ))}
                 </ul>
-                <Link href="/checkout" onClick={() => { try { localStorage.setItem('selectedPlanId', p.id) } catch { } }} className={`mt-6 inline-block w-full text-center py-2.5 rounded-full font-semibold transition ${isSelected ? 'bg-[#00a63e] text-white hover:bg-[#029238]' : 'border border-gray-300 hover:border-[#00a63e] hover:text-[#00a63e]'}`}>Choose plan</Link>
+                <Link href="/checkout" onClick={() => { try { localStorage.setItem('selectedPlanId', p.id) } catch { } }} className={`mt-6 inline-block w-full text-center py-2.5 rounded-full font-semibold transition ${isSelected ? 'bg-[#00a63e] text-white hover:bg-[#029238]' : 'border border-gray-300 hover:border-[#00a63e] hover:text-[#00a63e]'}`}>{p.id === 'custom' ? 'Contact Us' : 'Choose plan'}</Link>
               </label>
             )
           })}
@@ -323,7 +331,7 @@ function Footer() {
         <div className="py-6 border-t text-center text-gray-500">
           <p>&copy; {currentYear} GrainHero. All rights reserved.</p>
         </div>
-    </div>
+      </div>
     </footer>
   )
 }

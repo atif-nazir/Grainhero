@@ -62,6 +62,7 @@ router.get("/users", auth, async (req, res) => {
     if (userRole === USER_ROLES.SUPER_ADMIN) {
       // Super admin can see all users
       if (role) query.role = role;
+      if (tenant_id) query.$or = [{ tenant_id }, { owned_tenant_id: tenant_id }];
     } else if (userRole === USER_ROLES.ADMIN) {
       // Admin can only see their team members (managers and technicians)
       query.$or = [
@@ -381,6 +382,9 @@ router.put(
             code: "USER_ACCESS_DENIED",
           });
         }
+      } else if (userId === req.user.id) {
+        // User updating their own profile - allow
+        // But restrict finding their own tenant issue if they are technician
       } else {
         return res.status(403).json({
           error: "Insufficient permissions to update user",
@@ -402,6 +406,10 @@ router.put(
       if (phone) updateData.phone = phone;
       if (role) updateData.role = role;
       if (location) updateData.location = location;
+      // Allow updating address and preferences
+      if (req.body.address) updateData.address = req.body.address;
+      if (req.body.preferences) updateData.preferences = req.body.preferences;
+
       if (typeof blocked === "boolean") updateData.blocked = blocked;
       updateData.updated_by = req.user.id;
 

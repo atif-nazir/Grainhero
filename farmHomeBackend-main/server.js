@@ -32,12 +32,23 @@ const insuranceRoute = require("./routes/insurance");
 const buyersRoute = require("./routes/buyers");
 const environmentalRoute = require("./routes/environmental");
 
+// Logging & Transparency Module routes
+const activityLogsRoute = require("./routes/activityLogs");
+const notificationsRoute = require("./routes/notifications");
+const loggingRoute = require("./routes/logging");
+const paymentsRoute = require("./routes/payments");
+const reportsRoute = require("./routes/reports");
+
 // Super Admin routes
 const tenantManagementRoute = require("./routes/tenantManagement");
 const planManagementRoute = require("./routes/planManagement");
+const superAdminRoute = require("./routes/superAdmin");
 
 // User Management routes
 const userManagementRoute = require("./routes/userManagement");
+
+// Tenant Settings routes
+const tenantSettingsRoute = require("./routes/tenantSettings");
 
 const Alert = require("./models/Alert");
 const environmentalDataService = require("./services/environmentalDataService");
@@ -123,6 +134,112 @@ app.use(
     origin: "*",
   })
 );
+
+// ============================================
+// REQUEST LOGGING MIDDLEWARE
+// ============================================
+// This middleware logs all incoming API requests from Flutter app
+// It helps debug connection issues and track API usage
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+
+  // Log request details
+  console.log("\n" + "=".repeat(80));
+  console.log(`📱 [${timestamp}] ${req.method} ${req.originalUrl || req.url}`);
+  console.log(
+    `📍 From: ${req.ip || req.connection.remoteAddress || "unknown"}`
+  );
+  console.log(`🌐 User-Agent: ${req.get("user-agent") || "unknown"}`);
+
+  // Log headers (especially Authorization)
+  if (req.headers.authorization) {
+    const authHeader = req.headers.authorization;
+    const tokenPreview =
+      authHeader.length > 30 ? authHeader.substring(0, 30) + "..." : authHeader;
+    console.log(`🔑 Authorization: ${tokenPreview}`);
+  } else {
+    console.log(`🔑 Authorization: ❌ No token provided`);
+  }
+
+  // Log request body for POST/PUT/PATCH (but not for large payloads)
+  if (["POST", "PUT", "PATCH"].includes(req.method) && req.body) {
+    const bodyStr = JSON.stringify(req.body);
+    if (bodyStr.length < 500) {
+      console.log(`📦 Body: ${bodyStr}`);
+    } else {
+      console.log(
+        `📦 Body: ${bodyStr.substring(0, 200)}... (truncated, ${
+          bodyStr.length
+        } chars)`
+      );
+    }
+  }
+
+  // Log query parameters
+  if (Object.keys(req.query).length > 0) {
+    console.log(`🔍 Query: ${JSON.stringify(req.query)}`);
+  }
+
+  // Capture response
+  const originalSend = res.send;
+  res.send = function (data) {
+    const duration = Date.now() - startTime;
+    const statusCode = res.statusCode;
+    const statusEmoji =
+      statusCode >= 200 && statusCode < 300
+        ? "✅"
+        : statusCode >= 400 && statusCode < 500
+        ? "⚠️"
+        : statusCode >= 500
+        ? "❌"
+        : "ℹ️";
+
+    console.log(
+      `${statusEmoji} Response: ${statusCode} ${
+        res.statusMessage || ""
+      } (${duration}ms)`
+    );
+
+    // Log response body for errors (helpful for debugging)
+    if (statusCode >= 400) {
+      try {
+        const responseData = typeof data === "string" ? JSON.parse(data) : data;
+        if (responseData && typeof responseData === "object") {
+          const errorMsg =
+            responseData.message ||
+            responseData.error ||
+            responseData.msg ||
+            JSON.stringify(responseData);
+          console.log(`💬 Error Message: ${errorMsg}`);
+        }
+      } catch (e) {
+        // If parsing fails, just log a preview
+        const preview =
+          typeof data === "string"
+            ? data.substring(0, 200)
+            : String(data).substring(0, 200);
+        console.log(`💬 Response Preview: ${preview}...`);
+      }
+    }
+
+    console.log("=".repeat(80) + "\n");
+
+    originalSend.call(this, data);
+  };
+
+  // Handle errors
+  res.on("finish", () => {
+    if (!res.headersSent) {
+      const duration = Date.now() - startTime;
+      console.log(`⚠️  Request finished without response (${duration}ms)`);
+      console.log("=".repeat(80) + "\n");
+    }
+  });
+
+  next();
+});
+
 // ✅ Use this instead
 app.use("/auth", authRoute);
 app.use("/maintenance", maintenanceRoute);
@@ -145,10 +262,19 @@ app.use("/api/data-viz", dataVisualizationRoute);
 app.use("/api/silos", silosRoute);
 app.use("/api/insurance", insuranceRoute);
 app.use("/api/buyers", buyersRoute);
+app.use("/api/environmental", environmentalRoute);
+
+// Logging & Transparency Module
+app.use("/api/activity-logs", activityLogsRoute);
+app.use("/api/notifications", notificationsRoute);
+app.use("/api/logging", loggingRoute);
+app.use("/api/payments", paymentsRoute);
+app.use("/api/reports", reportsRoute);
 
 // Super Admin routes
 app.use("/api/tenant-management", tenantManagementRoute);
 app.use("/api/plan-management", planManagementRoute);
+app.use("/api/super-admin", superAdminRoute);
 
 // Subscription Analytics routes
 const subscriptionAnalyticsRoute = require("./routes/subscriptionAnalytics");
@@ -156,6 +282,9 @@ app.use("/api/subscription-analytics", subscriptionAnalyticsRoute);
 
 // User Management routes
 app.use("/api/user-management", userManagementRoute);
+
+// Tenant Settings routes
+app.use("/api", tenantSettingsRoute);
 
 // Warehouse Management routes
 const warehousesRoute = require("./routes/warehouses");
@@ -279,14 +408,19 @@ wss.on("connection", async function connection(ws, req) {
   });
 });
 
-wss.on("error", (err) => {
-  console.warn("WS server error:", err && (err.code || err.message));
-});
+// ============================================
+// START SERVER
+// ============================================
+const PORT = process.env.PORT || 5000;
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`API Documentation: http://localhost:${PORT}/api/docs`);
-  console.log(`WebSocket Server: ws://localhost:${PORT}`);
+server.listen(PORT, () => {
+  console.log("\n" + "=".repeat(80));
+  console.log(`🚀 GrainHero Backend Server is running on port ${PORT}`);
+  console.log(`📡 Server URL: http://localhost:${PORT}`);
+  console.log(`🔐 Auth endpoints: http://localhost:${PORT}/auth/*`);
+  console.log(`🌐 API endpoints: http://localhost:${PORT}/api/*`);
+  console.log(`📚 API Docs: http://localhost:${PORT}/api/docs`);
+  console.log(`💚 Health check: http://localhost:${PORT}/status`);
+  console.log("=".repeat(80) + "\n");
+  console.log("📱 Ready to receive requests from Flutter app...\n");
 });

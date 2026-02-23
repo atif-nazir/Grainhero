@@ -26,9 +26,29 @@ router.get(
   async (req, res) => {
     try {
       const { tenant_id, status, page = 1, limit = 20 } = req.query;
-      const scope = resolveTenantScope(req.user, tenant_id);
 
-      const filter = { ...scope };
+      let filter = {};
+
+      if (req.user.role === USER_ROLES.SUPER_ADMIN) {
+        // Super admin can view all; optionally scoped by tenant_id query
+        if (tenant_id) filter.tenant_id = tenant_id;
+      } else {
+        // Admin (and others) - try to find their subscription
+        const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
+        if (tenantId) {
+          filter.tenant_id = tenantId;
+        } else if (req.user.customerId) {
+          // Fallback: find by Stripe customer ID when tenant_id is missing
+          filter.stripe_customer_id = req.user.customerId;
+        } else {
+          // Last resort: find by created_by (user ID)
+          filter.$or = [
+            { created_by: req.user._id },
+            { tenant_id: req.user._id }
+          ];
+        }
+      }
+
       if (status) filter.status = status;
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -68,9 +88,25 @@ router.get(
   async (req, res) => {
     try {
       const { tenant_id } = req.query;
-      const scope = resolveTenantScope(req.user, tenant_id);
 
-      const subs = await Subscription.find(scope);
+      let filter = {};
+      if (req.user.role === USER_ROLES.SUPER_ADMIN) {
+        if (tenant_id) filter.tenant_id = tenant_id;
+      } else {
+        const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
+        if (tenantId) {
+          filter.tenant_id = tenantId;
+        } else if (req.user.customerId) {
+          filter.stripe_customer_id = req.user.customerId;
+        } else {
+          filter.$or = [
+            { created_by: req.user._id },
+            { tenant_id: req.user._id }
+          ];
+        }
+      }
+
+      const subs = await Subscription.find(filter);
 
       const summary = subs.reduce(
         (acc, sub) => {

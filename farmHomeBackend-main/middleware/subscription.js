@@ -14,16 +14,43 @@ const { SUBSCRIPTION_STATUSES } = require("../configs/enum");
  */
 async function getActiveSubscription(user) {
   try {
-    if (!user || !user.tenant_id) {
+    if (!user) {
       return null;
     }
 
-    // Find active subscription for the tenant
+    const tenantId = user.tenant_id || user.owned_tenant_id;
+
+    if (tenantId) {
+      // Find active subscription for the tenant
+      const subscription = await Subscription.findOne({
+        tenant_id: tenantId,
+        status: SUBSCRIPTION_STATUSES.ACTIVE,
+        deleted_at: null,
+      }).sort({ created_at: -1 });
+
+      if (subscription) return subscription;
+    }
+
+    // Fallback: find by Stripe customer ID when tenant_id is missing
+    if (user.customerId) {
+      const subscription = await Subscription.findOne({
+        stripe_customer_id: user.customerId,
+        status: SUBSCRIPTION_STATUSES.ACTIVE,
+        deleted_at: null,
+      }).sort({ created_at: -1 });
+
+      if (subscription) return subscription;
+    }
+
+    // Last resort: find by created_by (user ID)
     const subscription = await Subscription.findOne({
-      tenant_id: user.tenant_id,
+      $or: [
+        { created_by: user._id },
+        { tenant_id: user._id }
+      ],
       status: SUBSCRIPTION_STATUSES.ACTIVE,
       deleted_at: null,
-    }).sort({ created_at: -1 }); // Get most recent active subscription
+    }).sort({ created_at: -1 });
 
     return subscription;
   } catch (error) {
