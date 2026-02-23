@@ -114,30 +114,21 @@ router.get(
       // Super admins should have access to all data
       const isSuperAdmin = req.user?.role === 'super_admin';
 
-// Cache dashboard for 30 seconds (frequently accessed, but needs to be relatively fresh)
-router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(30 * 1000), async (req, res) => {
-  try {
-    const scopeConditions = [];
-    if (req.user?.tenant_id) {
-      scopeConditions.push({ tenant_id: req.user.tenant_id });
-    }
-    if (req.user?.owned_tenant_id) {
-      scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
-    }
-    if (req.user?._id) {
-      scopeConditions.push({ admin_id: req.user._id });
-      scopeConditions.push({ created_by: req.user._id });
-    }
+      const scopeConditions = [];
+      if (req.user?.tenant_id) {
+        scopeConditions.push({ tenant_id: req.user.tenant_id });
+      }
+      if (req.user?.owned_tenant_id) {
+        scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
+      }
+      if (req.user?._id) {
+        scopeConditions.push({ admin_id: req.user._id });
+        scopeConditions.push({ created_by: req.user._id });
+      }
 
-    // Add warehouse filter for managers and technicians
-    if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
-      scopeConditions.push(req.warehouseFilter);
-    }
-
-        // Add warehouse filter for managers and technicians
-        if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
-          scopeConditions.push(req.warehouseFilter);
-        }
+      // Add warehouse filter for managers and technicians
+      if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
+        scopeConditions.push(req.warehouseFilter);
       }
 
       const applyScope = (extra = {}) => {
@@ -750,111 +741,6 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
           return sum + (batch.quantity_kg || 0);
         }, 0);
       }
-    });
-
-    const analytics = {
-      monthlyIntake,
-      grainDistribution,
-      qualityMetrics: [
-        { quality: "Excellent / Safe", value: qualityBuckets.safe },
-        { quality: "Monitor / Risky", value: qualityBuckets.risky },
-        { quality: "Critical / Spoiled", value: qualityBuckets.spoiled },
-      ],
-    };
-
-    // Sensor snapshots
-    const sensorDevices = await SensorDevice.find(
-      applyScope({ status: { $ne: "retired" } })
-    )
-      .sort({ "health_metrics.last_heartbeat": -1 })
-      .limit(4)
-      .populate("silo_id", "name")
-      .lean();
-
-    const sensors = sensorDevices.map((device) => ({
-      id: device.device_id,
-      type: (device.sensor_types && device.sensor_types[0]) || "Sensor",
-      value:
-        device.health_metrics?.uptime_percentage || device.battery_level || 0,
-      unit: device.health_metrics?.uptime_percentage ? "%" : "%",
-      status: device.status,
-      location: device.silo_id?.name || "Unassigned",
-      lastReading:
-        device.health_metrics?.last_heartbeat ||
-        device.updated_at ||
-        new Date(),
-      battery: device.battery_level || 100,
-      signal: device.signal_strength || -50,
-    }));
-
-    // Business KPIs
-    const activeBuyers = await Buyer.countDocuments(
-      applyScope({ status: { $ne: "inactive" } })
-    );
-
-    const pricedBatches = grainBatches.filter(
-      (batch) => batch.purchase_price_per_kg
-    );
-    const avgPrice =
-      pricedBatches.length > 0
-        ? pricedBatches.reduce(
-          (sum, batch) => sum + (batch.purchase_price_per_kg || 0),
-          0
-        ) / pricedBatches.length
-        : 0;
-
-    const dispatchedBatches = grainBatches.filter(
-      (batch) => batch.status?.toLowerCase() === "dispatched"
-    );
-    const dispatchRate =
-      totalBatches > 0
-        ? Math.round((dispatchedBatches.length / totalBatches) * 100)
-        : 0;
-
-    const avgRiskScore =
-      totalBatches > 0
-        ? grainBatches.reduce(
-          (sum, batch) => sum + (batch.risk_score || 0),
-          0
-        ) / totalBatches
-        : 0;
-    const qualityScore = Number(
-      Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
-    );
-
-      // Get current plan information for the user
-      let currentPlan = 'Basic';
-      if (isSuperAdmin) {
-        // For super admin, show system-wide info
-        currentPlan = 'System Admin';
-      } else {
-        try {
-          const currentUser = await User.findById(req.user._id).populate('subscription_id').lean();
-          if (currentUser && currentUser.subscription_id) {
-            // If user has a subscription, get the plan name from it
-            if (currentUser.subscription_id.plan_id) {
-              const subscription = await Subscription.findById(currentUser.subscription_id.plan_id).lean();
-              if (subscription && subscription.name) {
-                currentPlan = subscription.name;
-              }
-            } else if (currentUser.subscription_id.name) {
-              // If the subscription object has a name directly
-              currentPlan = currentUser.subscription_id.name;
-            }
-          } else {
-            // Fallback: try to get from tenant if user doesn't have a subscription
-            if (req.user.tenant_id) {
-              const tenant = await Tenant.findById(req.user.tenant_id).lean();
-              if (tenant && tenant.plan) {
-                currentPlan = tenant.plan || 'Basic';
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching plan information:', error);
-          currentPlan = 'Basic'; // Default to Basic if there's an error
-        }
-      }
 
       const avgRiskScore =
         totalBatches > 0
@@ -867,14 +753,41 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
         Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
       );
 
-      // Filter out Monthly Revenue and Recent Incidents from main stats, add Current Plan
+      // Get current plan information for the user
+      let currentPlan = 'Basic';
+      if (isSuperAdmin) {
+        currentPlan = 'System Admin';
+      } else {
+        try {
+          const currentUser = await User.findById(req.user._id).populate('subscription_id').lean();
+          if (currentUser && currentUser.subscription_id) {
+            if (currentUser.subscription_id.plan_id) {
+              const subscription = await Subscription.findById(currentUser.subscription_id.plan_id).lean();
+              if (subscription && subscription.name) {
+                currentPlan = subscription.name;
+              }
+            } else if (currentUser.subscription_id.name) {
+              currentPlan = currentUser.subscription_id.name;
+            }
+          } else {
+            if (req.user.tenant_id) {
+              const tenant = await Tenant.findById(req.user.tenant_id).lean();
+              if (tenant && tenant.plan) {
+                currentPlan = tenant.plan || 'Basic';
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching plan information:', error);
+          currentPlan = 'Basic';
+        }
+      }
+
       const filteredStats = [
         {
           title: isSuperAdmin ? "Total Tenants" : "Total Silos",
           value: isSuperAdmin ? await Tenant.countDocuments({}) : totalSilos,
         },
-
-        // Monthly Revenue and Recent Incidents (last month) are excluded
         {
           title: "Active Staff",
           value: activeUsers,
@@ -907,7 +820,7 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
           totalCapacity,
           totalCurrentQuantity,
           utilizationPercentage: storageUtilization,
-          todaysIntake: totalTodaysIntake,  // Add today's intake
+          todaysIntake: totalTodaysIntake,
         },
         suggestions: {
           criticalStorage: criticalSilos,
@@ -934,7 +847,8 @@ router.get("/dashboard", auth, requireWarehouseAccess(), createCacheMiddleware(3
       console.error(err);
       res.status(500).json({ error: "Server error" });
     }
-  });
+  }
+);
 
 // ============= ENHANCED DASHBOARD & REPORTING =============
 

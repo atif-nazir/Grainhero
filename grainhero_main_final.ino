@@ -14,7 +14,6 @@
 #include <math.h>
 #include <time.h> //RTC - REAL TIME CLOCK
 
-
 #ifndef ENABLE_FIREBASE
 #define ENABLE_FIREBASE false
 #endif
@@ -34,7 +33,7 @@ String getDateTimeString() {
   return String(buf);
 }
 
-#define MQTT_BROKER "10.120.170.220" // Replace with your broker
+#define MQTT_BROKER "192.168.137.1" // Replace with your broker
 #define MQTT_PORT 1883
 #define MQTT_USERNAME "" // if needed
 #define MQTT_PASSWORD "" // if needed
@@ -183,7 +182,7 @@ bool lastServoSent = false;
 #define FIXED_DEVICE_ID "004B12387760"
 // --- GrainHero Patch: Dual-write to backend ---
 bool DUAL_WRITE_TO_BACKEND = true; // enable later for demo
-const char *BACKEND_BASE_URL = "http://192.168.100.21:5002/api/iot";
+const char *BACKEND_BASE_URL = "http://192.168.137.1:5000/api/iot";
 
 // Initialize sensors
 Adafruit_BME680 bme;
@@ -632,15 +631,72 @@ float calculateDewPoint(float temperature, float humidity) {
   return dewPoint;
 }
 
+/**
+ * Multi-factor pest/mold risk inference for stored grain.
+ * References:
+ *   TVOC:  Bosch BSEC IAQ classification (BME680 Datasheet)
+ *   RH:    Magan & Aldred (2007), Int. J. Food Microbiology 119(1-2), 131-139
+ *   Temp:  ASABE Standard D245.6
+ *   MC:    FAO Grain Storage Techniques Ch.4; IRRI Rice Knowledge Bank
+ */
+float pestRiskScore = 0.0;
+String pestRiskLabel = "None";
+
+void computePestMoldRisk(float tvoc, float humidity, float temperature,
+                         int soilPercent) {
+  float score = 0.0;
+  // Factor 1: TVOC (Bosch BSEC IAQ) — weight up to 0.40
+  if (tvoc > 1000)
+    score += 0.40;
+  else if (tvoc > 500)
+    score += 0.30;
+  else if (tvoc > 250)
+    score += 0.20;
+  else if (tvoc > 100)
+    score += 0.08;
+  // Factor 2: Humidity (Magan & Aldred 2007) — weight up to 0.25
+  if (humidity > 80)
+    score += 0.25;
+  else if (humidity > 70)
+    score += 0.18;
+  else if (humidity > 65)
+    score += 0.10;
+  // Factor 3: Temperature (ASABE D245.6) — weight up to 0.20
+  if (temperature > 35)
+    score += 0.18;
+  else if (temperature > 30)
+    score += 0.20;
+  else if (temperature > 25)
+    score += 0.12;
+  else if (temperature > 20)
+    score += 0.05;
+  // Factor 4: Grain Moisture (FAO/IRRI) — weight up to 0.15
+  float grainMC = 25.0 - (soilPercent / 100.0) * 17.0;
+  if (grainMC > 18)
+    score += 0.15;
+  else if (grainMC > 15)
+    score += 0.12;
+  else if (grainMC > 14)
+    score += 0.08;
+  else if (grainMC > 13)
+    score += 0.03;
+  score = constrain(score, 0.0, 1.0);
+  String label;
+  if (score >= 0.6)
+    label = "High";
+  else if (score >= 0.35)
+    label = "Medium";
+  else if (score >= 0.15)
+    label = "Low";
+  else
+    label = "None";
+  pestRiskScore = score;
+  pestRiskLabel = label;
+}
+
 String detectPestPresence(float tvoc, float humidity, int soilPercent) {
-  // Simple heuristic
-  if (tvoc > 800 || humidity > 75 || soilPercent < 30) {
-    return "High";
-  } else if (tvoc > 400 || humidity > 60) {
-    return "Medium";
-  } else {
-    return "Low";
-  }
+  computePestMoldRisk(tvoc, humidity, currentData.temperature, soilPercent);
+  return pestRiskLabel;
 }
 
 void requestFanOn(int speed = 60) {
@@ -1391,15 +1447,27 @@ void publishToFirebaseREST() {
           http.setTimeout(5000);
 
           http.addHeader("Content-Type", "application/json");
-          DynamicJsonDocument ingestDoc(512);
+          DynamicJsonDocument ingestDoc(1024);
           ingestDoc["device_id"] = currentData.deviceID;
           ingestDoc["timestamp"] = currentData.timestamp;
           JsonObject ingestReadings = ingestDoc.createNestedObject("readings");
           ingestReadings["temperature"] = currentData.temperature;
           ingestReadings["humidity"] = currentData.humidity;
           ingestReadings["tvoc"] = currentData.tvoc_approx;
+          ingestReadings["pressure"] = currentData.pressure;
+          ingestReadings["gas_resistance"] =
+              currentData.gas_resistance / 1000.0;
+          ingestReadings["altitude"] = currentData.altitude;
+          ingestReadings["air_quality"] = currentData.air_quality;
+          ingestReadings["soil_moisture_raw"] = currentData.soil_raw;
+          ingestReadings["soil_moisture_pct"] = currentData.soil_percentage;
+          ingestReadings["light_raw"] = currentData.ldr_raw;
+          ingestReadings["light_pct"] = currentData.light_percentage;
           ingestReadings["pwm_speed"] = pwmSpeed;
           ingestReadings["servo_state"] = servoState;
+          ingestReadings["alarm_state"] = alarmState ? "on" : "off";
+          ingestReadings["dew_point"] = currentData.dew_point;
+          ingestReadings["dew_point_gap"] = dew_point_gap;
           String payload;
           serializeJson(ingestDoc, payload);
           int httpResponseCode = http.POST(payload);
