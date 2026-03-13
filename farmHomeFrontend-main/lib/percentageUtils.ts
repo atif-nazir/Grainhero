@@ -15,8 +15,14 @@ export function formatPercentage(value: number, precision: PercentagePrecision =
     return '0%';
   }
 
+  // Auto-detect 0-1 scale (ML metrics) and convert to 0-100
+  let pctValue = value;
+  if (pctValue > 0 && pctValue <= 1) {
+    pctValue = pctValue * 100;
+  }
+
   // Ensure value is between 0 and 100
-  const clampedValue = Math.max(0, Math.min(100, value));
+  const clampedValue = Math.max(0, Math.min(100, pctValue));
 
   switch (precision) {
     case 'whole':

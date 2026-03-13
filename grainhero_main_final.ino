@@ -1465,9 +1465,10 @@ void publishToFirebaseREST() {
           ingestReadings["light_pct"] = currentData.light_percentage;
           ingestReadings["pwm_speed"] = pwmSpeed;
           ingestReadings["servo_state"] = servoState;
-          ingestReadings["alarm_state"] = alarmState ? "on" : "off";
+          ingestReadings["alarm_state"] = led4State ? "on" : "off";
           ingestReadings["dew_point"] = currentData.dew_point;
-          ingestReadings["dew_point_gap"] = dew_point_gap;
+          ingestReadings["dew_point_gap"] =
+              currentData.temperature - currentData.dew_point;
           String payload;
           serializeJson(ingestDoc, payload);
           int httpResponseCode = http.POST(payload);

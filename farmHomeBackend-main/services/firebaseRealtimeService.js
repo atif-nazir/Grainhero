@@ -35,128 +35,272 @@ function init() {
 async function handleLatest(deviceId, snapshot, io) {
   try {
     const payload = snapshot.val() || {}
-    console.log(`[Firebase] Received data for ${deviceId}:`, JSON.stringify(payload));
+    const mongoose = require('mongoose')
+    const SensorReading = require('../models/SensorReading')
 
-    const device = await SensorDevice.findOne({ device_id: deviceId })
-    // Use DB record if available, otherwise fallback to raw deviceId
-    const effectiveDeviceId = device ? device._id : deviceId
-    const tenantId = device ? device.admin_id : null
-    const siloId = device ? device.silo_id : null
-    const reading = {
-      device_id: effectiveDeviceId,
-      tenant_id: tenantId,
-      silo_id: siloId,
-      timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date()
-    }
-    if (payload.temperature !== undefined) {
-      reading.temperature = { value: Number(payload.temperature), unit: 'celsius' }
-    }
-    if (payload.humidity !== undefined) {
-      reading.humidity = { value: Number(payload.humidity), unit: 'percent' }
-    }
-    // Handle VOC/TVOC mapping
-    if (payload.tvoc_ppb !== undefined) {
-      reading.voc = { value: Number(payload.tvoc_ppb), unit: 'ppb' }
-    } else if (payload.voc !== undefined) {
-      reading.voc = { value: Number(payload.voc), unit: 'ppb' }
-    }
+    // ─── Step 1: Route all readings to device 004B12387760 (only real silo) ───
+    const DEVICE_ID = '004B12387760'
+    let device = await SensorDevice.findOne({ device_id: DEVICE_ID })
+    if (!device) {
+      console.log(`[Firebase] Device ${DEVICE_ID} not found — auto-registering...`)
 
-    if (payload.moisture !== undefined) {
-      reading.moisture = { value: Number(payload.moisture), unit: 'percent' }
-    }
-    if (payload.light !== undefined) {
-      reading.light = { value: Number(payload.light), unit: 'lux' }
-    }
-    if (payload.pressure !== undefined) {
-      reading.pressure = { value: Number(payload.pressure), unit: 'hPa' }
-    }
-    if (payload.ambient && typeof payload.ambient === 'object') {
-      reading.ambient = {}
-      if (payload.ambient.humidity !== undefined) {
-        reading.ambient.humidity = { value: Number(payload.ambient.humidity), unit: 'percent' }
-      }
-      if (payload.ambient.temperature !== undefined) {
-        reading.ambient.temperature = { value: Number(payload.ambient.temperature), unit: 'celsius' }
-      }
-      if (payload.ambient.light !== undefined) {
-        reading.ambient.light = { value: Number(payload.ambient.light), unit: 'lux' }
-      }
-    }
-
-    console.log(`[Firebase] Processing reading for ${deviceId}...`);
-
-    // *** DIRECT Silo update — guarantee current_conditions are persisted ***
-    try {
-      const mongoose = require('mongoose');
-      const siloIdStr = device.silo_id.toString();
-      console.log(`[Firebase] Looking up silo with ID: ${siloIdStr}`);
-
-      let silo = await Silo.findById(siloIdStr);
+      // Find or create a default silo
+      let silo = await Silo.findOne({})
       if (!silo) {
-        // SensorDevice has a stale silo_id — find the correct silo and fix the reference
-        console.log(`[Firebase] Silo ${siloIdStr} not found. Looking for available silos...`);
-        const allSilos = await Silo.find({}).lean();
-        if (allSilos.length > 0) {
-          // Use the first silo (or the one matching the admin)
-          const matchingSilo = allSilos.find(s => s.admin_id?.toString() === device.admin_id?.toString()) || allSilos[0];
-          console.log(`[Firebase] Auto-fixing SensorDevice ${deviceId}: silo_id ${siloIdStr} → ${matchingSilo._id}`);
-
-          // Fix the SensorDevice so future lookups work
-          await SensorDevice.updateOne({ _id: device._id }, { $set: { silo_id: matchingSilo._id } });
-
-          // Now load the silo properly
-          silo = await Silo.findById(matchingSilo._id);
-        } else {
-          console.log(`[Firebase] ⚠️ No silos exist in DB at all.`);
-        }
+        silo = new Silo({
+          name: 'Rice Storage Silo',
+          silo_id: DEVICE_ID,
+          capacity: 1000,
+          status: 'active',
+          grain_type: 'Rice',
+          location: { description: 'Primary GrainHero silo with live Arduino sensor' },
+          current_conditions: {},
+        })
+        await silo.save({ validateBeforeSave: false })
+        console.log(`[Firebase] ✅ Created silo: ${silo._id}`)
       }
 
-      if (silo) {
-        // Also update reading.silo_id to the correct one
-        reading.silo_id = silo._id;
+      // Create the sensor device
+      const adminId = silo.admin_id || new mongoose.Types.ObjectId()
+      device = new SensorDevice({
+        device_id: DEVICE_ID,
+        device_name: `GrainHero-${DEVICE_ID}`,
+        device_type: 'sensor',
+        category: 'environmental',
+        status: 'active',
+        communication_protocol: 'firebase',
+        admin_id: adminId,
+        silo_id: silo._id,
+        sensor_types: ['temperature', 'humidity', 'voc'],
+        data_transmission_interval: 10,
+      })
+      await device.save()
+      console.log(`[Firebase] ✅ Auto-registered device: ${DEVICE_ID} → silo ${silo._id}`)
+    }
 
-        const sensorTypes = ['temperature', 'humidity', 'co2', 'voc', 'moisture'];
+    // ─── Step 2: Extract and normalize sensor values ───
+    const tempVal = payload.temperature !== undefined ? Number(payload.temperature) : null
+    const humVal = payload.humidity !== undefined ? Number(payload.humidity) : null
+    const vocVal = payload.tvoc_ppb !== undefined ? Number(payload.tvoc_ppb)
+      : (payload.voc !== undefined ? Number(payload.voc) : null)
+    const pressureVal = payload.pressure !== undefined ? Number(payload.pressure) : null
+    const lightPct = payload.light_pct !== undefined ? Number(payload.light_pct)
+      : (payload.light !== undefined ? Number(payload.light) : null)
+    const soilMoisturePct = payload.soil_moisture_pct !== undefined ? Number(payload.soil_moisture_pct) : null
+    const dewPointVal = payload.dew_point !== undefined ? Number(payload.dew_point) : null
+    const dewPointGap = payload.dew_point_gap !== undefined ? Number(payload.dew_point_gap) : null
+    const pwmSpeedVal = payload.pwm_speed !== undefined ? Number(payload.pwm_speed) : 0
+    const servoVal = payload.servo_state ? 1 : 0
+    const alarmVal = payload.alarm_state === 'on' ? 1 : 0
+
+    // Convert soil moisture → grain moisture (soil 100%=dry, 0%=wet → grain 8-25% MC)
+    const grainMoisturePct = soilMoisturePct !== null
+      ? Math.round((25 - (soilMoisturePct / 100) * 17) * 10) / 10 : null
+    const airflowVal = pwmSpeedVal / 100.0
+
+    // ─── Step 3: Calculate pest/mold risk score ───
+    let pestScore = 0.0
+    if (vocVal !== null) {
+      if (vocVal > 1000) pestScore += 0.40
+      else if (vocVal > 500) pestScore += 0.30
+      else if (vocVal > 250) pestScore += 0.20
+      else if (vocVal > 100) pestScore += 0.08
+    }
+    if (humVal !== null) {
+      if (humVal > 80) pestScore += 0.25
+      else if (humVal > 70) pestScore += 0.18
+      else if (humVal > 65) pestScore += 0.10
+    }
+    if (tempVal !== null) {
+      if (tempVal > 35) pestScore += 0.18
+      else if (tempVal > 30) pestScore += 0.20
+      else if (tempVal > 25) pestScore += 0.12
+      else if (tempVal > 20) pestScore += 0.05
+    }
+    if (grainMoisturePct !== null) {
+      if (grainMoisturePct > 18) pestScore += 0.15
+      else if (grainMoisturePct > 15) pestScore += 0.12
+      else if (grainMoisturePct > 14) pestScore += 0.08
+      else if (grainMoisturePct > 13) pestScore += 0.03
+    }
+    pestScore = Math.min(1.0, Math.max(0.0, pestScore))
+
+    // ─── Step 4: Convert timestamp ───
+    let ts = payload.timestamp || payload.timestamp_unix
+    if (ts && ts < 2000000000) ts = ts * 1000  // seconds → ms
+    if (!ts || ts < 1600000000000) ts = Date.now()
+
+    // ─── Step 5: Create and SAVE SensorReading to MongoDB ───
+    const sensorReading = new SensorReading({
+      device_id: device._id,
+      tenant_id: device.admin_id,
+      silo_id: device.silo_id,
+      timestamp: new Date(ts),
+
+      temperature: tempVal !== null ? { value: tempVal, unit: 'celsius' } : undefined,
+      humidity: humVal !== null ? { value: humVal, unit: 'percent' } : undefined,
+      voc: vocVal !== null ? { value: vocVal, unit: 'ppb' } : undefined,
+      moisture: grainMoisturePct !== null ? { value: grainMoisturePct, unit: 'percent' } : undefined,
+      pressure: pressureVal !== null ? { value: pressureVal, unit: 'hPa' } : undefined,
+      light: lightPct !== null ? { value: lightPct, unit: 'lux' } : undefined,
+
+      actuation_state: {
+        fan_state: pwmSpeedVal > 0 ? 1 : 0,
+        fan_status: pwmSpeedVal > 0 ? 'on' : 'off',
+        lid_state: servoVal,
+        lid_status: servoVal ? 'open' : 'closed',
+        fan_speed_factor: airflowVal,
+        fan_duty_cycle: pwmSpeedVal,
+        fan_rpm: 0,
+      },
+
+      derived_metrics: {
+        dew_point: dewPointVal,
+        dew_point_gap: dewPointGap,
+        condensation_risk: dewPointGap !== null ? dewPointGap < 1 : false,
+        airflow: airflowVal,
+        pest_presence_score: pestScore,
+        pest_presence_flag: pestScore >= 0.35,
+        spoilage_risk_factors: {
+          high_voc_relative: vocVal !== null ? vocVal > 600 : false,
+          high_voc_rate: false,
+          high_moisture: grainMoisturePct !== null ? grainMoisturePct > 16 : false,
+          condensation_risk: dewPointGap !== null ? dewPointGap < 1 : false,
+          pest_presence: pestScore >= 0.35,
+        },
+        fan_recommendation: ((humVal || 0) > 75 || (vocVal || 0) > 600) ? 'run' : 'hold',
+      },
+
+      metadata: {
+        grain_type: 'Rice',
+        storage_days: null,
+      },
+
+      quality_indicators: {
+        is_valid: true,
+        confidence_score: 0.95,
+        anomaly_detected: false,
+      },
+      device_metrics: {
+        battery_level: device.battery_level,
+        signal_strength: device.signal_strength,
+      },
+      raw_payload: payload,
+    })
+
+    // Look up storage_days from active GrainBatch
+    try {
+      const GrainBatch = require('../models/GrainBatch')
+      const batch = await GrainBatch.findOne({
+        silo_id: device.silo_id,
+        status: { $in: ['stored', 'active', 'monitoring'] }
+      }).sort({ created_at: -1 }).select('intake_date harvest_date created_at')
+      if (batch) {
+        const refDate = batch.intake_date || batch.harvest_date || batch.created_at
+        sensorReading.metadata.storage_days = Math.max(0, Math.round((Date.now() - new Date(refDate)) / 86400000))
+      }
+    } catch (e) { /* non-critical */ }
+
+    await sensorReading.save()
+    console.log(`[Firebase] 💾 SensorReading saved to MongoDB (id=${sensorReading._id}, temp=${tempVal}, hum=${humVal}, voc=${vocVal})`)
+
+    // ─── Step 5b: Append reading to ML training dataset CSV ───
+    try {
+      const fs = require('fs')
+      const csvPath = require('path').join(__dirname, '../ml/rice_spoilage_10k.csv')
+      // Calculate dew point properly
+      const calcDewPoint = (t, rh) => {
+        if (t === null || rh === null) return null
+        const a = 17.27, b = 237.7
+        const alpha = (a * t) / (b + t) + Math.log(rh / 100 + 1e-9)
+        return Math.round((b * alpha) / (a - alpha) * 100) / 100
+      }
+      const dpVal = dewPointVal || calcDewPoint(tempVal, humVal)
+      const storageDays = sensorReading.metadata?.storage_days || 0
+      const rainfallVal = 0 // no rainfall sensor on Arduino; default to 0
+
+      // Classify spoilage using FAO Rice thresholds
+      let dangerCount = 0
+      if (grainMoisturePct !== null && grainMoisturePct > 18) dangerCount += 2
+      else if (grainMoisturePct !== null && grainMoisturePct > 14) dangerCount += 1
+      if (tempVal !== null && tempVal > 35) dangerCount += 2
+      else if (tempVal !== null && tempVal > 25) dangerCount += 1
+      if (humVal !== null && humVal > 80) dangerCount += 2
+      else if (humVal !== null && humVal > 65) dangerCount += 1
+      if (storageDays > 365) dangerCount += 2
+      else if (storageDays > 180) dangerCount += 1
+      if (pestScore > 0.5) dangerCount += 1
+      const spoilageClass = dangerCount >= 5 ? 2 : (dangerCount >= 2 ? 1 : 0)
+      const spoilageLabel = spoilageClass === 2 ? 'Spoiled' : (spoilageClass === 1 ? 'Risky' : 'Safe')
+
+      // Only append if we have valid temperature + humidity
+      if (tempVal !== null && humVal !== null) {
+        const row = [
+          (tempVal || 0).toFixed(2),
+          (humVal || 0).toFixed(2),
+          storageDays,
+          spoilageLabel,
+          1,  // Grain_Type = 1 (Rice)
+          (airflowVal || 0).toFixed(3),
+          (dpVal || 0).toFixed(2),
+          (lightPct || 0).toFixed(1),
+          pestScore > 0.5 ? 1 : 0,
+          (grainMoisturePct || 14).toFixed(2),
+          rainfallVal.toFixed(1),
+        ].join(',') + '\n'
+
+        fs.appendFileSync(csvPath, row)
+        console.log(`[Firebase] 📊 Appended reading to training dataset (label=${spoilageLabel})`)
+      }
+    } catch (csvErr) {
+      console.warn(`[Firebase] CSV append warning:`, csvErr.message)
+    }
+
+    // ─── Step 6: Update silo current_conditions ───
+    try {
+      let silo = await Silo.findById(device.silo_id)
+      if (silo) {
+        const sensorTypes = ['temperature', 'humidity', 'voc', 'moisture']
         for (const type of sensorTypes) {
-          if (reading[type]?.value !== undefined) {
-            if (!silo.current_conditions) silo.current_conditions = {};
+          if (sensorReading[type]?.value !== undefined) {
+            if (!silo.current_conditions) silo.current_conditions = {}
             silo.current_conditions[type] = {
-              value: reading[type].value,
+              value: sensorReading[type].value,
               timestamp: new Date(),
-              sensor_id: device._id
-            };
+              sensor_id: device._id,
+            }
           }
         }
-        silo.current_conditions.last_updated = new Date();
-        await silo.save({ validateBeforeSave: false });
-        console.log(`[Firebase] ✅ Silo ${silo._id} (${silo.name}) updated: temp=${reading.temperature?.value}, hum=${reading.humidity?.value}, voc=${reading.voc?.value}`);
+        silo.current_conditions.last_updated = new Date()
+        await silo.save({ validateBeforeSave: false })
       }
     } catch (siloErr) {
-      console.error(`[Firebase] ❌ Direct silo update failed:`, siloErr.message);
+      console.warn(`[Firebase] Silo update warning:`, siloErr.message)
     }
 
-    // Also queue for full processing (historical readings, alerts, anomaly detection)
-    await realTimeDataService.processSensorReading(reading)
-    console.log(`[Firebase] Reading processed for ${deviceId}.`);
-
-    // Add actuator states
-    reading.fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off')
-    reading.lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed')
-    reading.mlDecision = payload.mlDecision || 'idle'
-    reading.humanOverride = !!payload.humanOverride || !!payload.human_override
-    reading.pwm_speed = payload.pwm_speed
-    reading.servo_state = payload.servo_state
-
+    // ─── Step 7: Update device heartbeat ───
     try {
-      await realTimeDataService.processSensorReading(reading)
-    } catch (procErr) {
-      // Don't let processing failures block event emission
-      console.warn('realTimeDataService.processSensorReading error:', procErr.message)
-    }
+      await device.updateHeartbeat()
+      await device.incrementReadingCount()
+    } catch (e) { /* non-critical */ }
+
+    // ─── Step 8: Broadcast via WebSocket ───
     if (io) {
-      io.emit('sensor_reading', { type: 'sensor_reading', data: reading, timestamp: new Date() })
+      const liveData = {
+        temperature: tempVal,
+        humidity: humVal,
+        tvoc: vocVal,
+        fanState: pwmSpeedVal > 0 ? 'on' : 'off',
+        lidState: servoVal ? 'open' : 'closed',
+        alarmState: alarmVal ? 'on' : 'off',
+        mlDecision: payload.mlDecision || ((humVal > 75 || (vocVal || 0) > 600) ? 'fan_on' : 'idle'),
+        humanOverride: !!payload.humanOverride || !!payload.human_override,
+        timestamp: ts,
+      }
+      io.emit('sensor_reading', { type: 'sensor_reading', data: liveData, timestamp: new Date() })
     }
   } catch (err) {
-    console.error('Firebase latest handler error:', err.message)
+    console.error('[Firebase] handleLatest error:', err.message)
   }
 }
 

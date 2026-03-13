@@ -85,7 +85,11 @@ try {
 
     console.log(`📡 Connecting to MQTT broker at: ${brokerUrl}`);
 
-    const opts = { reconnectPeriod: 5000 };
+    const opts = {
+      reconnectPeriod: 10000,   // retry every 10s
+      connectTimeout: 8000,     // give up connecting after 8s (don't block boot)
+      keepalive: 30,
+    };
     if (process.env.MQTT_USERNAME && process.env.MQTT_PASSWORD) {
       opts.username = process.env.MQTT_USERNAME;
       opts.password = process.env.MQTT_PASSWORD;
@@ -94,14 +98,26 @@ try {
 
     mqttClient.on('connect', () => {
       console.log('✅ Connected to MQTT broker');
-      // Subscribe to sensor data topics
       mqttClient.subscribe('grainhero/sensors/+/readings');
       mqttClient.subscribe('grainhero/sensors/+/status');
       mqttClient.subscribe('grainhero/actuators/+/feedback');
     });
 
     mqttClient.on('error', (error) => {
-      console.error('MQTT connection error:', error);
+      // Log but NEVER crash — Firebase is the primary data path
+      console.warn('⚠️  MQTT error (non-fatal):', error.code || error.message);
+    });
+
+    mqttClient.on('close', () => {
+      console.warn('⚠️  MQTT connection closed — will retry in 10s');
+    });
+
+    mqttClient.on('offline', () => {
+      console.warn('⚠️  MQTT offline — broker unreachable, continuing with Firebase');
+    });
+
+    mqttClient.on('reconnect', () => {
+      console.log('🔄 MQTT reconnecting...');
     });
   }
 } catch (error) {
@@ -536,7 +552,7 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
       const payload = snapshot.val() || {};
       const temperature = payload.temperature !== undefined ? Number(payload.temperature) : 0;
       const humidity = payload.humidity !== undefined ? Number(payload.humidity) : 0;
-      const tvocRaw = payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0);
+      const tvocRaw = payload.tvoc_ppb !== undefined ? Number(payload.tvoc_ppb) : (payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0));
       const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
       const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
       const alarmState = payload.alarmState === 'on' || payload.alarm_state === 'on' ? 'on' : 'off';
@@ -896,7 +912,79 @@ router.post('/emergency-shutdown', [
   }
 });
 
+// GET /iot/silos/:deviceId/history-public — historical readings from MongoDB for charting
+router.get('/silos/:deviceId/history-public', async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    let hours = Math.min(168, Math.max(1, parseInt(req.query.hours) || 6));
+    const limit = Math.min(2000, Math.max(10, parseInt(req.query.limit) || 500));
+    let since = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    // Find device by device_id string
+    const device = await SensorDevice.findOne({ device_id: deviceId });
+    const deviceObjectId = device ? device._id : null;
+
+    // Build query — use specific device if found, else search all
+    const buildQuery = (devId, fromDate) => {
+      const q = { deleted_at: null };
+      if (devId) q.device_id = devId;
+      if (fromDate) q.timestamp = { $gte: fromDate };
+      return q;
+    };
+
+    let readings = await SensorReading.find(buildQuery(deviceObjectId, since))
+      .sort({ timestamp: -1 }).limit(limit)
+      .select('timestamp temperature humidity voc moisture light pressure derived_metrics actuation_state metadata')
+      .lean();
+
+    // Fallback 1: if specific device has no data in window, try all time for that device
+    if (readings.length === 0 && deviceObjectId) {
+      readings = await SensorReading.find(buildQuery(deviceObjectId, null))
+        .sort({ timestamp: -1 }).limit(limit)
+        .select('timestamp temperature humidity voc moisture light pressure derived_metrics actuation_state metadata')
+        .lean();
+      if (readings.length > 0) {
+        since = readings[readings.length - 1].timestamp;
+        hours = Math.round((Date.now() - since) / 3600000);
+      }
+    }
+
+    // Fallback 2: query ANY device for any time window
+    if (readings.length === 0) {
+      readings = await SensorReading.find(buildQuery(null, null))
+        .sort({ timestamp: -1 }).limit(limit)
+        .select('timestamp temperature humidity voc moisture light pressure derived_metrics actuation_state metadata')
+        .lean();
+    }
+
+    readings.reverse();
+
+    const points = readings.map(r => ({
+      timestamp: r.timestamp,
+      time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      temperature: r.temperature?.value ?? null,
+      humidity: r.humidity?.value ?? null,
+      tvoc: r.voc?.value ?? null,
+      moisture: r.moisture?.value ?? null,
+      light: r.light?.value ?? null,
+      pressure: r.pressure?.value ?? null,
+      dewPoint: r.derived_metrics?.dew_point ?? null,
+      pestScore: r.derived_metrics?.pest_presence_score ?? null,
+      airflow: r.derived_metrics?.airflow ?? null,
+      fanOn: r.actuation_state?.fan_state === 1 ? 1 : 0,
+      pwm: r.actuation_state?.fan_duty_cycle ?? 0,
+      storageDays: r.metadata?.storage_days ?? null,
+    }));
+
+    res.json({ readings: points, count: points.length, device_id: deviceId, actual_device_id: device?.device_id || 'all', hours, from: since, to: new Date() });
+  } catch (error) {
+    console.error('Historical readings error:', error);
+    res.status(500).json({ error: 'Failed to fetch historical data' });
+  }
+});
+
 // POST /iot/mqtt-ingest - Ingest data from MQTT (for real devices)
+
 router.post('/mqtt-ingest', async (req, res) => {
   try {
     const { device_id, readings, timestamp } = req.body;

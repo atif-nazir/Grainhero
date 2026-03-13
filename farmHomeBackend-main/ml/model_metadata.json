@@ -1,0 +1,137 @@
+{
+  "model_type": "Soft Voting Ensemble (XGBoost + RandomForest + LightGBM)",
+  "version": "3.0.0",
+  "features": [
+    "Temperature",
+    "Humidity",
+    "Storage_Days",
+    "Airflow",
+    "Dew_Point",
+    "Ambient_Light",
+    "Pest_Presence",
+    "Grain_Moisture",
+    "Rainfall"
+  ],
+  "label_classes": [
+    "Risky",
+    "Safe",
+    "Spoiled"
+  ],
+  "best_params": {
+    "XGBoost": {
+      "max_depth": 5,
+      "n_estimators": 302,
+      "learning_rate": 0.2322257188508089,
+      "subsample": 0.8399770007639584,
+      "colsample_bytree": 0.8385808216069602,
+      "gamma": 0.4971870722767828,
+      "reg_alpha": 0.14300151008777906,
+      "reg_lambda": 3.4830826110571063
+    },
+    "RandomForest": {
+      "n_estimators": 328,
+      "max_depth": 30,
+      "min_samples_split": 2,
+      "min_samples_leaf": 2,
+      "max_features": "log2"
+    },
+    "LightGBM": {
+      "n_estimators": 339,
+      "max_depth": 5,
+      "learning_rate": 0.28961692981233206,
+      "num_leaves": 100,
+      "subsample": 0.7624349766216985,
+      "colsample_bytree": 0.7434830403957655,
+      "reg_alpha": 3.2240286939480662,
+      "reg_lambda": 0.3077642714994755
+    }
+  },
+  "metrics": {
+    "XGBoost": {
+      "accuracy": 0.9872,
+      "precision": 0.9872,
+      "recall": 0.9872,
+      "f1_score": 0.9872,
+      "cv_mean": 0.9841,
+      "cv_std": 0.0034
+    },
+    "RandomForest": {
+      "accuracy": 0.9606,
+      "precision": 0.9604,
+      "recall": 0.9606,
+      "f1_score": 0.9604,
+      "cv_mean": 0.9614,
+      "cv_std": 0.0051
+    },
+    "LightGBM": {
+      "accuracy": 0.9843,
+      "precision": 0.9843,
+      "recall": 0.9843,
+      "f1_score": 0.9843,
+      "cv_mean": 0.9835,
+      "cv_std": 0.0051
+    },
+    "Ensemble": {
+      "accuracy": 0.9848,
+      "precision": 0.9848,
+      "recall": 0.9848,
+      "f1_score": 0.9848,
+      "cv_mean": 0.9825,
+      "cv_std": 0.0044
+    }
+  },
+  "feature_importance": [
+    [
+      "Temperature",
+      403.3849593838406
+    ],
+    [
+      "Grain_Moisture",
+      395.78366564074184
+    ],
+    [
+      "Storage_Days",
+      355.4310791695659
+    ],
+    [
+      "Humidity",
+      336.730829958036
+    ],
+    [
+      "Airflow",
+      281.6854281469643
+    ],
+    [
+      "Dew_Point",
+      271.7805650460869
+    ],
+    [
+      "Rainfall",
+      126.78838921886654
+    ],
+    [
+      "Ambient_Light",
+      121.03876107008672
+    ],
+    [
+      "Pest_Presence",
+      117.70965569790275
+    ]
+  ],
+  "training_date": "2026-03-14T00:14:21.269070",
+  "dataset": "C:\\Users\\Nexgen\\Downloads\\FYP\\Grainhero\\farmHomeBackend-main\\ml\\rice_spoilage_10k.csv",
+  "weka_comparison": {
+    "Random Forest (Weka)": {
+      "accuracy": 0.9726,
+      "f1": 0.973
+    },
+    "J48 (Weka)": {
+      "accuracy": 0.9644,
+      "f1": 0.964
+    },
+    "Stacking (Weka)": {
+      "accuracy": 0.9716,
+      "f1": 0.972
+    }
+  }
+}

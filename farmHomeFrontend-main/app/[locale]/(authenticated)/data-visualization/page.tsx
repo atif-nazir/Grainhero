@@ -132,11 +132,12 @@ export default function DataVisualizationPage() {
   const deviceId =
     process.env.NEXT_PUBLIC_DEVICE_ID || '004B12387760';
   const [selectedRange, setSelectedRange] = useState<
-    '5m' | '15m' | '1h' | '6h'
-  >('15m');
+    '1h' | '6h' | '24h' | '7d'
+  >('6h');
   const [liveTelemetry, setLiveTelemetry] =
     useState<LiveTelemetry | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [historySource, setHistorySource] = useState<'loading' | 'db' | 'live'>('loading');
   const [mlMetrics, setMlMetrics] = useState<MlMetrics | null>(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [retrainStatus, setRetrainStatus] = useState<
@@ -146,21 +147,11 @@ export default function DataVisualizationPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const historyRef = useRef<HistoryPoint[]>([]);
 
-  /* Max points per range */
-  const maxPoints = useMemo(() => {
-    switch (selectedRange) {
-      case '5m':
-        return 100;
-      case '15m':
-        return 300;
-      case '1h':
-        return 1200;
-      case '6h':
-        return 7200;
-      default:
-        return 300;
-    }
-  }, [selectedRange]);
+  /* Max live-polling points per range */
+  const maxPoints = 500;
+
+  /* Hours for DB history per range */
+  const rangeToHours: Record<string, number> = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 };
 
   /* ── Poll live telemetry ── */
   const pollTelemetry = useCallback(async () => {
@@ -199,6 +190,46 @@ export default function DataVisualizationPage() {
       setErrors((prev) => [...prev.slice(-4), msg]);
     }
   }, [deviceId, maxPoints]);
+
+  /* ── Load historical data from MongoDB when range changes ── */
+  useEffect(() => {
+    let mounted = true;
+    const loadHistory = async () => {
+      setHistorySource('loading');
+      try {
+        const hours = rangeToHours[selectedRange] || 6;
+        const res = await fetch(
+          `${backendUrl}/api/iot/silos/${deviceId}/history-public?hours=${hours}&limit=500`
+        );
+        if (!res.ok) throw new Error(`History ${res.status}`);
+        const json = await res.json();
+        if (mounted && json.readings && json.readings.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pts: HistoryPoint[] = json.readings.map((r: any) => ({
+            time: r.time || new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            fullTime: new Date(r.timestamp).toLocaleString(),
+            temperature: r.temperature ?? 0,
+            humidity: r.humidity ?? 0,
+            tvoc: r.tvoc ?? 0,
+            riskIndex: r.riskIndex ?? 0,
+            dewPoint: r.dewPoint ?? null,
+            fanOn: r.fanOn ?? 0,
+            pwm: r.pwm ?? 0,
+          }));
+          historyRef.current = pts;
+          setHistory(pts);
+          setHistorySource('db');
+        } else if (mounted) {
+          setHistorySource('live'); // fall back to live-only accumulation
+        }
+      } catch {
+        if (mounted) setHistorySource('live');
+      }
+    };
+    loadHistory();
+    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRange, deviceId]);
 
   useEffect(() => {
     pollTelemetry();
@@ -415,10 +446,10 @@ export default function DataVisualizationPage() {
               <SelectValue placeholder="Time window" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="5m">Last 5 min</SelectItem>
-              <SelectItem value="15m">Last 15 min</SelectItem>
               <SelectItem value="1h">Last 1 hour</SelectItem>
               <SelectItem value="6h">Last 6 hours</SelectItem>
+              <SelectItem value="24h">Last 24 hours</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
             </SelectContent>
           </Select>
           <Button
@@ -436,10 +467,10 @@ export default function DataVisualizationPage() {
       {liveTelemetry && (
         <Card
           className={`border-l-4 ${liveTelemetry.riskIndex > 70
-              ? 'border-l-red-500 bg-red-50/30'
-              : liveTelemetry.riskIndex > 40
-                ? 'border-l-amber-500 bg-amber-50/30'
-                : 'border-l-green-500 bg-green-50/30'
+            ? 'border-l-red-500 bg-red-50/30'
+            : liveTelemetry.riskIndex > 40
+              ? 'border-l-amber-500 bg-amber-50/30'
+              : 'border-l-green-500 bg-green-50/30'
             }`}
         >
           <CardContent className="py-3">
@@ -681,10 +712,10 @@ export default function DataVisualizationPage() {
             {retrainMsg && (
               <span
                 className={`text-sm ${retrainStatus === 'error'
-                    ? 'text-red-600'
-                    : retrainStatus === 'done'
-                      ? 'text-green-600'
-                      : 'text-gray-500'
+                  ? 'text-red-600'
+                  : retrainStatus === 'done'
+                    ? 'text-green-600'
+                    : 'text-gray-500'
                   }`}
               >
                 {retrainMsg}
@@ -702,7 +733,10 @@ export default function DataVisualizationPage() {
             Temperature & Humidity Trend
           </CardTitle>
           <CardDescription>
-            {history.length} data points collected ({selectedRange} window)
+            {history.length} data points — source:{' '}
+            <span className={historySource === 'db' ? 'text-green-600 font-semibold' : historySource === 'loading' ? 'text-gray-400' : 'text-amber-500'}>
+              {historySource === 'db' ? '✅ MongoDB history' : historySource === 'loading' ? 'Loading...' : '⚡ Live only'}
+            </span>
           </CardDescription>
         </CardHeader>
         <CardContent className="h-80">

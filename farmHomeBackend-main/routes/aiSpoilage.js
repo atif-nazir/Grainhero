@@ -8,9 +8,137 @@ const riceDataService = require('../services/riceDataService');
 const trainingDataService = require('../services/trainingDataService');
 const SpoilagePrediction = require('../models/SpoilagePrediction');
 
+// ─── Environment-based spoilage calculation (rule-based fallback) ───
+function calculateSpoilageFromEnvironment(inputData) {
+    const temp = inputData.temperature || 25;
+    const humidity = inputData.humidity || 60;
+    const grainMoist = inputData.grain_moisture || 14;
+    const airflow = inputData.airflow || 0;
+    const pest = inputData.pest_presence || 0;
+    const storage = inputData.storage_days || 1;
+    const dewPt = inputData.dew_point || 20;
+    const rainfall = inputData.rainfall || 0;
+
+    // ─── Classification based on environmental thresholds ───
+    let riskScore = 0;
+
+    // Temperature contribution (0-25 pts)
+    if (temp > 35) riskScore += 25;
+    else if (temp > 30) riskScore += 18;
+    else if (temp > 28) riskScore += 12;
+    else if (temp > 25) riskScore += 6;
+
+    // Humidity contribution (0-25 pts)
+    if (humidity > 85) riskScore += 25;
+    else if (humidity > 80) riskScore += 20;
+    else if (humidity > 70) riskScore += 14;
+    else if (humidity > 65) riskScore += 8;
+
+    // Grain moisture contribution (0-25 pts)
+    if (grainMoist > 20) riskScore += 25;
+    else if (grainMoist > 18) riskScore += 20;
+    else if (grainMoist > 16) riskScore += 14;
+    else if (grainMoist > 14) riskScore += 8;
+
+    // Pest presence (0-10 pts)
+    riskScore += Math.min(10, Math.round(pest * 15));
+
+    // Low airflow penalty (0-8 pts)
+    if (airflow < 0.1) riskScore += 8;
+    else if (airflow < 0.3) riskScore += 5;
+
+    // Storage duration (0-7 pts)
+    if (storage > 90) riskScore += 7;
+    else if (storage > 60) riskScore += 5;
+    else if (storage > 30) riskScore += 3;
+
+    riskScore = Math.min(100, riskScore);
+
+    // Classification
+    let prediction, confidence;
+    if (riskScore >= 70) {
+        prediction = 'Spoiled';
+        confidence = 0.6 + (riskScore - 70) / 100;
+    } else if (riskScore >= 40) {
+        prediction = 'Risky';
+        confidence = 0.55 + (riskScore - 40) / 100;
+    } else {
+        prediction = 'Safe';
+        confidence = 0.6 + (40 - riskScore) / 100;
+    }
+    confidence = Math.min(0.95, Math.max(0.5, confidence));
+
+    // Class probabilities (approximate)
+    let pSafe, pRisky, pSpoiled;
+    if (prediction === 'Safe') {
+        pSafe = confidence; pRisky = (1 - confidence) * 0.7; pSpoiled = (1 - confidence) * 0.3;
+    } else if (prediction === 'Risky') {
+        pRisky = confidence; pSafe = (1 - confidence) * 0.6; pSpoiled = (1 - confidence) * 0.4;
+    } else {
+        pSpoiled = confidence; pRisky = (1 - confidence) * 0.6; pSafe = (1 - confidence) * 0.4;
+    }
+
+    // ─── Probability-weighted time-to-spoilage (same as smartbin_predict.py) ───
+    const baseSurvival = { Safe: 720, Risky: 168, Spoiled: 24 };
+    const weightedHours = pSafe * baseSurvival.Safe + pRisky * baseSurvival.Risky + pSpoiled * baseSurvival.Spoiled;
+
+    // Severity adjustment factors (identical to Python model)
+    let severityFactor = 1.0;
+    if (temp > 35) severityFactor *= 0.35;
+    else if (temp > 30) severityFactor *= 0.55;
+    else if (temp > 28) severityFactor *= 0.75;
+
+    if (humidity > 85) severityFactor *= 0.35;
+    else if (humidity > 80) severityFactor *= 0.50;
+    else if (humidity > 70) severityFactor *= 0.70;
+
+    if (grainMoist > 20) severityFactor *= 0.40;
+    else if (grainMoist > 18) severityFactor *= 0.60;
+    else if (grainMoist > 16) severityFactor *= 0.80;
+
+    if (pest > 0) severityFactor *= 0.65;
+    if (airflow < 0.2) severityFactor *= 0.80;
+    if (storage > 90) severityFactor *= 0.70;
+    else if (storage > 60) severityFactor *= 0.85;
+
+    const timeToSpoilage = Math.max(1, Math.round(weightedHours * severityFactor));
+
+    // Key risk factors
+    const riskFactors = [];
+    if (temp > 30) riskFactors.push('high_temperature');
+    else if (temp > 28) riskFactors.push('elevated_temperature');
+    if (humidity > 80) riskFactors.push('high_humidity');
+    else if (humidity > 70) riskFactors.push('elevated_humidity');
+    if (grainMoist > 18) riskFactors.push('high_grain_moisture');
+    else if (grainMoist > 16) riskFactors.push('elevated_grain_moisture');
+    if (pest > 0) riskFactors.push('pest_presence');
+    if (airflow < 0.2) riskFactors.push('low_airflow');
+    if (storage > 60) riskFactors.push('long_storage_duration');
+    if (rainfall > 5) riskFactors.push('heavy_rainfall');
+
+    return {
+        prediction,
+        confidence: parseFloat(confidence.toFixed(4)),
+        risk_score: riskScore,
+        time_to_spoilage_hours: timeToSpoilage,
+        time_to_spoilage_method: 'environment_rule_based',
+        class_probabilities: {
+            Safe: parseFloat(pSafe.toFixed(4)),
+            Risky: parseFloat(pRisky.toFixed(4)),
+            Spoiled: parseFloat(pSpoiled.toFixed(4)),
+        },
+        severity_factor: parseFloat(severityFactor.toFixed(3)),
+        weighted_base_hours: parseFloat(weightedHours.toFixed(1)),
+        key_risk_factors: riskFactors,
+        model_used: 'SmartBin-EnvironmentRules',
+        features_used: 9,
+        timestamp: new Date().toISOString(),
+    };
+}
+
 // SmartBin-RiceSpoilage ML Model Integration
 async function callSmartBinModel(inputData) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const pythonScript = path.join(__dirname, '../ml/smartbin_predict.py');
 
         const python = spawn('python', [pythonScript], {
@@ -32,30 +160,21 @@ async function callSmartBinModel(inputData) {
             if (code === 0) {
                 try {
                     const result = JSON.parse(output);
-                    resolve(result);
+                    // If the model returned a fallback (no real prediction), use env calc
+                    if (result.model_used && result.model_used.includes('Fallback')) {
+                        console.log('ML model returned fallback, using environment calculation');
+                        resolve(calculateSpoilageFromEnvironment(inputData));
+                    } else {
+                        resolve(result);
+                    }
                 } catch (e) {
-                    console.log('ML model output (not JSON):', output);
-                    resolve({
-                        prediction: 'Safe',
-                        confidence: 0.6,
-                        risk_score: 30,
-                        time_to_spoilage_hours: 168,
-                        key_risk_factors: [],
-                        model_used: `${modelType}-fallback`,
-                        timestamp: new Date().toISOString()
-                    });
+                    console.log('ML model output parse failed, using environment calculation');
+                    resolve(calculateSpoilageFromEnvironment(inputData));
                 }
             } else {
                 console.error('ML model error:', error);
-                resolve({
-                    prediction: 'Safe',
-                    confidence: 0.6,
-                    risk_score: 30,
-                    time_to_spoilage_hours: 168,
-                    key_risk_factors: [],
-                    model_used: `${modelType}-error`,
-                    timestamp: new Date().toISOString()
-                });
+                console.log('Using environment-based calculation as fallback');
+                resolve(calculateSpoilageFromEnvironment(inputData));
             }
         });
 
@@ -685,33 +804,40 @@ router.post('/retrain', [
 // Helper function to parse training output
 function parseTrainingOutput(output) {
     try {
-        // Look for metrics in the output
+        // Try to extract the JSON metrics block from ensemble_train.py output
+        const jsonMatch = output.match(/__METRICS_JSON__\s*([\s\S]*?)\s*__END_METRICS__/);
+        if (jsonMatch) {
+            const metricsObj = JSON.parse(jsonMatch[1]);
+            // metricsObj has keys: XGBoost, RandomForest, LightGBM, Ensemble
+            const ens = metricsObj.Ensemble || {};
+            return {
+                accuracy: ens.accuracy || 0,
+                f1_score: ens.f1_score || 0,
+                precision: ens.precision || 0,
+                recall: ens.recall || 0,
+                cv_mean: ens.cv_mean || 0,
+                cv_std: ens.cv_std || 0,
+                model_type: 'ensemble',
+                per_model: {
+                    XGBoost: metricsObj.XGBoost || {},
+                    RandomForest: metricsObj.RandomForest || {},
+                    LightGBM: metricsObj.LightGBM || {},
+                },
+                timestamp: new Date().toISOString()
+            };
+        }
+        // Fallback: try old format
         const accuracyMatch = output.match(/Accuracy: ([\d.]+)/);
         const f1Match = output.match(/F1-Score: ([\d.]+)/);
-        const cvMatch = output.match(/CV Score: ([\d.]+)/);
-
         return {
-            accuracy: accuracyMatch ? parseFloat(accuracyMatch[1]) : 0.87,
-            f1_score: f1Match ? parseFloat(f1Match[1]) : 0.85,
-            cv_mean: cvMatch ? parseFloat(cvMatch[1]) : 0.86,
-            precision: 0.89,
-            recall: 0.84,
-            training_samples: 319,
-            test_samples: 80,
+            accuracy: accuracyMatch ? parseFloat(accuracyMatch[1]) : 0,
+            f1_score: f1Match ? parseFloat(f1Match[1]) : 0,
+            model_type: 'legacy',
             timestamp: new Date().toISOString()
         };
     } catch (error) {
         console.error('Error parsing training output:', error);
-        return {
-            accuracy: 0.87,
-            f1_score: 0.85,
-            cv_mean: 0.86,
-            precision: 0.89,
-            recall: 0.84,
-            training_samples: 319,
-            test_samples: 80,
-            timestamp: new Date().toISOString()
-        };
+        return { accuracy: 0, f1_score: 0, error: error.message, timestamp: new Date().toISOString() };
     }
 }
 
@@ -1666,35 +1792,111 @@ router.get('/predictions-public', async (req, res) => {
     }
 });
 
-// POST /ai-spoilage/retrain-public - Retrain model (no auth for testing)
+// POST /ai-spoilage/retrain-public - Retrain ensemble model (no auth for testing)
 router.post('/retrain-public', async (req, res) => {
     try {
-        console.log('🚀 Starting public model retraining...');
-        const pythonScript = path.join(__dirname, '../ml/enhanced_train.py');
-        const python = spawn('python', [pythonScript], { stdio: ['pipe', 'pipe', 'pipe'] });
+        const grainType = (req.body.grain_type || req.query.grain || 'rice').toLowerCase();
+        const validGrains = ['rice', 'wheat', 'maize', 'sorghum', 'barley'];
+        if (!validGrains.includes(grainType)) {
+            return res.status(400).json({ error: `Invalid grain type: ${grainType}. Valid: ${validGrains.join(', ')}` });
+        }
+
+        console.log(`Starting ensemble retraining for ${grainType.toUpperCase()}...`);
+        const pythonScript = path.join(__dirname, '../ml/ensemble_train.py');
+        const python = spawn('python', [pythonScript, grainType], { stdio: ['pipe', 'pipe', 'pipe'] });
         let output = '';
         let error = '';
-        python.stdout.on('data', (d) => { output += d.toString(); });
+        python.stdout.on('data', (d) => { output += d.toString(); console.log('[Ensemble] ' + d.toString().trim()); });
         python.stderr.on('data', (d) => { error += d.toString(); });
         python.on('close', (code) => {
             if (code === 0) {
                 const metrics = parseTrainingOutput(output);
-                console.log('✅ Public model retrain completed');
+                console.log(`Ensemble retrain completed for ${grainType}:`, JSON.stringify({
+                    ensemble_accuracy: metrics.accuracy,
+                    ensemble_f1: metrics.f1_score,
+                }));
                 res.json({
-                    message: 'Model retrained successfully',
+                    message: `Ensemble model retrained for ${grainType} (XGBoost + RandomForest + LightGBM)`,
                     status: 'completed',
+                    model_type: 'ensemble',
+                    grain_type: grainType,
                     performance_metrics: metrics,
                     completion_time: new Date().toISOString(),
                 });
             } else {
-                res.status(500).json({ error: 'Retrain failed', details: error || output });
+                console.error(`Ensemble retrain failed for ${grainType}:`, error || output);
+                res.status(500).json({ error: 'Ensemble retrain failed', grain_type: grainType, details: error || output });
             }
         });
-        setTimeout(() => { python.kill(); }, 300000);
+        setTimeout(() => { python.kill(); }, 600000); // 10 min timeout
     } catch (error) {
         console.error('Public retrain error:', error);
         res.status(500).json({ error: 'Retrain failed', details: error.message });
     }
 });
 
+// GET /ai-spoilage/model-info-public - Get current model info and metrics
+router.get('/model-info-public', async (req, res) => {
+    try {
+        const grainType = (req.query.grain || 'rice').toLowerCase();
+        const fs = require('fs');
+
+        // Try grain-specific metadata first, fall back to default
+        let metadataPath = path.join(__dirname, `../ml/${grainType}_model_metadata.json`);
+        if (!fs.existsSync(metadataPath)) {
+            metadataPath = path.join(__dirname, '../ml/model_metadata.json');
+        }
+
+        const datasetPath = path.join(__dirname, `../ml/${grainType}_spoilage_10k.csv`);
+
+        let metadata = null;
+        if (fs.existsSync(metadataPath)) {
+            metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+        }
+
+        // Count dataset rows
+        let datasetRows = 0;
+        if (fs.existsSync(datasetPath)) {
+            const content = fs.readFileSync(datasetPath, 'utf8');
+            datasetRows = content.split('\n').filter(l => l.trim()).length - 1;
+        }
+
+        // List all trained grains
+        const trainedGrains = ['rice', 'wheat', 'maize', 'sorghum', 'barley'].filter(g =>
+            fs.existsSync(path.join(__dirname, `../ml/${g}_model_metadata.json`))
+        );
+
+        if (metadata) {
+            res.json({
+                model_type: metadata.model_type || 'unknown',
+                version: metadata.version || '1.0',
+                grain_type: metadata.grain_type || grainType,
+                metrics: metadata.metrics || {},
+                feature_importance: metadata.feature_importance || [],
+                label_classes: metadata.label_classes || ['Safe', 'Risky', 'Spoiled'],
+                training_date: metadata.training_date || null,
+                dataset_rows: metadata.dataset_rows || datasetRows,
+                weka_comparison: metadata.weka_comparison || {},
+                trained_grains: trainedGrains,
+                available_grains: ['rice', 'wheat', 'maize', 'sorghum', 'barley'],
+            });
+        } else {
+            res.json({
+                model_type: 'not_trained',
+                version: '0',
+                grain_type: grainType,
+                metrics: {},
+                dataset_rows: datasetRows,
+                trained_grains: trainedGrains,
+                available_grains: ['rice', 'wheat', 'maize', 'sorghum', 'barley'],
+                message: `No model metadata found for ${grainType}. Please retrain the model.`,
+            });
+        }
+    } catch (error) {
+        console.error('Model info error:', error);
+        res.status(500).json({ error: 'Failed to get model info', details: error.message });
+    }
+});
+
 module.exports = router;
+
