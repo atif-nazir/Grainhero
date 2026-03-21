@@ -226,6 +226,23 @@ router.post('/devices/:id/control', [
 
     if (!device) {
       // Allow direct control by device_id even if not in DB
+      // But FIRST check safety guardrails via Firebase telemetry
+      try {
+        const firebaseService = require('../services/firebaseRealtimeService');
+        const fbData = await firebaseService.readTelemetry(id);
+        if (fbData) {
+          const t = fbData.temperature ?? fbData.temp ?? 0;
+          const tv = fbData.tvoc_ppb ?? fbData.tvoc ?? 0;
+          if (t > 60 || tv > 1000) {
+            return res.status(200).json({
+              status: 'blocked',
+              reason: 'unsafe_conditions',
+              details: `Safety guardrail: temp=${t}°C, tvoc=${tv}ppb`
+            });
+          }
+        }
+      } catch { /* proceed if telemetry unavailable */ }
+
       const controlTopic = `grainhero/actuators/${id}/control`;
       const pct = typeof value === 'number' ? Math.max(0, Math.min(100, Number(value))) : (action === 'turn_on' ? 80 : 0);
       const pwm255 = Math.round(pct / 100 * 255);
@@ -241,7 +258,7 @@ router.post('/devices/:id/control', [
         mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
         console.log(`📡 MQTT request sent to ${controlTopic}`);
       }
-      // Always mirror control intent to Firebase so ESP32 polling can act
+      // Mirror control intent to Firebase for telemetry tracking
       try {
         await firebaseRealtimeService.writeControlState(id, {
           human_requested_fan: action === 'turn_on' ? true : (action === 'turn_off' ? false : undefined),
@@ -1419,3 +1436,4 @@ if (mqttClient) {
 }
 
 module.exports = router;
+module.exports.getMqttClient = () => mqttClient;

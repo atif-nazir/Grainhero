@@ -90,6 +90,8 @@ export default function ModelPerformancePage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [trainingHistory, setTrainingHistory] = useState<TrainingHistory | null>(null)
   const [error, setError] = useState<string>('')
+  const [selectedGrain, setSelectedGrain] = useState('rice')
+  const [trainedGrains, setTrainedGrains] = useState<string[]>([])
 
   // Retraining progress state
   const [trainProgress, setTrainProgress] = useState(0)
@@ -101,6 +103,7 @@ export default function ModelPerformancePage() {
   } | null>(null)
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  const allGrains = ['rice', 'wheat', 'maize', 'sorghum', 'barley']
 
   const loadPerformanceData = useCallback(async () => {
     setLoading(true)
@@ -123,7 +126,7 @@ export default function ModelPerformancePage() {
 
       // Fallback: use model-info-public to build performance data
       if (!performanceData) {
-        const publicRes = await fetch(`${backendUrl}/api/ai-spoilage/model-info-public`)
+        const publicRes = await fetch(`${backendUrl}/api/ai-spoilage/model-info-public?grain=${selectedGrain}`)
         if (publicRes.ok) {
           const info = await publicRes.json()
           const ensMetrics = info.metrics?.Ensemble || info.metrics?.ensemble || {}
@@ -166,6 +169,7 @@ export default function ModelPerformancePage() {
             feature_importance: info.feature_importance || [],
             weka_comparison: info.weka_comparison || {},
           }
+          if (info.trained_grains) setTrainedGrains(info.trained_grains)
         }
       }
 
@@ -190,7 +194,8 @@ export default function ModelPerformancePage() {
     } finally {
       setLoading(false)
     }
-  }, [backendUrl])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendUrl, selectedGrain])
 
   useEffect(() => {
     void loadPerformanceData()
@@ -231,6 +236,7 @@ export default function ModelPerformancePage() {
       const response = await fetch(`${backendUrl}/api/ai-spoilage/retrain-public`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grain_type: selectedGrain }),
       })
 
       cancelled = true // stop simulation
@@ -358,7 +364,19 @@ export default function ModelPerformancePage() {
             {model_info.name} v{model_info.version} • {model_info.algorithm}
           </p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-2">
+          {/* Grain Selector */}
+          <select
+            value={selectedGrain}
+            onChange={(e) => setSelectedGrain(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            {allGrains.map(g => (
+              <option key={g} value={g}>
+                {g.charAt(0).toUpperCase() + g.slice(1)} {trainedGrains.includes(g) ? '✓' : '○'}
+              </option>
+            ))}
+          </select>
           <Button
             onClick={loadPerformanceData}
             variant="outline"
@@ -373,7 +391,7 @@ export default function ModelPerformancePage() {
             className="bg-gray-900 hover:bg-gray-800"
           >
             <Zap className="h-4 w-4 mr-2" />
-            {retraining ? 'Training...' : 'Retrain Model'}
+            {retraining ? 'Training...' : `Retrain ${selectedGrain.charAt(0).toUpperCase() + selectedGrain.slice(1)}`}
           </Button>
         </div>
       </div>

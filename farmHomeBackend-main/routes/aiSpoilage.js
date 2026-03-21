@@ -8,6 +8,39 @@ const riceDataService = require('../services/riceDataService');
 const trainingDataService = require('../services/trainingDataService');
 const SpoilagePrediction = require('../models/SpoilagePrediction');
 
+// ─── AI Decision via MQTT: LEDs + Fan control based on prediction ───
+// LED mapping: LED2 (GPIO14) = Safe/Green, LED3 (GPIO12) = Risky/Yellow, LED4 (GPIO25) = Spoiled/Red
+// Fan logic: Safe = off, Risky = on (80%), Spoiled = on (100%)
+function setHealthLEDs(deviceId, classification) {
+    try {
+        const iotModule = require('./iot');
+        const mqttClient = iotModule.getMqttClient ? iotModule.getMqttClient() : null;
+        if (!mqttClient || !mqttClient.connected) return;
+
+        const cls = (classification || '').toLowerCase();
+        
+        // LED states (one on, others off)
+        const shouldVentilate = cls === 'risky' || cls === 'spoiled';
+        const fanSpeed = cls === 'spoiled' ? 100 : (cls === 'risky' ? 80 : 0);
+
+        const msg = {
+            // LED health indicators
+            led2: cls === 'safe',     // Green LED  = Safe
+            led3: cls === 'risky',    // Yellow LED = Risky
+            led4: cls === 'spoiled',  // Red LED    = Spoiled
+            // AI fan decision (Arduino reads these in mqttCallback)
+            ai_fan: shouldVentilate,
+            ai_fan_speed: fanSpeed,
+        };
+
+        const topic = `grainhero/actuators/${deviceId}/control`;
+        mqttClient.publish(topic, JSON.stringify(msg), { qos: 1 });
+        console.log(`AI → ${deviceId}: ${cls} | LED2=${msg.led2} LED3=${msg.led3} LED4=${msg.led4} | fan=${shouldVentilate} speed=${fanSpeed}`);
+    } catch (e) {
+        console.warn('AI MQTT control failed:', e.message);
+    }
+}
+
 // ─── Environment-based spoilage calculation (rule-based fallback) ───
 function calculateSpoilageFromEnvironment(inputData) {
     const temp = inputData.temperature || 25;
@@ -1769,6 +1802,9 @@ router.get('/predictions-public', async (req, res) => {
                     timestamp: new Date().toISOString(),
                     is_live: true,
                 };
+
+                // Update LEDs based on prediction classification
+                setHealthLEDs(device_id, mlResult.prediction);
             } catch (e) {
                 console.error('Live prediction generation failed:', e.message);
             }

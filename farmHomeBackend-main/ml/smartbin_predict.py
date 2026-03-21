@@ -19,11 +19,22 @@ FEATURE_NAMES = [
 ]
 
 
-def load_model():
-    """Load ensemble model and label encoder."""
-    ensemble_path = os.path.join(ML_DIR, 'ensemble_model.pkl')
-    encoder_path = os.path.join(ML_DIR, 'label_encoder.pkl')
-    metadata_path = os.path.join(ML_DIR, 'model_metadata.json')
+def load_model(grain_type='rice'):
+    """Load ensemble model and label encoder for the given grain type."""
+    grain = grain_type.lower()
+    
+    # Try grain-specific model first, then fall back to default
+    ensemble_path = os.path.join(ML_DIR, f'{grain}_ensemble_model.pkl')
+    encoder_path = os.path.join(ML_DIR, f'{grain}_label_encoder.pkl')
+    metadata_path = os.path.join(ML_DIR, f'{grain}_model_metadata.json')
+
+    # Fallback to non-prefixed files
+    if not os.path.exists(ensemble_path):
+        ensemble_path = os.path.join(ML_DIR, 'ensemble_model.pkl')
+    if not os.path.exists(encoder_path):
+        encoder_path = os.path.join(ML_DIR, 'label_encoder.pkl')
+    if not os.path.exists(metadata_path):
+        metadata_path = os.path.join(ML_DIR, 'model_metadata.json')
 
     # Fall back to old model if ensemble doesn't exist yet
     if not os.path.exists(ensemble_path):
@@ -47,24 +58,26 @@ def load_model():
     return model, encoder, metadata, False
 
 
-def predict_single(features_dict):
+def predict_single(features_dict, grain_type='rice'):
     """
     Predict spoilage for a single reading.
 
     Parameters:
         features_dict: dict with keys matching FEATURE_NAMES
+        grain_type: which grain model to use (rice, wheat, maize, sorghum, barley)
 
     Returns:
         dict with prediction, confidence, per-model breakdown
     """
-    model, encoder, metadata, is_legacy = load_model()
+    model, encoder, metadata, is_legacy = load_model(grain_type)
 
     if model is None:
         return {
-            'error': 'No model found. Please retrain the model first.',
+            'error': f'No model found for {grain_type}. Please retrain the model first.',
             'prediction': 'Unknown',
             'confidence': 0,
-            'model_type': 'none'
+            'model_type': 'none',
+            'grain_type': grain_type
         }
 
     # Build the feature array in correct order

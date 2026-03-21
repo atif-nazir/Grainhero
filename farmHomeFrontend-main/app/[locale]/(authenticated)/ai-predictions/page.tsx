@@ -332,7 +332,7 @@ export default function AIPredictionsPage() {
           </CardHeader>
           <CardContent>
             {/* Key metrics row */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
               <div className="text-center p-3 bg-white/60 rounded-xl border">
                 <div className="text-3xl font-bold">{livePrediction.risk_score}%</div>
                 <div className="text-xs text-gray-500 mt-1">Risk Score</div>
@@ -340,21 +340,6 @@ export default function AIPredictionsPage() {
               <div className="text-center p-3 bg-white/60 rounded-xl border">
                 <div className="text-3xl font-bold">{(livePrediction.confidence * 100).toFixed(1)}%</div>
                 <div className="text-xs text-gray-500 mt-1">Confidence</div>
-              </div>
-              <div className="text-center p-3 bg-white/60 rounded-xl border">
-                <div className="text-3xl font-bold">{livePrediction.days_until_spoilage}d</div>
-                <div className="text-xs text-gray-500 mt-1">Days to Spoilage</div>
-                {livePrediction.time_to_spoilage_method && (
-                  <div className="text-[10px] text-gray-400 mt-0.5 flex items-center justify-center gap-0.5">
-                    <Info className="h-2.5 w-2.5" />
-                    {livePrediction.time_to_spoilage_method === 'probability_weighted_survival'
-                      ? 'Probability-Weighted'
-                      : livePrediction.time_to_spoilage_method}
-                    {livePrediction.severity_factor !== undefined && (
-                      <span> • SF: {livePrediction.severity_factor}</span>
-                    )}
-                  </div>
-                )}
               </div>
               <div className="text-center p-3 bg-white/60 rounded-xl border">
                 <div className="text-3xl font-bold capitalize">{livePrediction.risk_level}</div>
@@ -367,25 +352,26 @@ export default function AIPredictionsPage() {
             </div>
 
             {/* Class probabilities */}
-            {livePrediction.class_probabilities && Object.keys(livePrediction.class_probabilities).length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Class Probabilities</h4>
-                <div className="flex gap-3">
-                  {Object.entries(livePrediction.class_probabilities).map(([cls, prob]) => (
-                    <div key={cls} className="flex-1 p-2 bg-white/70 rounded-lg border text-center">
-                      <div className="text-xs text-gray-500 capitalize">{cls}</div>
-                      <div className="text-lg font-bold">{(prob * 100).toFixed(1)}%</div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                        <div
-                          className={`h-1.5 rounded-full ${cls === 'Safe' ? 'bg-green-500' : cls === 'Risky' ? 'bg-orange-500' : 'bg-red-500'}`}
-                          style={{ width: `${prob * 100}%` }}
-                        />
-                      </div>
+            {livePrediction.class_probabilities && Object.keys(livePrediction.class_probabilities).length > 0 && (() => {
+              const sorted = Object.entries(livePrediction.class_probabilities).sort((a, b) => b[1] - a[1])
+              const [topClass, topProb] = sorted[0]
+              const barColor = topClass === 'Safe' ? 'bg-green-500' : topClass === 'Risky' ? 'bg-orange-500' : 'bg-red-500'
+              const textColor = topClass === 'Safe' ? 'text-green-700' : topClass === 'Risky' ? 'text-orange-700' : 'text-red-700'
+              return (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Predicted Class</h4>
+                  <div className="p-3 bg-white/70 rounded-lg border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-lg font-bold capitalize ${textColor}`}>{topClass}</span>
+                      <span className={`text-2xl font-bold ${textColor}`}>{(topProb * 100).toFixed(1)}%</span>
                     </div>
-                  ))}
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className={`h-2.5 rounded-full ${barColor} transition-all`} style={{ width: `${topProb * 100}%` }} />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Input features with data source indicators */}
             <div className="mb-4">
