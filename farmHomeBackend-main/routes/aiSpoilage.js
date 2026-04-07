@@ -8,9 +8,170 @@ const riceDataService = require('../services/riceDataService');
 const trainingDataService = require('../services/trainingDataService');
 const SpoilagePrediction = require('../models/SpoilagePrediction');
 
+// ─── AI Decision via MQTT: LEDs + Fan control based on prediction ───
+// LED mapping: LED2 (GPIO14) = Safe/Green, LED3 (GPIO12) = Risky/Yellow, LED4 (GPIO25) = Spoiled/Red
+// Fan logic: Safe = off, Risky = on (80%), Spoiled = on (100%)
+function setHealthLEDs(deviceId, classification) {
+    try {
+        const iotModule = require('./iot');
+        const mqttClient = iotModule.getMqttClient ? iotModule.getMqttClient() : null;
+        if (!mqttClient || !mqttClient.connected) return;
+
+        const cls = (classification || '').toLowerCase();
+        
+        // LED states (one on, others off)
+        const shouldVentilate = cls === 'risky' || cls === 'spoiled';
+        const fanSpeed = cls === 'spoiled' ? 100 : (cls === 'risky' ? 80 : 0);
+
+        const msg = {
+            // LED health indicators
+            led2: cls === 'safe',     // Green LED  = Safe
+            led3: cls === 'risky',    // Yellow LED = Risky
+            led4: cls === 'spoiled',  // Red LED    = Spoiled
+            // AI fan decision (Arduino reads these in mqttCallback)
+            ai_fan: shouldVentilate,
+            ai_fan_speed: fanSpeed,
+        };
+
+        const topic = `grainhero/actuators/${deviceId}/control`;
+        mqttClient.publish(topic, JSON.stringify(msg), { qos: 1 });
+        console.log(`AI → ${deviceId}: ${cls} | LED2=${msg.led2} LED3=${msg.led3} LED4=${msg.led4} | fan=${shouldVentilate} speed=${fanSpeed}`);
+    } catch (e) {
+        console.warn('AI MQTT control failed:', e.message);
+    }
+}
+
+// ─── Environment-based spoilage calculation (rule-based fallback) ───
+function calculateSpoilageFromEnvironment(inputData) {
+    const temp = inputData.temperature || 25;
+    const humidity = inputData.humidity || 60;
+    const grainMoist = inputData.grain_moisture || 14;
+    const airflow = inputData.airflow || 0;
+    const pest = inputData.pest_presence || 0;
+    const storage = inputData.storage_days || 1;
+    const dewPt = inputData.dew_point || 20;
+    const rainfall = inputData.rainfall || 0;
+
+    // ─── Classification based on environmental thresholds ───
+    let riskScore = 0;
+
+    // Temperature contribution (0-25 pts)
+    if (temp > 35) riskScore += 25;
+    else if (temp > 30) riskScore += 18;
+    else if (temp > 28) riskScore += 12;
+    else if (temp > 25) riskScore += 6;
+
+    // Humidity contribution (0-25 pts)
+    if (humidity > 85) riskScore += 25;
+    else if (humidity > 80) riskScore += 20;
+    else if (humidity > 70) riskScore += 14;
+    else if (humidity > 65) riskScore += 8;
+
+    // Grain moisture contribution (0-25 pts)
+    if (grainMoist > 20) riskScore += 25;
+    else if (grainMoist > 18) riskScore += 20;
+    else if (grainMoist > 16) riskScore += 14;
+    else if (grainMoist > 14) riskScore += 8;
+
+    // Pest presence (0-10 pts)
+    riskScore += Math.min(10, Math.round(pest * 15));
+
+    // Low airflow penalty (0-8 pts)
+    if (airflow < 0.1) riskScore += 8;
+    else if (airflow < 0.3) riskScore += 5;
+
+    // Storage duration (0-7 pts)
+    if (storage > 90) riskScore += 7;
+    else if (storage > 60) riskScore += 5;
+    else if (storage > 30) riskScore += 3;
+
+    riskScore = Math.min(100, riskScore);
+
+    // Classification
+    let prediction, confidence;
+    if (riskScore >= 70) {
+        prediction = 'Spoiled';
+        confidence = 0.6 + (riskScore - 70) / 100;
+    } else if (riskScore >= 40) {
+        prediction = 'Risky';
+        confidence = 0.55 + (riskScore - 40) / 100;
+    } else {
+        prediction = 'Safe';
+        confidence = 0.6 + (40 - riskScore) / 100;
+    }
+    confidence = Math.min(0.95, Math.max(0.5, confidence));
+
+    // Class probabilities (approximate)
+    let pSafe, pRisky, pSpoiled;
+    if (prediction === 'Safe') {
+        pSafe = confidence; pRisky = (1 - confidence) * 0.7; pSpoiled = (1 - confidence) * 0.3;
+    } else if (prediction === 'Risky') {
+        pRisky = confidence; pSafe = (1 - confidence) * 0.6; pSpoiled = (1 - confidence) * 0.4;
+    } else {
+        pSpoiled = confidence; pRisky = (1 - confidence) * 0.6; pSafe = (1 - confidence) * 0.4;
+    }
+
+    // ─── Probability-weighted time-to-spoilage (same as smartbin_predict.py) ───
+    const baseSurvival = { Safe: 720, Risky: 168, Spoiled: 24 };
+    const weightedHours = pSafe * baseSurvival.Safe + pRisky * baseSurvival.Risky + pSpoiled * baseSurvival.Spoiled;
+
+    // Severity adjustment factors (identical to Python model)
+    let severityFactor = 1.0;
+    if (temp > 35) severityFactor *= 0.35;
+    else if (temp > 30) severityFactor *= 0.55;
+    else if (temp > 28) severityFactor *= 0.75;
+
+    if (humidity > 85) severityFactor *= 0.35;
+    else if (humidity > 80) severityFactor *= 0.50;
+    else if (humidity > 70) severityFactor *= 0.70;
+
+    if (grainMoist > 20) severityFactor *= 0.40;
+    else if (grainMoist > 18) severityFactor *= 0.60;
+    else if (grainMoist > 16) severityFactor *= 0.80;
+
+    if (pest > 0) severityFactor *= 0.65;
+    if (airflow < 0.2) severityFactor *= 0.80;
+    if (storage > 90) severityFactor *= 0.70;
+    else if (storage > 60) severityFactor *= 0.85;
+
+    const timeToSpoilage = Math.max(1, Math.round(weightedHours * severityFactor));
+
+    // Key risk factors
+    const riskFactors = [];
+    if (temp > 30) riskFactors.push('high_temperature');
+    else if (temp > 28) riskFactors.push('elevated_temperature');
+    if (humidity > 80) riskFactors.push('high_humidity');
+    else if (humidity > 70) riskFactors.push('elevated_humidity');
+    if (grainMoist > 18) riskFactors.push('high_grain_moisture');
+    else if (grainMoist > 16) riskFactors.push('elevated_grain_moisture');
+    if (pest > 0) riskFactors.push('pest_presence');
+    if (airflow < 0.2) riskFactors.push('low_airflow');
+    if (storage > 60) riskFactors.push('long_storage_duration');
+    if (rainfall > 5) riskFactors.push('heavy_rainfall');
+
+    return {
+        prediction,
+        confidence: parseFloat(confidence.toFixed(4)),
+        risk_score: riskScore,
+        time_to_spoilage_hours: timeToSpoilage,
+        time_to_spoilage_method: 'environment_rule_based',
+        class_probabilities: {
+            Safe: parseFloat(pSafe.toFixed(4)),
+            Risky: parseFloat(pRisky.toFixed(4)),
+            Spoiled: parseFloat(pSpoiled.toFixed(4)),
+        },
+        severity_factor: parseFloat(severityFactor.toFixed(3)),
+        weighted_base_hours: parseFloat(weightedHours.toFixed(1)),
+        key_risk_factors: riskFactors,
+        model_used: 'SmartBin-EnvironmentRules',
+        features_used: 9,
+        timestamp: new Date().toISOString(),
+    };
+}
+
 // SmartBin-RiceSpoilage ML Model Integration
 async function callSmartBinModel(inputData) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const pythonScript = path.join(__dirname, '../ml/smartbin_predict.py');
 
         const python = spawn('python', [pythonScript], {
@@ -32,30 +193,21 @@ async function callSmartBinModel(inputData) {
             if (code === 0) {
                 try {
                     const result = JSON.parse(output);
-                    resolve(result);
+                    // If the model returned a fallback (no real prediction), use env calc
+                    if (result.model_used && result.model_used.includes('Fallback')) {
+                        console.log('ML model returned fallback, using environment calculation');
+                        resolve(calculateSpoilageFromEnvironment(inputData));
+                    } else {
+                        resolve(result);
+                    }
                 } catch (e) {
-                    console.log('ML model output (not JSON):', output);
-                    resolve({
-                        prediction: 'Safe',
-                        confidence: 0.6,
-                        risk_score: 30,
-                        time_to_spoilage_hours: 168,
-                        key_risk_factors: [],
-                        model_used: `${modelType}-fallback`,
-                        timestamp: new Date().toISOString()
-                    });
+                    console.log('ML model output parse failed, using environment calculation');
+                    resolve(calculateSpoilageFromEnvironment(inputData));
                 }
             } else {
                 console.error('ML model error:', error);
-                resolve({
-                    prediction: 'Safe',
-                    confidence: 0.6,
-                    risk_score: 30,
-                    time_to_spoilage_hours: 168,
-                    key_risk_factors: [],
-                    model_used: `${modelType}-error`,
-                    timestamp: new Date().toISOString()
-                });
+                console.log('Using environment-based calculation as fallback');
+                resolve(calculateSpoilageFromEnvironment(inputData));
             }
         });
 
@@ -685,33 +837,40 @@ router.post('/retrain', [
 // Helper function to parse training output
 function parseTrainingOutput(output) {
     try {
-        // Look for metrics in the output
+        // Try to extract the JSON metrics block from ensemble_train.py output
+        const jsonMatch = output.match(/__METRICS_JSON__\s*([\s\S]*?)\s*__END_METRICS__/);
+        if (jsonMatch) {
+            const metricsObj = JSON.parse(jsonMatch[1]);
+            // metricsObj has keys: XGBoost, RandomForest, LightGBM, Ensemble
+            const ens = metricsObj.Ensemble || {};
+            return {
+                accuracy: ens.accuracy || 0,
+                f1_score: ens.f1_score || 0,
+                precision: ens.precision || 0,
+                recall: ens.recall || 0,
+                cv_mean: ens.cv_mean || 0,
+                cv_std: ens.cv_std || 0,
+                model_type: 'ensemble',
+                per_model: {
+                    XGBoost: metricsObj.XGBoost || {},
+                    RandomForest: metricsObj.RandomForest || {},
+                    LightGBM: metricsObj.LightGBM || {},
+                },
+                timestamp: new Date().toISOString()
+            };
+        }
+        // Fallback: try old format
         const accuracyMatch = output.match(/Accuracy: ([\d.]+)/);
         const f1Match = output.match(/F1-Score: ([\d.]+)/);
-        const cvMatch = output.match(/CV Score: ([\d.]+)/);
-
         return {
-            accuracy: accuracyMatch ? parseFloat(accuracyMatch[1]) : 0.87,
-            f1_score: f1Match ? parseFloat(f1Match[1]) : 0.85,
-            cv_mean: cvMatch ? parseFloat(cvMatch[1]) : 0.86,
-            precision: 0.89,
-            recall: 0.84,
-            training_samples: 319,
-            test_samples: 80,
+            accuracy: accuracyMatch ? parseFloat(accuracyMatch[1]) : 0,
+            f1_score: f1Match ? parseFloat(f1Match[1]) : 0,
+            model_type: 'legacy',
             timestamp: new Date().toISOString()
         };
     } catch (error) {
         console.error('Error parsing training output:', error);
-        return {
-            accuracy: 0.87,
-            f1_score: 0.85,
-            cv_mean: 0.86,
-            precision: 0.89,
-            recall: 0.84,
-            training_samples: 319,
-            test_samples: 80,
-            timestamp: new Date().toISOString()
-        };
+        return { accuracy: 0, f1_score: 0, error: error.message, timestamp: new Date().toISOString() };
     }
 }
 
@@ -1257,14 +1416,14 @@ router.post('/predict-live', async (req, res) => {
         const {
             device_id = '004B12387760',
             grain_type = 'Rice',
-            storage_days = 30,
-            grain_moisture,
+            storage_days: storageDaysOverride,
+            grain_moisture: grainMoistureOverride,
             // Optional overrides for any sensor value
             temperature: tempOverride,
             humidity: humOverride,
         } = req.body;
 
-        // 1. Read live telemetry from Firebase
+        // ═══ 1. Read live telemetry from Firebase ═══
         let liveData = {};
         try {
             const firebaseService = require('../services/firebaseRealtimeService');
@@ -1274,43 +1433,208 @@ router.post('/predict-live', async (req, res) => {
             console.log('Firebase read failed, using request body values:', e.message);
         }
 
-        // Derive values from live telemetry or request body
+        // ═══ 2. Derive REAL values from live telemetry ═══
         const temp = tempOverride ?? liveData.temperature ?? liveData.temp ?? 25;
         const hum = humOverride ?? liveData.humidity ?? 60;
-        const dewPt = liveData.dew_point ?? liveData.dewPoint ?? (temp - ((100 - hum) / 5));
+        const dewPt = liveData.dew_point ?? liveData.dewPoint ?? liveData.dew ?? (() => {
+            // Magnus formula fallback
+            const a = 17.27, b = 237.7;
+            const alpha = (a * temp) / (b + temp) + Math.log(hum / 100);
+            return (b * alpha) / (a - alpha);
+        })();
         const pressure = liveData.pressure ?? 1013;
-        const light = liveData.light ?? liveData.ambient_light ?? 100;
-        const tvoc = liveData.tvoc ?? 0;
+        const tvoc = liveData.tvoc_ppb ?? liveData.tvoc ?? liveData.voc ?? 0;
 
-        // Build ML input matching smartbin_predict.py feature order
+        // ─── 4. STORAGE DAYS: Compute from active GrainBatch ───
+        let storageDays = storageDaysOverride ?? null;
+        if (storageDays === null) {
+            try {
+                const SensorDevice = require('../models/SensorDevice');
+                const GrainBatch = require('../models/GrainBatch');
+                // Find the device to get its silo reference
+                const device = await SensorDevice.findOne({ device_id: device_id }).select('silo_id');
+                if (device && device.silo_id) {
+                    // Find the active batch in this silo
+                    const batch = await GrainBatch.findOne({
+                        silo_id: device.silo_id,
+                        status: { $in: ['stored', 'active', 'monitoring'] }
+                    }).sort({ created_at: -1 }).select('intake_date harvest_date created_at');
+
+                    if (batch) {
+                        const refDate = batch.intake_date || batch.harvest_date || batch.created_at;
+                        storageDays = Math.max(0, Math.round((Date.now() - new Date(refDate)) / (1000 * 60 * 60 * 24)));
+                        console.log(`📦 Storage days computed from batch: ${storageDays} days (ref: ${refDate})`);
+                    }
+                }
+            } catch (e) {
+                console.log('Could not compute storage_days from batch:', e.message);
+            }
+            // Final fallback: if no batch found, use a reasonable default
+            if (storageDays === null) storageDays = 30;
+        }
+
+        // ─── 5. GRAIN MOISTURE: From capacitive moisture probe (soil_moisture) ───
+        // The hardware reads a capacitive probe placed inside the grain and publishes
+        // as soil_moisture.percentage (0-100 inverted: 100=dry, 0=saturated)
+        let grainMoisture = grainMoistureOverride ?? null;
+        if (grainMoisture === null) {
+            const soilMoisture = liveData.soil_moisture;
+            const moistureRaw = liveData.moisture;
+
+            if (soilMoisture && soilMoisture.percentage !== undefined) {
+                // Convert soil moisture percentage to grain moisture %
+                // Soil sensor: 100% = dry (low moisture), 0% = saturated (high moisture)
+                // Grain moisture scale: ~8-25% MC (moisture content)
+                // Mapping: soil 100% → ~8% MC, soil 0% → ~25% MC
+                grainMoisture = 25 - (soilMoisture.percentage / 100) * 17;
+                grainMoisture = Math.round(grainMoisture * 10) / 10; // 1 decimal
+                console.log(`🌾 Grain moisture from probe: ${grainMoisture}% (soil sensor: ${soilMoisture.percentage}%)`);
+            } else if (moistureRaw !== undefined) {
+                // Direct moisture reading from Firebase
+                grainMoisture = Number(moistureRaw);
+                console.log(`🌾 Grain moisture (direct): ${grainMoisture}%`);
+            } else {
+                // Estimate from ambient humidity as last resort
+                grainMoisture = hum > 80 ? 18 : hum > 70 ? 16 : hum > 60 ? 14 : 12;
+                console.log(`🌾 Grain moisture estimated from humidity: ${grainMoisture}%`);
+            }
+        }
+
+        // ─── 6. AIRFLOW: Derive from fan PWM speed telemetry ───
+        let airflow;
+        const pwmSpeed = liveData.pwm_speed ?? liveData.pwm ?? null;
+        const fanState = liveData.fanState ?? liveData.fan_state ?? null;
+
+        if (pwmSpeed !== null && pwmSpeed !== undefined) {
+            // pwm_speed is 0-100 (percentage), convert to 0.0-1.0 for ML model
+            airflow = Number(pwmSpeed) / 100.0;
+            console.log(`🌀 Airflow from fan PWM: ${airflow.toFixed(2)} (pwm_speed: ${pwmSpeed}%)`);
+        } else if (fanState !== null && fanState !== undefined) {
+            // Binary fallback: fan on = 0.6, fan off = 0.0
+            airflow = (fanState === true || fanState === 'on' || fanState === 1) ? 0.6 : 0.0;
+            console.log(`🌀 Airflow from fan state: ${airflow} (${fanState})`);
+        } else {
+            airflow = 0.0; // No fan data = no airflow
+            console.log(`🌀 Airflow: 0.0 (no fan data available)`);
+        }
+
+        // ─── 7. AMBIENT LIGHT: From LDR sensor on hardware ───
+        let ambientLight;
+        const lightSensor = liveData.light_sensor;
+        const lightDirect = liveData.light;
+
+        if (lightSensor && lightSensor.percentage !== undefined) {
+            // LDR percentage (0-100, 100=bright)
+            ambientLight = Number(lightSensor.percentage);
+            console.log(`💡 Ambient light from LDR: ${ambientLight}% (raw: ${lightSensor.raw})`);
+        } else if (lightSensor && lightSensor.raw !== undefined) {
+            // Map raw LDR (4095=dark, 100=bright) to percentage
+            ambientLight = Math.max(0, Math.min(100, Math.round(((4095 - Number(lightSensor.raw)) / 3995) * 100)));
+            console.log(`💡 Ambient light from LDR raw: ${ambientLight}%`);
+        } else if (lightDirect !== undefined) {
+            ambientLight = Number(lightDirect);
+            console.log(`💡 Ambient light (direct): ${ambientLight}`);
+        } else {
+            ambientLight = 50; // Neutral default
+            console.log(`💡 Ambient light: 50 (no sensor data)`);
+        }
+
+        // ─── 8. PEST/MOLD RISK: Multi-factor inference ───
+        // Same algorithm as Arduino computePestMoldRisk() and iot.js mqtt-ingest.
+        //
+        // References:
+        //   TVOC:  Bosch BSEC IAQ classification (BME680 Datasheet)
+        //   RH:    Magan & Aldred (2007), Int. J. Food Microbiology 119(1-2), pp.131-139
+        //   Temp:  ASABE Standard D245.6
+        //   MC:    FAO Grain Storage Techniques Ch.4; IRRI Rice Knowledge Bank
+        let pestScore = 0.0;
+
+        // Factor 1: TVOC (Bosch BSEC IAQ tiers) — weight up to 0.40
+        if (tvoc > 1000) pestScore += 0.40;
+        else if (tvoc > 500) pestScore += 0.30;
+        else if (tvoc > 250) pestScore += 0.20;
+        else if (tvoc > 100) pestScore += 0.08;
+
+        // Factor 2: Humidity (Magan & Aldred 2007: aw ≥ 0.65-0.70) — weight up to 0.25
+        if (hum > 80) pestScore += 0.25;
+        else if (hum > 70) pestScore += 0.18;
+        else if (hum > 65) pestScore += 0.10;
+
+        // Factor 3: Temperature (ASABE: optimal 25-35°C for storage fungi) — weight up to 0.20
+        if (temp > 35) pestScore += 0.18;
+        else if (temp > 30) pestScore += 0.20;
+        else if (temp > 25) pestScore += 0.12;
+        else if (temp > 20) pestScore += 0.05;
+
+        // Factor 4: Grain Moisture (FAO/IRRI: safe ≤13%, risk 13-14%, critical ≥15%) — up to 0.15
+        if (grainMoisture > 18) pestScore += 0.15;
+        else if (grainMoisture > 15) pestScore += 0.12;
+        else if (grainMoisture > 14) pestScore += 0.08;
+        else if (grainMoisture > 13) pestScore += 0.03;
+
+        pestScore = Math.min(1.0, Math.max(0.0, pestScore));
+        const pestLabel = pestScore >= 0.6 ? 'High' : pestScore >= 0.35 ? 'Medium' : pestScore >= 0.15 ? 'Low' : 'None';
+        // For the ML model: pass the composite score (0.0-1.0) as a continuous feature
+        const pestPresence = Math.round(pestScore * 10) / 10;
+        console.log(`🐛 Pest/mold risk: ${pestLabel} (score=${pestScore.toFixed(2)}, ML input=${pestPresence}) — TVOC=${tvoc}, RH=${hum}%, T=${temp}°C, MC=${grainMoisture}%`);
+
+        // ─── 9. RAINFALL: Live reading from OpenWeather API ───
+        let rainfall = 0;
+        try {
+            const weatherService = require('../services/weatherService');
+            // Default coordinates: Lahore, Pakistan (configurable via env)
+            const lat = parseFloat(process.env.SILO_LATITUDE || '31.5204');
+            const lon = parseFloat(process.env.SILO_LONGITUDE || '74.3587');
+
+            if (weatherService.apiKey) {
+                const weather = await weatherService.getCurrentWeather(lat, lon);
+                rainfall = weather.precipitation || 0; // mm in last 1h
+                console.log(`🌧️ Rainfall from OpenWeather: ${rainfall} mm`);
+            } else {
+                console.log(`🌧️ Rainfall: 0 mm (OPENWEATHER_API_KEY not set)`);
+            }
+        } catch (e) {
+            console.log(`🌧️ Rainfall fetch failed: ${e.message}, defaulting to 0`);
+        }
+
+        // ═══ 3. Build ML input matching smartbin_predict.py feature order ═══
         const mlInput = {
             temperature: temp,
             humidity: hum,
-            storage_days: storage_days,
-            airflow: liveData.airflow ?? 1.0,
+            storage_days: storageDays,
+            airflow: airflow,
             dew_point: dewPt,
-            ambient_light: light,
-            pest_presence: liveData.pest_presence ?? 0,
-            grain_moisture: grain_moisture ?? (hum > 70 ? 16 : 14),
-            rainfall: liveData.rainfall ?? 0,
+            ambient_light: ambientLight,
+            pest_presence: pestPresence,
+            grain_moisture: grainMoisture,
+            rainfall: rainfall,
         };
 
-        // 2. Call ML model
+        // Log data sources for transparency
+        console.log(`🧠 ML Input Features:`, JSON.stringify(mlInput, null, 2));
+
+        // ═══ 4. Call ML model ═══
         const mlResult = await callSmartBinModel(mlInput);
 
-        // 3. Generate recommendations based on prediction
+        // ═══ 5. Generate recommendations based on prediction + real data ═══
         const recommendations = [];
         if (temp > 30) recommendations.push('Activate ventilation fans to reduce temperature');
-        if (temp > 25) recommendations.push('Monitor temperature closely — approaching risk zone');
+        if (temp > 25 && temp <= 30) recommendations.push('Monitor temperature closely — approaching risk zone');
         if (hum > 80) recommendations.push('URGENT: Humidity critical — activate dehumidification immediately');
-        if (hum > 70) recommendations.push('Increase airflow to reduce humidity levels');
-        if ((grain_moisture ?? 14) > 18) recommendations.push('Grain moisture too high — initiate drying cycle');
-        if (tvoc > 500) recommendations.push('Elevated VOC levels detected — inspect for mold/decay');
-        if (mlResult.risk_score >= 80) recommendations.push('CRITICAL: Immediate intervention required');
-        if (mlResult.risk_score >= 60) recommendations.push('Schedule grain quality inspection within 24 hours');
+        if (hum > 70 && hum <= 80) recommendations.push('Increase airflow to reduce humidity levels');
+        if (grainMoisture > 18) recommendations.push('Grain moisture too high — initiate drying cycle');
+        else if (grainMoisture > 16) recommendations.push('Grain moisture elevated — monitor closely');
+        if (tvoc > 600) recommendations.push('URGENT: High VOC levels — inspect for mold/decay/pest activity');
+        else if (tvoc > 400) recommendations.push('Elevated VOC levels detected — schedule inspection');
+        if (airflow < 0.2 && hum > 65) recommendations.push('Low airflow with high humidity — activate ventilation');
+        if (rainfall > 5) recommendations.push('Heavy rainfall detected — check for water ingress and seal storage');
+        else if (rainfall > 0) recommendations.push('Rainfall detected — monitor storage integrity');
+        if (storageDays > 60) recommendations.push(`Grain stored ${storageDays} days — schedule quality check`);
+        if (mlResult.risk_score >= 80) recommendations.push('CRITICAL: Immediate intervention required — high spoilage probability');
+        if (mlResult.risk_score >= 60 && mlResult.risk_score < 80) recommendations.push('Schedule grain quality inspection within 24 hours');
         if (recommendations.length === 0) recommendations.push('All parameters within safe range — continue routine monitoring');
 
-        // 4. Build response
+        // ═══ 6. Build response ═══
         const response = {
             prediction_id: `LIVE-${Date.now()}`,
             device_id,
@@ -1324,10 +1648,25 @@ router.post('/predict-live', async (req, res) => {
                     mlResult.risk_score > 40 ? 'medium' : 'low',
             time_to_spoilage_hours: mlResult.time_to_spoilage_hours,
             days_until_spoilage: Math.round(mlResult.time_to_spoilage_hours / 24),
+            time_to_spoilage_method: mlResult.time_to_spoilage_method || 'probability_weighted_survival',
+            class_probabilities: mlResult.class_probabilities || {},
+            severity_factor: mlResult.severity_factor,
             key_risk_factors: mlResult.key_risk_factors,
             model_used: mlResult.model_used,
             // Input features used
             input_features: mlInput,
+            // Data source transparency
+            data_sources: {
+                temperature: tempOverride ? 'manual_override' : (liveData.temperature !== undefined ? 'firebase_bme680' : 'default'),
+                humidity: humOverride ? 'manual_override' : (liveData.humidity !== undefined ? 'firebase_bme680' : 'default'),
+                storage_days: storageDaysOverride ? 'manual_override' : (storageDays !== 30 ? 'grain_batch_db' : 'default_30d'),
+                grain_moisture: grainMoistureOverride ? 'manual_override' : ((liveData.soil_moisture || liveData.moisture !== undefined) ? 'capacitive_probe' : 'humidity_estimate'),
+                airflow: pwmSpeed !== null ? 'fan_pwm_telemetry' : (fanState !== null ? 'fan_state_binary' : 'default_off'),
+                ambient_light: (lightSensor || lightDirect !== undefined) ? 'ldr_sensor' : 'default',
+                pest_presence: (tvoc > 0 || hum > 65 || temp > 25 || grainMoisture > 13) ? 'multi_factor_inference' : 'default_none',
+                rainfall: rainfall > 0 ? 'openweather_api' : 'openweather_api_zero',
+                dew_point: (liveData.dew_point || liveData.dewPoint) ? 'firebase_sensor' : 'magnus_formula',
+            },
             // Live sensor readings used
             live_sensor_data: {
                 temperature: temp,
@@ -1335,15 +1674,18 @@ router.post('/predict-live', async (req, res) => {
                 dew_point: dewPt,
                 tvoc,
                 pressure,
-                light,
+                light: ambientLight,
+                pwm_speed: pwmSpeed,
+                soil_moisture_pct: liveData.soil_moisture?.percentage,
+                rainfall,
             },
             // Actionable output
             recommendations,
             grain_type,
-            storage_days,
+            storage_days: storageDays,
         };
 
-        console.log(`🧠 Live ML prediction: ${mlResult.prediction} (risk=${mlResult.risk_score}%, conf=${(mlResult.confidence * 100).toFixed(1)}%) for device ${device_id}`);
+        console.log(`🧠 Live ML prediction: ${mlResult.prediction} (risk=${mlResult.risk_score}%, conf=${(mlResult.confidence * 100).toFixed(1)}%, spoilage_in=${Math.round(mlResult.time_to_spoilage_hours / 24)}d, method=${mlResult.time_to_spoilage_method || 'weighted'}) for device ${device_id}`);
         res.json(response);
 
     } catch (error) {
@@ -1377,17 +1719,63 @@ router.get('/predictions-public', async (req, res) => {
 
                 const temp = liveData.temperature ?? liveData.temp ?? 25;
                 const hum = liveData.humidity ?? 60;
-                const dewPt = liveData.dew_point ?? liveData.dewPoint ?? (temp - ((100 - hum) / 5));
+                const dewPt = liveData.dew_point ?? liveData.dewPoint ?? (() => {
+                    const a = 17.27, b = 237.7;
+                    const alpha = (a * temp) / (b + temp) + Math.log(hum / 100);
+                    return (b * alpha) / (a - alpha);
+                })();
+                const tvoc = liveData.tvoc_ppb ?? liveData.tvoc ?? liveData.voc ?? 0;
+
+                // Grain moisture from capacitive probe
+                let gm = 14;
+                const sm = liveData.soil_moisture;
+                if (sm && sm.percentage !== undefined) {
+                    gm = Math.round((25 - (sm.percentage / 100) * 17) * 10) / 10;
+                } else if (liveData.moisture !== undefined) {
+                    gm = Number(liveData.moisture);
+                } else {
+                    gm = hum > 80 ? 18 : hum > 70 ? 16 : hum > 60 ? 14 : 12;
+                }
+
+                // Airflow from fan PWM
+                const pwm = liveData.pwm_speed ?? liveData.pwm ?? null;
+                const af = pwm !== null ? Number(pwm) / 100.0 :
+                    ((liveData.fanState === true || liveData.fanState === 'on') ? 0.6 : 0.0);
+
+                // Ambient light from LDR
+                const ls = liveData.light_sensor;
+                const al = ls?.percentage !== undefined ? Number(ls.percentage) :
+                    (liveData.light !== undefined ? Number(liveData.light) : 50);
+
+                // Pest/mold risk: multi-factor inference (same as predict-live)
+                let ppScore = 0.0;
+                if (tvoc > 1000) ppScore += 0.40;
+                else if (tvoc > 500) ppScore += 0.30;
+                else if (tvoc > 250) ppScore += 0.20;
+                else if (tvoc > 100) ppScore += 0.08;
+                if (hum > 80) ppScore += 0.25;
+                else if (hum > 70) ppScore += 0.18;
+                else if (hum > 65) ppScore += 0.10;
+                if (temp > 35) ppScore += 0.18;
+                else if (temp > 30) ppScore += 0.20;
+                else if (temp > 25) ppScore += 0.12;
+                else if (temp > 20) ppScore += 0.05;
+                if (gm > 18) ppScore += 0.15;
+                else if (gm > 15) ppScore += 0.12;
+                else if (gm > 14) ppScore += 0.08;
+                else if (gm > 13) ppScore += 0.03;
+                ppScore = Math.min(1.0, Math.max(0.0, ppScore));
+                const pp = Math.round(ppScore * 10) / 10;
 
                 const mlInput = {
                     temperature: temp,
                     humidity: hum,
                     storage_days: 30,
-                    airflow: liveData.airflow ?? 1.0,
+                    airflow: af,
                     dew_point: dewPt,
-                    ambient_light: liveData.light ?? 100,
-                    pest_presence: 0,
-                    grain_moisture: hum > 70 ? 16 : 14,
+                    ambient_light: al,
+                    pest_presence: pp,
+                    grain_moisture: gm,
                     rainfall: liveData.rainfall ?? 0,
                 };
 
@@ -1404,14 +1792,19 @@ router.get('/predictions-public', async (req, res) => {
                             mlResult.risk_score > 40 ? 'medium' : 'low',
                     time_to_spoilage_hours: mlResult.time_to_spoilage_hours,
                     days_until_spoilage: Math.round(mlResult.time_to_spoilage_hours / 24),
+                    time_to_spoilage_method: mlResult.time_to_spoilage_method || 'probability_weighted_survival',
+                    class_probabilities: mlResult.class_probabilities || {},
                     key_risk_factors: mlResult.key_risk_factors,
                     model_used: mlResult.model_used,
                     input_features: mlInput,
-                    live_sensor_data: { temperature: temp, humidity: hum, dew_point: dewPt },
+                    live_sensor_data: { temperature: temp, humidity: hum, dew_point: dewPt, tvoc, pwm_speed: pwm, light: al },
                     grain_type: 'Rice',
                     timestamp: new Date().toISOString(),
                     is_live: true,
                 };
+
+                // Update LEDs based on prediction classification
+                setHealthLEDs(device_id, mlResult.prediction);
             } catch (e) {
                 console.error('Live prediction generation failed:', e.message);
             }
@@ -1435,35 +1828,111 @@ router.get('/predictions-public', async (req, res) => {
     }
 });
 
-// POST /ai-spoilage/retrain-public - Retrain model (no auth for testing)
+// POST /ai-spoilage/retrain-public - Retrain ensemble model (no auth for testing)
 router.post('/retrain-public', async (req, res) => {
     try {
-        console.log('🚀 Starting public model retraining...');
-        const pythonScript = path.join(__dirname, '../ml/enhanced_train.py');
-        const python = spawn('python', [pythonScript], { stdio: ['pipe', 'pipe', 'pipe'] });
+        const grainType = (req.body.grain_type || req.query.grain || 'rice').toLowerCase();
+        const validGrains = ['rice', 'wheat', 'maize', 'sorghum', 'barley'];
+        if (!validGrains.includes(grainType)) {
+            return res.status(400).json({ error: `Invalid grain type: ${grainType}. Valid: ${validGrains.join(', ')}` });
+        }
+
+        console.log(`Starting ensemble retraining for ${grainType.toUpperCase()}...`);
+        const pythonScript = path.join(__dirname, '../ml/ensemble_train.py');
+        const python = spawn('python', [pythonScript, grainType], { stdio: ['pipe', 'pipe', 'pipe'] });
         let output = '';
         let error = '';
-        python.stdout.on('data', (d) => { output += d.toString(); });
+        python.stdout.on('data', (d) => { output += d.toString(); console.log('[Ensemble] ' + d.toString().trim()); });
         python.stderr.on('data', (d) => { error += d.toString(); });
         python.on('close', (code) => {
             if (code === 0) {
                 const metrics = parseTrainingOutput(output);
-                console.log('✅ Public model retrain completed');
+                console.log(`Ensemble retrain completed for ${grainType}:`, JSON.stringify({
+                    ensemble_accuracy: metrics.accuracy,
+                    ensemble_f1: metrics.f1_score,
+                }));
                 res.json({
-                    message: 'Model retrained successfully',
+                    message: `Ensemble model retrained for ${grainType} (XGBoost + RandomForest + LightGBM)`,
                     status: 'completed',
+                    model_type: 'ensemble',
+                    grain_type: grainType,
                     performance_metrics: metrics,
                     completion_time: new Date().toISOString(),
                 });
             } else {
-                res.status(500).json({ error: 'Retrain failed', details: error || output });
+                console.error(`Ensemble retrain failed for ${grainType}:`, error || output);
+                res.status(500).json({ error: 'Ensemble retrain failed', grain_type: grainType, details: error || output });
             }
         });
-        setTimeout(() => { python.kill(); }, 300000);
+        setTimeout(() => { python.kill(); }, 600000); // 10 min timeout
     } catch (error) {
         console.error('Public retrain error:', error);
         res.status(500).json({ error: 'Retrain failed', details: error.message });
     }
 });
 
+// GET /ai-spoilage/model-info-public - Get current model info and metrics
+router.get('/model-info-public', async (req, res) => {
+    try {
+        const grainType = (req.query.grain || 'rice').toLowerCase();
+        const fs = require('fs');
+
+        // Try grain-specific metadata first, fall back to default
+        let metadataPath = path.join(__dirname, `../ml/${grainType}_model_metadata.json`);
+        if (!fs.existsSync(metadataPath)) {
+            metadataPath = path.join(__dirname, '../ml/model_metadata.json');
+        }
+
+        const datasetPath = path.join(__dirname, `../ml/${grainType}_spoilage_10k.csv`);
+
+        let metadata = null;
+        if (fs.existsSync(metadataPath)) {
+            metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+        }
+
+        // Count dataset rows
+        let datasetRows = 0;
+        if (fs.existsSync(datasetPath)) {
+            const content = fs.readFileSync(datasetPath, 'utf8');
+            datasetRows = content.split('\n').filter(l => l.trim()).length - 1;
+        }
+
+        // List all trained grains
+        const trainedGrains = ['rice', 'wheat', 'maize', 'sorghum', 'barley'].filter(g =>
+            fs.existsSync(path.join(__dirname, `../ml/${g}_model_metadata.json`))
+        );
+
+        if (metadata) {
+            res.json({
+                model_type: metadata.model_type || 'unknown',
+                version: metadata.version || '1.0',
+                grain_type: metadata.grain_type || grainType,
+                metrics: metadata.metrics || {},
+                feature_importance: metadata.feature_importance || [],
+                label_classes: metadata.label_classes || ['Safe', 'Risky', 'Spoiled'],
+                training_date: metadata.training_date || null,
+                dataset_rows: metadata.dataset_rows || datasetRows,
+                weka_comparison: metadata.weka_comparison || {},
+                trained_grains: trainedGrains,
+                available_grains: ['rice', 'wheat', 'maize', 'sorghum', 'barley'],
+            });
+        } else {
+            res.json({
+                model_type: 'not_trained',
+                version: '0',
+                grain_type: grainType,
+                metrics: {},
+                dataset_rows: datasetRows,
+                trained_grains: trainedGrains,
+                available_grains: ['rice', 'wheat', 'maize', 'sorghum', 'barley'],
+                message: `No model metadata found for ${grainType}. Please retrain the model.`,
+            });
+        }
+    } catch (error) {
+        console.error('Model info error:', error);
+        res.status(500).json({ error: 'Failed to get model info', details: error.message });
+    }
+});
+
 module.exports = router;
+

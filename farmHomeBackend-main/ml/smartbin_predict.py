@@ -1,151 +1,179 @@
+"""
+GrainHero Ensemble Predictor
+=============================
+Loads the trained ensemble model and makes predictions.
+Returns per-model confidence breakdown + ensemble prediction.
+"""
 import joblib
 import numpy as np
 import json
-import sys
 import os
-from datetime import datetime
+import sys
+
+ML_DIR = os.path.dirname(os.path.abspath(__file__))
+
+FEATURE_NAMES = [
+    'Temperature', 'Humidity', 'Storage_Days', 'Airflow',
+    'Dew_Point', 'Ambient_Light', 'Pest_Presence',
+    'Grain_Moisture', 'Rainfall'
+]
 
 
-def predict_spoilage(input_data):
-    """SmartBin Rice Spoilage Prediction"""
-    try:
-        # Load the SmartBin model
-        model_path = os.path.join(os.path.dirname(__file__), 'smartbin_model.pkl')
-        model = joblib.load(model_path)
-        
-        # Prepare features in the correct order based on the original dataset
-        # Features: Temperature, Humidity, Storage_Days, Airflow, Dew_Point, Ambient_Light, Pest_Presence, Grain_Moisture, Rainfall
-        features = [
-            input_data.get('temperature', 25.0),
-            input_data.get('humidity', 60.0),
-            input_data.get('storage_days', 1),
-            input_data.get('airflow', 1.0),
-            input_data.get('dew_point', 20.0),
-            input_data.get('ambient_light', 100.0),
-            input_data.get('pest_presence', 0),
-            input_data.get('grain_moisture', 15.0),
-            input_data.get('rainfall', 0.0)
-        ]
-        
-        # Reshape for prediction
-        feature_array = np.array(features).reshape(1, -1)
-        
-        feature_array[0][0] = max(0, min(feature_array[0][0], 60))    # temperature (°C)
-        feature_array[0][1] = max(0, min(feature_array[0][1], 100))   # humidity (%)
-        feature_array[0][7] = max(5, min(feature_array[0][7], 30))    # grain moisture (%)
-        feature_array[0][8] = max(0, min(feature_array[0][8], 300))   # rainfall (mm)
-            
-        
-        # ================= SAFETY GUARDRAILS =================
-# Feature index mapping:
-# 0: temperature, 1: humidity, 2: storage_days,
-# 3: airflow, 4: dew_point, 5: ambient_light,
-# 6: pest_presence, 7: grain_moisture, 8: rainfall
+def load_model(grain_type='rice'):
+    """Load ensemble model and label encoder for the given grain type."""
+    grain = grain_type.lower()
+    
+    # Try grain-specific model first, then fall back to default
+    ensemble_path = os.path.join(ML_DIR, f'{grain}_ensemble_model.pkl')
+    encoder_path = os.path.join(ML_DIR, f'{grain}_label_encoder.pkl')
+    metadata_path = os.path.join(ML_DIR, f'{grain}_model_metadata.json')
 
-  
-# =====================================================
+    # Fallback to non-prefixed files
+    if not os.path.exists(ensemble_path):
+        ensemble_path = os.path.join(ML_DIR, 'ensemble_model.pkl')
+    if not os.path.exists(encoder_path):
+        encoder_path = os.path.join(ML_DIR, 'label_encoder.pkl')
+    if not os.path.exists(metadata_path):
+        metadata_path = os.path.join(ML_DIR, 'model_metadata.json')
 
-        # Get prediction
-        prediction = model.predict(feature_array)[0]
-        
-        # Get prediction probability
-        probabilities = model.predict_proba(feature_array)[0]
-        confidence = max(probabilities)
-        
-        # Map prediction to labels
-        label_map = {0: 'Safe', 1: 'Risky', 2: 'Spoiled'}
-        prediction_label = label_map.get(prediction, 'Safe')
-        
-        # Calculate risk score
-        risk_score = int(probabilities[prediction] * 100)
-        
-        # Calculate time to spoilage
-        base_times = {0: 720, 1: 168, 2: 24}  # Safe: 30 days, Risky: 7 days, Spoiled: 1 day
-        base_time = base_times.get(prediction, 720)
-        
-        # Adjust based on environmental factors
-        temp = input_data.get('temperature', 25)
-        humidity = input_data.get('humidity', 60)
-        
-        temp_factor = 1.0
-        if temp > 30:
-            temp_factor = 0.5
-        elif temp > 25:
-            temp_factor = 0.7
-        
-        humidity_factor = 1.0
-        if humidity > 80:
-            humidity_factor = 0.4
-        elif humidity > 70:
-            humidity_factor = 0.6
-        
-        time_to_spoilage = int(base_time * temp_factor * humidity_factor)
-        
-        # Identify key risk factors
-        risk_factors = []
-        if temp > 30:
-            risk_factors.append('high_temperature')
-        if humidity > 80:
-            risk_factors.append('high_humidity')
-        if input_data.get('grain_moisture', 15) > 18:
-            risk_factors.append('high_moisture')
-        if input_data.get('pest_presence', 0) > 0:
-            risk_factors.append('pest_presence')
-        
+    # Fall back to old model if ensemble doesn't exist yet
+    if not os.path.exists(ensemble_path):
+        fallback_path = os.path.join(ML_DIR, 'smartbin_model.pkl')
+        if os.path.exists(fallback_path):
+            model = joblib.load(fallback_path)
+            encoder = None
+            if os.path.exists(encoder_path):
+                encoder = joblib.load(encoder_path)
+            return model, encoder, None, True  # True = legacy mode
+        return None, None, None, False
+
+    model = joblib.load(ensemble_path)
+    encoder = joblib.load(encoder_path) if os.path.exists(encoder_path) else None
+
+    metadata = None
+    if os.path.exists(metadata_path):
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+
+    return model, encoder, metadata, False
+
+
+def predict_single(features_dict, grain_type='rice'):
+    """
+    Predict spoilage for a single reading.
+
+    Parameters:
+        features_dict: dict with keys matching FEATURE_NAMES
+        grain_type: which grain model to use (rice, wheat, maize, sorghum, barley)
+
+    Returns:
+        dict with prediction, confidence, per-model breakdown
+    """
+    model, encoder, metadata, is_legacy = load_model(grain_type)
+
+    if model is None:
         return {
-            'prediction': prediction_label,
-            'confidence': float(confidence),
-            'risk_score': risk_score,
-            'time_to_spoilage_hours': time_to_spoilage,
-            'key_risk_factors': risk_factors,
-            'model_used': 'SmartBin-RiceSpoilage',
-            'timestamp': datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        # Fallback prediction
-        return {
-            'prediction': 'Safe',
-            'confidence': 0.6,
-            'risk_score': 30,
-            'time_to_spoilage_hours': 168,
-            'key_risk_factors': [],
-            'model_used': 'SmartBin-Fallback',
-            'timestamp': datetime.now().isoformat(),
-            'error': str(e)
+            'error': f'No model found for {grain_type}. Please retrain the model first.',
+            'prediction': 'Unknown',
+            'confidence': 0,
+            'model_type': 'none',
+            'grain_type': grain_type
         }
 
-if __name__ == "__main__":
-    try:
-        input_json = sys.stdin.read()
-        if input_json.strip():
-            input_data = json.loads(input_json)
-            result = predict_spoilage(input_data)
-            print(json.dumps(result))
-        else:
-            # Test prediction
-            test_data = {
-                'temperature': 28,
-                'humidity': 75,
-                'grain_moisture': 16,
-                'dew_point': 22,
-                'storage_days': 20,
-                'airflow': 1.2,
-                'ambient_light': 150,
-                'pest_presence': 0,
-                'rainfall': 0.5
+    # Build the feature array in correct order
+    feature_values = []
+    for f in FEATURE_NAMES:
+        val = features_dict.get(f, 0)
+        feature_values.append(float(val) if val is not None else 0.0)
+
+    X = np.array([feature_values])
+
+    if is_legacy:
+        # Old single-model path
+        pred = model.predict(X)
+        pred_label = pred[0] if isinstance(pred[0], str) else str(pred[0])
+        try:
+            proba = model.predict_proba(X)[0]
+            confidence = float(np.max(proba))
+        except:
+            confidence = 0.0
+
+        return {
+            'prediction': pred_label,
+            'confidence': round(confidence * 100, 1),
+            'model_type': 'legacy_single',
+            'ensemble_breakdown': None,
+        }
+
+    # --- Ensemble prediction ---
+    pred = model.predict(X)[0]
+    pred_label = encoder.inverse_transform([pred])[0] if encoder else str(pred)
+
+    # Get ensemble probabilities
+    proba = model.predict_proba(X)[0]
+    class_labels = list(encoder.classes_) if encoder else ['Safe', 'Risky', 'Spoiled']
+    confidence = float(np.max(proba))
+
+    # Get per-model breakdown
+    model_breakdown = []
+    model_names = ['XGBoost', 'RandomForest', 'LightGBM']
+    for i, (name, estimator) in enumerate(model.estimators_):
+        est_proba = estimator.predict_proba(X)[0]
+        est_pred_idx = int(np.argmax(est_proba))
+        est_pred_label = encoder.inverse_transform([est_pred_idx])[0] if encoder else str(est_pred_idx)
+        model_breakdown.append({
+            'model': model_names[i] if i < len(model_names) else name,
+            'prediction': est_pred_label,
+            'confidence': round(float(np.max(est_proba)) * 100, 1),
+            'probabilities': {
+                class_labels[j]: round(float(est_proba[j]) * 100, 1)
+                for j in range(len(class_labels))
             }
-            result = predict_spoilage(test_data)
-            print(json.dumps(result))
-    except Exception as e:
-        fallback_result = {
-            'prediction': 'Safe',
-            'confidence': 0.6,
-            'risk_score': 30,
-            'time_to_spoilage_hours': 168,
-            'key_risk_factors': [],
-            'model_used': 'SmartBin-Exception',
-            'timestamp': datetime.now().isoformat(),
-            'error': str(e)
-        }
-        print(json.dumps(fallback_result))
+        })
+
+    return {
+        'prediction': pred_label,
+        'confidence': round(confidence * 100, 1),
+        'model_type': 'ensemble',
+        'probabilities': {
+            class_labels[j]: round(float(proba[j]) * 100, 1) for j in range(len(class_labels))
+        },
+        'ensemble_breakdown': model_breakdown,
+    }
+
+
+def get_model_info():
+    """Get current model metadata and metrics."""
+    metadata_path = os.path.join(ML_DIR, 'model_metadata.json')
+    if os.path.exists(metadata_path):
+        with open(metadata_path) as f:
+            return json.load(f)
+    return None
+
+
+if __name__ == '__main__':
+    # Quick test
+    test_reading = {
+        'Temperature': 32.5,
+        'Humidity': 78.0,
+        'Storage_Days': 45,
+        'Airflow': 0.6,
+        'Dew_Point': 18.2,
+        'Ambient_Light': 120,
+        'Pest_Presence': 0,
+        'Grain_Moisture': 15.5,
+        'Rainfall': 1.2,
+    }
+
+    result = predict_single(test_reading)
+    print("\n🔮 Prediction Result:")
+    print(json.dumps(result, indent=2))
+
+    info = get_model_info()
+    if info:
+        print(f"\n📊 Model Info:")
+        print(f"   Type: {info.get('model_type')}")
+        print(f"   Version: {info.get('version')}")
+        if 'metrics' in info:
+            for name, m in info['metrics'].items():
+                print(f"   {name}: Acc={m['accuracy']}, F1={m['f1_score']}")

@@ -85,7 +85,11 @@ try {
 
     console.log(`📡 Connecting to MQTT broker at: ${brokerUrl}`);
 
-    const opts = { reconnectPeriod: 5000 };
+    const opts = {
+      reconnectPeriod: 10000,   // retry every 10s
+      connectTimeout: 8000,     // give up connecting after 8s (don't block boot)
+      keepalive: 30,
+    };
     if (process.env.MQTT_USERNAME && process.env.MQTT_PASSWORD) {
       opts.username = process.env.MQTT_USERNAME;
       opts.password = process.env.MQTT_PASSWORD;
@@ -94,14 +98,26 @@ try {
 
     mqttClient.on('connect', () => {
       console.log('✅ Connected to MQTT broker');
-      // Subscribe to sensor data topics
       mqttClient.subscribe('grainhero/sensors/+/readings');
       mqttClient.subscribe('grainhero/sensors/+/status');
       mqttClient.subscribe('grainhero/actuators/+/feedback');
     });
 
     mqttClient.on('error', (error) => {
-      console.error('MQTT connection error:', error);
+      // Log but NEVER crash — Firebase is the primary data path
+      console.warn('⚠️  MQTT error (non-fatal):', error.code || error.message);
+    });
+
+    mqttClient.on('close', () => {
+      console.warn('⚠️  MQTT connection closed — will retry in 10s');
+    });
+
+    mqttClient.on('offline', () => {
+      console.warn('⚠️  MQTT offline — broker unreachable, continuing with Firebase');
+    });
+
+    mqttClient.on('reconnect', () => {
+      console.log('🔄 MQTT reconnecting...');
     });
   }
 } catch (error) {
@@ -210,6 +226,23 @@ router.post('/devices/:id/control', [
 
     if (!device) {
       // Allow direct control by device_id even if not in DB
+      // But FIRST check safety guardrails via Firebase telemetry
+      try {
+        const firebaseService = require('../services/firebaseRealtimeService');
+        const fbData = await firebaseService.readTelemetry(id);
+        if (fbData) {
+          const t = fbData.temperature ?? fbData.temp ?? 0;
+          const tv = fbData.tvoc_ppb ?? fbData.tvoc ?? 0;
+          if (t > 60 || tv > 1000) {
+            return res.status(200).json({
+              status: 'blocked',
+              reason: 'unsafe_conditions',
+              details: `Safety guardrail: temp=${t}°C, tvoc=${tv}ppb`
+            });
+          }
+        }
+      } catch { /* proceed if telemetry unavailable */ }
+
       const controlTopic = `grainhero/actuators/${id}/control`;
       const pct = typeof value === 'number' ? Math.max(0, Math.min(100, Number(value))) : (action === 'turn_on' ? 80 : 0);
       const pwm255 = Math.round(pct / 100 * 255);
@@ -225,7 +258,7 @@ router.post('/devices/:id/control', [
         mqttClient.publish(controlTopic, JSON.stringify(controlMessage), { qos: 1 });
         console.log(`📡 MQTT request sent to ${controlTopic}`);
       }
-      // Always mirror control intent to Firebase so ESP32 polling can act
+      // Mirror control intent to Firebase for telemetry tracking
       try {
         await firebaseRealtimeService.writeControlState(id, {
           human_requested_fan: action === 'turn_on' ? true : (action === 'turn_off' ? false : undefined),
@@ -536,7 +569,7 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
       const payload = snapshot.val() || {};
       const temperature = payload.temperature !== undefined ? Number(payload.temperature) : 0;
       const humidity = payload.humidity !== undefined ? Number(payload.humidity) : 0;
-      const tvocRaw = payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0);
+      const tvocRaw = payload.tvoc_ppb !== undefined ? Number(payload.tvoc_ppb) : (payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0));
       const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
       const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
       const alarmState = payload.alarmState === 'on' || payload.alarm_state === 'on' ? 'on' : 'off';
@@ -896,7 +929,79 @@ router.post('/emergency-shutdown', [
   }
 });
 
+// GET /iot/silos/:deviceId/history-public — historical readings from MongoDB for charting
+router.get('/silos/:deviceId/history-public', async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    let hours = Math.min(168, Math.max(1, parseInt(req.query.hours) || 6));
+    const limit = Math.min(2000, Math.max(10, parseInt(req.query.limit) || 500));
+    let since = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    // Find device by device_id string
+    const device = await SensorDevice.findOne({ device_id: deviceId });
+    const deviceObjectId = device ? device._id : null;
+
+    // Build query — use specific device if found, else search all
+    const buildQuery = (devId, fromDate) => {
+      const q = { deleted_at: null };
+      if (devId) q.device_id = devId;
+      if (fromDate) q.timestamp = { $gte: fromDate };
+      return q;
+    };
+
+    let readings = await SensorReading.find(buildQuery(deviceObjectId, since))
+      .sort({ timestamp: -1 }).limit(limit)
+      .select('timestamp temperature humidity voc moisture light pressure derived_metrics actuation_state metadata')
+      .lean();
+
+    // Fallback 1: if specific device has no data in window, try all time for that device
+    if (readings.length === 0 && deviceObjectId) {
+      readings = await SensorReading.find(buildQuery(deviceObjectId, null))
+        .sort({ timestamp: -1 }).limit(limit)
+        .select('timestamp temperature humidity voc moisture light pressure derived_metrics actuation_state metadata')
+        .lean();
+      if (readings.length > 0) {
+        since = readings[readings.length - 1].timestamp;
+        hours = Math.round((Date.now() - since) / 3600000);
+      }
+    }
+
+    // Fallback 2: query ANY device for any time window
+    if (readings.length === 0) {
+      readings = await SensorReading.find(buildQuery(null, null))
+        .sort({ timestamp: -1 }).limit(limit)
+        .select('timestamp temperature humidity voc moisture light pressure derived_metrics actuation_state metadata')
+        .lean();
+    }
+
+    readings.reverse();
+
+    const points = readings.map(r => ({
+      timestamp: r.timestamp,
+      time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      temperature: r.temperature?.value ?? null,
+      humidity: r.humidity?.value ?? null,
+      tvoc: r.voc?.value ?? null,
+      moisture: r.moisture?.value ?? null,
+      light: r.light?.value ?? null,
+      pressure: r.pressure?.value ?? null,
+      dewPoint: r.derived_metrics?.dew_point ?? null,
+      pestScore: r.derived_metrics?.pest_presence_score ?? null,
+      airflow: r.derived_metrics?.airflow ?? null,
+      fanOn: r.actuation_state?.fan_state === 1 ? 1 : 0,
+      pwm: r.actuation_state?.fan_duty_cycle ?? 0,
+      storageDays: r.metadata?.storage_days ?? null,
+    }));
+
+    res.json({ readings: points, count: points.length, device_id: deviceId, actual_device_id: device?.device_id || 'all', hours, from: since, to: new Date() });
+  } catch (error) {
+    console.error('Historical readings error:', error);
+    res.status(500).json({ error: 'Failed to fetch historical data' });
+  }
+});
+
 // POST /iot/mqtt-ingest - Ingest data from MQTT (for real devices)
+
 router.post('/mqtt-ingest', async (req, res) => {
   try {
     const { device_id, readings, timestamp } = req.body;
@@ -963,21 +1068,125 @@ router.post('/mqtt-ingest', async (req, res) => {
       normalized.voc = normalized.tvoc;
       delete normalized.tvoc;
     }
-    if (normalized.pwm_speed !== undefined && typeof normalized.pwm_speed === 'number') {
-      normalized.pwm_speed = { value: normalized.pwm_speed, unit: 'percent' };
-    }
-    if (normalized.servo_state !== undefined) {
-      const val = typeof normalized.servo_state === 'boolean' ? (normalized.servo_state ? 1 : 0) : normalized.servo_state;
-      normalized.servo_state = { value: val, unit: 'boolean' };
+
+    // Extract raw sensor values for proper schema population
+    const tempVal = Number(normalized.temperature ?? 0);
+    const humVal = Number(normalized.humidity ?? 0);
+    const vocVal = Number(normalized.voc ?? normalized.tvoc ?? 0);
+    const pressureVal = normalized.pressure !== undefined ? Number(normalized.pressure) : null;
+    const gasResistance = normalized.gas_resistance !== undefined ? Number(normalized.gas_resistance) : null;
+    const soilMoisturePct = normalized.soil_moisture_pct !== undefined ? Number(normalized.soil_moisture_pct) : null;
+    const soilMoistureRaw = normalized.soil_moisture_raw !== undefined ? Number(normalized.soil_moisture_raw) : null;
+    const lightPct = normalized.light_pct !== undefined ? Number(normalized.light_pct) : null;
+    const lightRaw = normalized.light_raw !== undefined ? Number(normalized.light_raw) : null;
+    const pwmSpeedVal = normalized.pwm_speed !== undefined ? Number(normalized.pwm_speed) : 0;
+    const servoVal = normalized.servo_state !== undefined ? (typeof normalized.servo_state === 'boolean' ? (normalized.servo_state ? 1 : 0) : Number(normalized.servo_state)) : 0;
+    const dewPointVal = normalized.dew_point !== undefined ? Number(normalized.dew_point) : null;
+    const dewPointGap = normalized.dew_point_gap !== undefined ? Number(normalized.dew_point_gap) : null;
+    const alarmVal = normalized.alarm_state === 'on' ? 1 : 0;
+
+    // Convert grain moisture from soil sensor (soil 100%=dry, 0%=wet → grain 8-25% MC)
+    const grainMoisturePct = soilMoisturePct !== null ? Math.round((25 - (soilMoisturePct / 100) * 17) * 10) / 10 : null;
+
+    // Airflow from PWM speed (0-100 → 0.0-1.0)
+    const airflowVal = pwmSpeedVal / 100.0;
+
+    /**
+     * Multi-factor pest/mold risk inference (mirrors Arduino computePestMoldRisk)
+     *
+     * References:
+     *   TVOC:  Bosch BSEC IAQ classification (BME680 Datasheet)
+     *   RH:    Magan & Aldred (2007), Int. J. Food Microbiology 119(1-2), pp.131-139
+     *   Temp:  ASABE Standard D245.6
+     *   MC:    FAO Grain Storage Techniques Ch.4; IRRI Rice Knowledge Bank
+     */
+    let pestScore = 0.0;
+
+    // Factor 1: TVOC (Bosch BSEC IAQ) — weight up to 0.40
+    if (vocVal > 1000) pestScore += 0.40;
+    else if (vocVal > 500) pestScore += 0.30;
+    else if (vocVal > 250) pestScore += 0.20;
+    else if (vocVal > 100) pestScore += 0.08;
+
+    // Factor 2: Humidity (Magan & Aldred 2007: aw ≥ 0.65-0.70) — weight up to 0.25
+    if (humVal > 80) pestScore += 0.25;
+    else if (humVal > 70) pestScore += 0.18;
+    else if (humVal > 65) pestScore += 0.10;
+
+    // Factor 3: Temperature (ASABE: optimal 25-35°C) — weight up to 0.20
+    if (tempVal > 35) pestScore += 0.18;
+    else if (tempVal > 30) pestScore += 0.20;
+    else if (tempVal > 25) pestScore += 0.12;
+    else if (tempVal > 20) pestScore += 0.05;
+
+    // Factor 4: Grain Moisture (FAO/IRRI: safe ≤13%, risk 13-14%, critical ≥15%) — weight up to 0.15
+    if (grainMoisturePct !== null) {
+      if (grainMoisturePct > 18) pestScore += 0.15;
+      else if (grainMoisturePct > 15) pestScore += 0.12;
+      else if (grainMoisturePct > 14) pestScore += 0.08;
+      else if (grainMoisturePct > 13) pestScore += 0.03;
     }
 
-    // Create sensor reading
+    pestScore = Math.min(1.0, Math.max(0.0, pestScore));
+    const pestPresent = pestScore >= 0.35;  // Medium or above
+
+    // Create sensor reading with properly populated schema fields
     const sensorReading = new SensorReading({
       device_id: device._id,
       tenant_id: device.admin_id,
       silo_id: device.silo_id,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      ...normalized,
+
+      // Core sensor readings
+      temperature: tempVal ? { value: tempVal, unit: 'celsius' } : undefined,
+      humidity: humVal ? { value: humVal, unit: 'percent' } : undefined,
+      voc: vocVal ? { value: vocVal, unit: 'ppb' } : undefined,
+      moisture: grainMoisturePct !== null ? { value: grainMoisturePct, unit: 'percent' } : undefined,
+      pressure: pressureVal ? { value: pressureVal, unit: 'hPa' } : undefined,
+      light: lightPct !== null ? { value: lightPct, unit: 'lux' } : undefined,
+
+      // Ambient readings (from LDR and soil probe)
+      ambient: {
+        light: lightPct !== null ? { value: lightPct, unit: 'lux' } : undefined,
+      },
+
+      // Actuation state at time of reading
+      actuation_state: {
+        fan_state: pwmSpeedVal > 0 ? 1 : 0,
+        fan_status: pwmSpeedVal > 0 ? 'on' : 'off',
+        lid_state: servoVal ? 1 : 0,
+        lid_status: servoVal ? 'open' : 'closed',
+        fan_speed_factor: airflowVal,
+        fan_duty_cycle: pwmSpeedVal,
+        fan_rpm: 0,
+        last_command_source: 'sensor_reading',
+        last_state_change: new Date(),
+      },
+
+      // Derived metrics for ML and visualization
+      derived_metrics: {
+        dew_point: dewPointVal,
+        dew_point_gap: dewPointGap,
+        condensation_risk: dewPointGap !== null ? dewPointGap < 1 : false,
+        airflow: airflowVal,
+        pest_presence_score: pestScore,
+        pest_presence_flag: pestPresent,
+        spoilage_risk_factors: {
+          high_voc_relative: vocVal > 600,
+          high_voc_rate: false,
+          high_moisture: grainMoisturePct !== null ? grainMoisturePct > 16 : false,
+          condensation_risk: dewPointGap !== null ? dewPointGap < 1 : false,
+          pest_presence: pestPresent,
+        },
+        fan_recommendation: (humVal > 75 || vocVal > 600) ? 'run' : 'hold',
+      },
+
+      // Metadata for ML retraining
+      metadata: {
+        grain_type: 'Rice',
+        storage_days: null, // Will be populated from batch lookup below
+      },
+
       quality_indicators: {
         is_valid: true,
         confidence_score: 0.95,
@@ -986,29 +1195,58 @@ router.post('/mqtt-ingest', async (req, res) => {
       device_metrics: {
         battery_level: device.battery_level,
         signal_strength: device.signal_strength
-      }
+      },
+
+      // Store raw payload for debugging
+      raw_payload: { ...readings, timestamp },
     });
+
+    // Try to populate storage_days from active GrainBatch
+    try {
+      const GrainBatch = require('../models/GrainBatch');
+      if (device.silo_id) {
+        const batch = await GrainBatch.findOne({
+          silo_id: device.silo_id,
+          status: { $in: ['stored', 'active', 'monitoring'] }
+        }).sort({ created_at: -1 }).select('intake_date harvest_date created_at');
+        if (batch) {
+          const refDate = batch.intake_date || batch.harvest_date || batch.created_at;
+          sensorReading.metadata.storage_days = Math.max(0, Math.round((Date.now() - new Date(refDate)) / (1000 * 60 * 60 * 24)));
+        }
+      }
+    } catch (e) {
+      // Non-critical: storage_days stays null
+    }
 
     await sensorReading.save();
 
-    // Cache telemetry for polling fallback (was missing for existing devices)
-    const tempVal = readings?.temperature ?? 0;
-    const humVal = readings?.humidity ?? 0;
-    const vocVal = readings?.tvoc ?? readings?.voc ?? 0;
-    const fState = (readings?.pwm_speed && Number(readings.pwm_speed) > 0) ? 'on' : 'off';
-    const lState = readings?.servo_state ? 'open' : 'closed';
+    // Cache telemetry for polling fallback (with all sensor data)
+    const fState = pwmSpeedVal > 0 ? 'on' : 'off';
+    const lState = servoVal ? 'open' : 'closed';
     const aState = (readings?.alarm_state === 'on') ? 'on' : 'off';
     const mlDec = (humVal > 75 || vocVal > 600) ? 'fan_on' : 'idle';
     lastTelemetry.set(device_id, {
-      temperature: Number(tempVal),
-      humidity: Number(humVal),
-      tvoc: Number(vocVal),
+      temperature: tempVal,
+      humidity: humVal,
+      tvoc: vocVal,
       fanState: fState,
       lidState: lState,
       alarmState: aState,
       mlDecision: mlDec,
       humanOverride: false,
       guardrails: [],
+      pressure: pressureVal,
+      light: lightPct,
+      soilMoisture: soilMoisturePct,
+      dewPoint: dewPointVal,
+      pestRiskScore: pestScore,
+      pwm_speed: pwmSpeedVal,
+      riskIndex: Math.min(100, Math.round(
+        (humVal > 70 ? 30 : humVal * 0.3) +
+        (tempVal > 35 ? 25 : tempVal * 0.5) +
+        (vocVal > 500 ? 25 : vocVal * 0.03) +
+        (pestPresent ? 20 : 0)
+      )),
       timestamp: (Number(timestamp) > 1600000000000) ? Number(timestamp) : Date.now()
     });
 
@@ -1198,3 +1436,4 @@ if (mqttClient) {
 }
 
 module.exports = router;
+module.exports.getMqttClient = () => mqttClient;

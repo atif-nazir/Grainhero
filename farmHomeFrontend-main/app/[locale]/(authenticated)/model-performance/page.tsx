@@ -42,8 +42,11 @@ interface ModelPerformance {
     accuracy_trend: number[]
     f1_trend: number[]
     best_performance: {
-      best_accuracy: { value: number, timestamp: string }
-      best_f1: { value: number, timestamp: string }
+      best_accuracy?: { value: number, timestamp: string }
+      best_f1?: { value: number, timestamp: string }
+      accuracy?: number
+      f1_score?: number
+      achieved_at?: string
     }
   }
   training_insights: {
@@ -87,8 +90,20 @@ export default function ModelPerformancePage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [trainingHistory, setTrainingHistory] = useState<TrainingHistory | null>(null)
   const [error, setError] = useState<string>('')
+  const [selectedGrain, setSelectedGrain] = useState('rice')
+  const [trainedGrains, setTrainedGrains] = useState<string[]>([])
+
+  // Retraining progress state
+  const [trainProgress, setTrainProgress] = useState(0)
+  const [trainStep, setTrainStep] = useState('')
+  const [trainResult, setTrainResult] = useState<{
+    success: boolean
+    metrics?: Record<string, { accuracy: number; f1_score: number; precision?: number; recall?: number }>
+    previousAccuracy?: number
+  } | null>(null)
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
+  const allGrains = ['rice', 'wheat', 'maize', 'sorghum', 'barley']
 
   const loadPerformanceData = useCallback(async () => {
     setLoading(true)
@@ -100,25 +115,77 @@ export default function ModelPerformancePage() {
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
 
-      const [performanceRes, historyRes] = await Promise.all([
-        fetch(`${backendUrl}/ai-spoilage/model-performance`, { headers }),
-        fetch(`${backendUrl}/ai-spoilage/training-history`, { headers })
-      ])
+      // Try authenticated endpoint first, fall back to public
+      let performanceData = null
+      try {
+        const performanceRes = await fetch(`${backendUrl}/api/ai-spoilage/model-performance`, { headers })
+        if (performanceRes.ok) {
+          performanceData = await performanceRes.json()
+        }
+      } catch { /* fall through to public */ }
 
-      if (!performanceRes.ok) {
-        const body = await performanceRes.json().catch(() => null)
-        throw new Error(body?.error || body?.message || 'Failed to load model performance')
+      // Fallback: use model-info-public to build performance data
+      if (!performanceData) {
+        const publicRes = await fetch(`${backendUrl}/api/ai-spoilage/model-info-public?grain=${selectedGrain}`)
+        if (publicRes.ok) {
+          const info = await publicRes.json()
+          const ensMetrics = info.metrics?.Ensemble || info.metrics?.ensemble || {}
+          performanceData = {
+            performance_summary: {
+              total_training_sessions: 1,
+              latest_metrics: {
+                accuracy: ensMetrics.accuracy || 0,
+                precision: ensMetrics.precision || 0,
+                recall: ensMetrics.recall || 0,
+                f1_score: ensMetrics.f1_score || 0,
+                cv_mean: ensMetrics.cv_mean || 0,
+                cv_std: ensMetrics.cv_std || 0,
+              },
+              overall_improvement: {},
+              accuracy_trend: [ensMetrics.accuracy || 0],
+              f1_trend: [ensMetrics.f1_score || 0],
+              best_performance: { accuracy: ensMetrics.accuracy || 0, f1_score: ensMetrics.f1_score || 0, achieved_at: info.training_date || '' },
+            },
+            training_insights: {
+              total_data_points: info.dataset_rows || 0,
+              feature_count: 9,
+              class_distribution: {},
+              avg_training_time: '~3 min',
+            },
+            recommendations: [
+              info.model_type === 'not_trained'
+                ? 'Click "Retrain Ensemble" to train the XGBoost + RandomForest + LightGBM ensemble.'
+                : `Ensemble trained on ${info.dataset_rows || 0} rows. Add more live readings and retrain to improve accuracy.`
+            ],
+            model_info: {
+              name: 'GrainHero Spoilage Predictor',
+              version: info.version || '3.0',
+              algorithm: info.model_type || 'Ensemble (XGBoost + RF + LightGBM)',
+              features: ['Temperature', 'Humidity', 'Storage_Days', 'Airflow', 'Dew_Point', 'Ambient_Light', 'Pest_Presence', 'Grain_Moisture', 'Rainfall'],
+              target_classes: info.label_classes || ['Safe', 'Risky', 'Spoiled'],
+            },
+            // Extra: full per-model metrics for ensemble display
+            ensemble_metrics: info.metrics || {},
+            feature_importance: info.feature_importance || [],
+            weka_comparison: info.weka_comparison || {},
+          }
+          if (info.trained_grains) setTrainedGrains(info.trained_grains)
+        }
       }
 
-      const performanceData = await performanceRes.json()
-      setPerformance(performanceData)
-
-      if (historyRes.ok) {
-        const historyData = await historyRes.json()
-        setTrainingHistory(historyData)
+      if (performanceData) {
+        setPerformance(performanceData)
       } else {
-        setTrainingHistory(null)
+        throw new Error('No model data available. Train the model first.')
       }
+
+      // Try loading history
+      try {
+        const historyRes = await fetch(`${backendUrl}/api/ai-spoilage/training-history`, { headers })
+        if (historyRes.ok) {
+          setTrainingHistory(await historyRes.json())
+        }
+      } catch { setTrainingHistory(null) }
     } catch (err) {
       console.error('Error loading performance data:', err)
       setPerformance(null)
@@ -127,41 +194,83 @@ export default function ModelPerformancePage() {
     } finally {
       setLoading(false)
     }
-  }, [backendUrl])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendUrl, selectedGrain])
 
   useEffect(() => {
     void loadPerformanceData()
   }, [loadPerformanceData])
 
   const retrainModel = async () => {
+    const previousAccuracy = performance?.performance_summary?.latest_metrics?.accuracy ?? 0
     setRetraining(true)
+    setTrainResult(null)
+    setTrainProgress(0)
+    setTrainStep('Initializing ensemble training...')
+
+    // Simulate progress steps while backend trains (actual training takes ~3-5 min)
+    const steps = [
+      { pct: 5, label: 'Loading dataset...', delay: 2000 },
+      { pct: 15, label: 'Tuning XGBoost (15 Optuna trials)...', delay: 25000 },
+      { pct: 35, label: 'Tuning Random Forest (15 Optuna trials)...', delay: 25000 },
+      { pct: 55, label: 'Tuning LightGBM (15 Optuna trials)...', delay: 25000 },
+      { pct: 70, label: 'Training individual models...', delay: 15000 },
+      { pct: 80, label: 'Building soft voting ensemble...', delay: 15000 },
+      { pct: 88, label: 'Cross-validating ensemble (5-fold)...', delay: 30000 },
+      { pct: 95, label: 'Saving model & metadata...', delay: 5000 },
+    ]
+
+    // Start progress simulation (non-blocking)
+    let cancelled = false
+    const runProgress = async () => {
+      for (const step of steps) {
+        if (cancelled) return
+        setTrainProgress(step.pct)
+        setTrainStep(step.label)
+        await new Promise(r => setTimeout(r, step.delay))
+      }
+    }
+    const progressPromise = runProgress()
+
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-      const response = await fetch(`${backendUrl}/ai-spoilage/retrain`, {
+      const response = await fetch(`${backendUrl}/api/ai-spoilage/retrain-public`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          force_retrain: true,
-          hyperparameter_tuning: true
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grain_type: selectedGrain }),
       })
+
+      cancelled = true // stop simulation
+      await progressPromise.catch(() => {})
 
       if (!response.ok) {
         const body = await response.json().catch(() => null)
-        throw new Error(body?.error || body?.message || 'Model retraining failed')
+        throw new Error(body?.error || body?.details || 'Ensemble retraining failed')
       }
 
+      setTrainProgress(100)
+      setTrainStep('Complete!')
+
       const result = await response.json()
-      alert(
-        `Model retraining completed!\n\nAccuracy: ${formatAccuracy(result.performance_metrics?.accuracy ?? 0)}\nF1 Score: ${formatF1Score(result.performance_metrics?.f1_score ?? 0)}`
-      )
+      const m = result.performance_metrics || {}
+      const pm = m.per_model || {}
+
+      setTrainResult({
+        success: true,
+        metrics: {
+          Ensemble: { accuracy: m.accuracy ?? 0, f1_score: m.f1_score ?? 0, precision: m.precision ?? 0, recall: m.recall ?? 0 },
+          XGBoost: pm.XGBoost || {},
+          RandomForest: pm.RandomForest || {},
+          LightGBM: pm.LightGBM || {},
+        },
+        previousAccuracy,
+      })
+
       await loadPerformanceData()
     } catch (err) {
+      cancelled = true
       console.error('Error retraining model:', err)
-      alert((err as Error).message || 'Model retraining failed.')
+      setTrainResult({ success: false })
+      setTrainStep(`Error: ${(err as Error).message}`)
     } finally {
       setRetraining(false)
     }
@@ -228,10 +337,17 @@ export default function ModelPerformancePage() {
     )
   }
 
-  const { performance_summary, training_insights, recommendations, model_info } = performance
+  const { performance_summary, training_insights: rawInsights, recommendations: rawRecommendations, model_info } = performance
+  const training_insights = { ...rawInsights, insights: rawInsights?.insights || [] }
+  const recommendations = rawRecommendations || []
   const { latest_metrics, overall_improvement, accuracy_trend, f1_trend, best_performance } = performance_summary
   const accuracyTrendValues = accuracy_trend || []
   const f1TrendValues = f1_trend || []
+
+  // Helper: ensure a metric is in 0-100 scale for Progress bars
+  const to100 = (v: number) => (v > 0 && v <= 1) ? v * 100 : v
+  // Helper: get best accuracy handling both old/new format
+  const bestAccVal = best_performance?.best_accuracy?.value ?? best_performance?.accuracy ?? 0
 
   return (
     <div className="space-y-6">
@@ -248,7 +364,19 @@ export default function ModelPerformancePage() {
             {model_info.name} v{model_info.version} • {model_info.algorithm}
           </p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-2">
+          {/* Grain Selector */}
+          <select
+            value={selectedGrain}
+            onChange={(e) => setSelectedGrain(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            {allGrains.map(g => (
+              <option key={g} value={g}>
+                {g.charAt(0).toUpperCase() + g.slice(1)} {trainedGrains.includes(g) ? '✓' : '○'}
+              </option>
+            ))}
+          </select>
           <Button
             onClick={loadPerformanceData}
             variant="outline"
@@ -263,10 +391,89 @@ export default function ModelPerformancePage() {
             className="bg-gray-900 hover:bg-gray-800"
           >
             <Zap className="h-4 w-4 mr-2" />
-            {retraining ? 'Training...' : 'Retrain Model'}
+            {retraining ? 'Training...' : `Retrain ${selectedGrain.charAt(0).toUpperCase() + selectedGrain.slice(1)}`}
           </Button>
         </div>
       </div>
+
+      {/* Retraining Progress Overlay */}
+      {(retraining || trainResult) && (
+        <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <CardContent className="p-6">
+            {retraining ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+                  <div>
+                    <div className="font-semibold text-gray-900">Ensemble Training in Progress</div>
+                    <div className="text-sm text-gray-600">XGBoost + Random Forest + LightGBM with Optuna Tuning</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium text-blue-700">{trainStep}</span>
+                    <span className="text-gray-600">{trainProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-1000 ease-out"
+                      style={{ width: `${trainProgress}%` }}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">This typically takes 3-5 minutes. Do not close this page.</p>
+              </div>
+            ) : trainResult?.success ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div className="font-semibold text-gray-900">Training Complete!</div>
+                  <Button size="sm" variant="ghost" onClick={() => setTrainResult(null)} className="ml-auto text-xs">Dismiss</Button>
+                </div>
+
+                {/* Per-model results table */}
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  {Object.entries(trainResult.metrics || {}).map(([name, m]) => (
+                    <div key={name} className={`p-3 rounded-lg ${name === 'Ensemble' ? 'bg-green-100 border border-green-300' : 'bg-white border border-gray-200'}`}>
+                      <div className="text-xs text-gray-500 mb-1">{name}</div>
+                      <div className={`text-lg font-bold ${name === 'Ensemble' ? 'text-green-700' : 'text-gray-800'}`}>
+                        {formatAccuracy(m.accuracy || 0)}
+                      </div>
+                      <div className="text-xs text-gray-500">F1: {formatF1Score(m.f1_score || 0)}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Before/After comparison */}
+                {(trainResult.previousAccuracy ?? 0) > 0 && trainResult.metrics?.Ensemble && (
+                  <div className="flex items-center gap-2 text-sm bg-white rounded-lg p-3 border">
+                    <span className="text-gray-500">Previous:</span>
+                    <span className="font-medium">{formatAccuracy(trainResult.previousAccuracy ?? 0)}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-500">New:</span>
+                    <span className="font-bold text-green-700">{formatAccuracy(trainResult.metrics.Ensemble.accuracy)}</span>
+                    {trainResult.metrics.Ensemble.accuracy > (trainResult.previousAccuracy ?? 0) && (
+                      <Badge className="bg-green-100 text-green-700 ml-2">
+                        <ArrowUp className="h-3 w-3 mr-1" />
+                        Improved
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : trainResult && !trainResult.success ? (
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+                <div>
+                  <div className="font-semibold text-red-700">Training Failed</div>
+                  <div className="text-sm text-gray-600">{trainStep}</div>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setTrainResult(null)} className="ml-auto text-xs">Dismiss</Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Performance Overview Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -329,7 +536,7 @@ export default function ModelPerformancePage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {formatAccuracy(best_performance.best_accuracy?.value)}
+                  {formatAccuracy(bestAccVal)}
                 </div>
                 <div className="text-xs text-gray-500">Best Accuracy</div>
               </div>
@@ -363,21 +570,21 @@ export default function ModelPerformancePage() {
                     <span>Precision</span>
                     <span className="font-medium">{formatPrecision(latest_metrics.precision)}</span>
                   </div>
-                  <Progress value={latest_metrics.precision} className="h-2" />
+                  <Progress value={to100(latest_metrics.precision)} className="h-2" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Recall</span>
                     <span className="font-medium">{formatPrecision(latest_metrics.recall)}</span>
                   </div>
-                  <Progress value={latest_metrics.recall} className="h-2" />
+                  <Progress value={to100(latest_metrics.recall)} className="h-2" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Cross-Validation</span>
                     <span className="font-medium">{formatPrecision(latest_metrics.cv_mean)}</span>
                   </div>
-                  <Progress value={latest_metrics.cv_mean} className="h-2" />
+                  <Progress value={to100(latest_metrics.cv_mean)} className="h-2" />
                 </div>
               </CardContent>
             </Card>
@@ -463,7 +670,7 @@ export default function ModelPerformancePage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {training_insights.insights.map((insight, index) => (
+                {(training_insights.insights || []).map((insight: string, index: number) => (
                   <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
                     <span className="text-sm text-gray-700">{insight}</span>
@@ -482,7 +689,7 @@ export default function ModelPerformancePage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recommendations.map((recommendation, index) => (
+                {(recommendations || []).map((recommendation: string, index: number) => (
                   <div key={index} className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
                     <AlertTriangle className="h-5 w-5 text-blue-500 mt-0.5" />
                     <span className="text-sm text-gray-700">{recommendation}</span>

@@ -115,16 +115,16 @@ router.get(
       const isSuperAdmin = req.user?.role === 'super_admin';
 
       const scopeConditions = [];
-    if (req.user?.tenant_id) {
-      scopeConditions.push({ tenant_id: req.user.tenant_id });
-    }
-    if (req.user?.owned_tenant_id) {
-      scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
-    }
-    if (req.user?._id) {
-      scopeConditions.push({ admin_id: req.user._id });
-      scopeConditions.push({ created_by: req.user._id });
-    }
+      if (req.user?.tenant_id) {
+        scopeConditions.push({ tenant_id: req.user.tenant_id });
+      }
+      if (req.user?.owned_tenant_id) {
+        scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
+      }
+      if (req.user?._id) {
+        scopeConditions.push({ admin_id: req.user._id });
+        scopeConditions.push({ created_by: req.user._id });
+      }
 
       // Add warehouse filter for managers and technicians
       if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
@@ -742,40 +742,6 @@ router.get(
         }, 0);
       }
 
-      // Get current plan information for the user
-      let currentPlan = 'Basic';
-      if (isSuperAdmin) {
-        // For super admin, show system-wide info
-        currentPlan = 'System Admin';
-      } else {
-        try {
-          const currentUser = await User.findById(req.user._id).populate('subscription_id').lean();
-          if (currentUser && currentUser.subscription_id) {
-            // If user has a subscription, get the plan name from it
-            if (currentUser.subscription_id.plan_id) {
-              const subscription = await Subscription.findById(currentUser.subscription_id.plan_id).lean();
-              if (subscription && subscription.name) {
-                currentPlan = subscription.name;
-              }
-            } else if (currentUser.subscription_id.name) {
-              // If the subscription object has a name directly
-              currentPlan = currentUser.subscription_id.name;
-            }
-          } else {
-            // Fallback: try to get from tenant if user doesn't have a subscription
-            if (req.user.tenant_id) {
-              const tenant = await Tenant.findById(req.user.tenant_id).lean();
-              if (tenant && tenant.plan) {
-                currentPlan = tenant.plan || 'Basic';
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching plan information:', error);
-          currentPlan = 'Basic'; // Default to Basic if there's an error
-        }
-      }
-
       const avgRiskScore =
         totalBatches > 0
           ? grainBatches.reduce(
@@ -787,14 +753,41 @@ router.get(
         Math.max(1, Math.min(5, 5 - avgRiskScore / 25)).toFixed(1)
       );
 
-      // Filter out Monthly Revenue and Recent Incidents from main stats, add Current Plan
+      // Get current plan information for the user
+      let currentPlan = 'Basic';
+      if (isSuperAdmin) {
+        currentPlan = 'System Admin';
+      } else {
+        try {
+          const currentUser = await User.findById(req.user._id).populate('subscription_id').lean();
+          if (currentUser && currentUser.subscription_id) {
+            if (currentUser.subscription_id.plan_id) {
+              const subscription = await Subscription.findById(currentUser.subscription_id.plan_id).lean();
+              if (subscription && subscription.name) {
+                currentPlan = subscription.name;
+              }
+            } else if (currentUser.subscription_id.name) {
+              currentPlan = currentUser.subscription_id.name;
+            }
+          } else {
+            if (req.user.tenant_id) {
+              const tenant = await Tenant.findById(req.user.tenant_id).lean();
+              if (tenant && tenant.plan) {
+                currentPlan = tenant.plan || 'Basic';
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching plan information:', error);
+          currentPlan = 'Basic';
+        }
+      }
+
       const filteredStats = [
         {
           title: isSuperAdmin ? "Total Tenants" : "Total Silos",
           value: isSuperAdmin ? await Tenant.countDocuments({}) : totalSilos,
         },
-
-        // Monthly Revenue and Recent Incidents (last month) are excluded
         {
           title: "Active Staff",
           value: activeUsers,
@@ -827,7 +820,7 @@ router.get(
           totalCapacity,
           totalCurrentQuantity,
           utilizationPercentage: storageUtilization,
-          todaysIntake: totalTodaysIntake,  // Add today's intake
+          todaysIntake: totalTodaysIntake,
         },
         suggestions: {
           criticalStorage: criticalSilos,
@@ -854,7 +847,8 @@ router.get(
       console.error(err);
       res.status(500).json({ error: "Server error" });
     }
-  });
+  }
+);
 
 // ============= ENHANCED DASHBOARD & REPORTING =============
 

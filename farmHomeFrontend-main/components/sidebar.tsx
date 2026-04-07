@@ -141,7 +141,7 @@ const aiAnalyticsNav = [
   {
     name: "ai-spoilage",
     label: "Spoilage Prediction & Advisory",
-    href: "/ai-spoilage",
+    href: "/ai-predictions",
     icon: Sparkles,
     roles: ["super_admin", "admin", "manager", "technician"],
     badge: "AI"
@@ -163,43 +163,22 @@ const aiAnalyticsNav = [
     roles: ["super_admin", "admin", "manager"],
     badge: "AI"
   },
-  // {
-  //   name: "spoilage-analysis",
-  //   label: "Spoilage Analysis",
-  //   href: "/spoilage-analysis",
-  //   icon: TrendingUp,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "AI"
-  // },
-  // {
-  //   name: "model-performance",
-  //   href: "/model-performance",
-  //   icon: Brain,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "ML"
-  // },
-  // {
-  //   name: "data-management",
-  //   href: "/data-management",
-  //   icon: Database,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "ML"
-  // },
-  // {
-  //   name: "environmental-data",
-  //   label: "Environmental Data",
-  //   href: "/environmental-data",
-  //   icon: BarChart3,
-  //   roles: ["super_admin", "admin", "manager", "technician"],
-  //   badge: undefined
-  // },
-  // {
-  //   name: "data-visualization",
-  //   href: "/data-visualization",
-  //   icon: BarChart3,
-  //   roles: ["super_admin", "admin", "manager"],
-  //   badge: "NEW"
-  // },
+  {
+    name: "model-performance",
+    label: "ML Model Performance",
+    href: "/model-performance",
+    icon: Brain,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "ML"
+  },
+  {
+    name: "data-visualization",
+    label: "Data Visualization",
+    href: "/data-visualization",
+    icon: BarChart3,
+    roles: ["super_admin", "admin", "manager"],
+    badge: "NEW"
+  },
 ]
 
 // Business & Finance - CORE MODULES ONLY

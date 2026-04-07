@@ -11,9 +11,10 @@ import optuna
 import os
 
 class SmartBinModelTrainer:
-    def __init__(self, data_path='../../SmartBin-RiceSpoilage-main/SmartBin-RiceSpoilage-main/smartbin_rice_storage_data_enhanced.csv'):
-        self.base_data_path = data_path
-        self.combined_data_path = 'combined_training_data.csv'
+    def __init__(self):
+        self.ml_dir = os.path.dirname(os.path.abspath(__file__))
+        self.base_data_path = os.path.join(self.ml_dir, 'rice_spoilage_10k.csv')
+        self.combined_data_path = os.path.join(self.ml_dir, 'combined_training_data.csv')
         self.model = None
         self.label_encoder = LabelEncoder()
         self.feature_names = ['Temperature', 'Humidity', 'Grain_Moisture', 'Dew_Point', 'Storage_Days', 'Airflow', 'Ambient_Light', 'Pest_Presence', 'Rainfall']
@@ -22,20 +23,33 @@ class SmartBinModelTrainer:
     def load_and_preprocess_data(self):
         """Load and preprocess the dataset"""
         try:
-            # First, create combined dataset if it doesn't exist
+            # Use data_manager to create combined dataset from base + any manual additions
+            import sys
+            sys.path.insert(0, self.ml_dir)
             from data_manager import data_manager
             data_manager.create_combined_dataset()
             
             # Load the combined dataset
             if os.path.exists(self.combined_data_path):
                 df = pd.read_csv(self.combined_data_path)
-                print(f"✅ Loaded combined dataset with {len(df)} records")
+                print(f"\u2705 Loaded combined dataset with {len(df)} records")
             else:
                 df = pd.read_csv(self.base_data_path)
-                print(f"✅ Loaded base dataset with {len(df)} records")
+                print(f"\u2705 Loaded base dataset with {len(df)} records")
             
-            # Handle missing values
-            df = df.fillna(df.median())
+            # Normalize: Spoilage_Class (int) → Spoilage_Label (string)
+            if 'Spoilage_Class' in df.columns and 'Spoilage_Label' not in df.columns:
+                label_map = {0: 'Safe', 1: 'Risky', 2: 'Spoiled'}
+                df['Spoilage_Label'] = df['Spoilage_Class'].map(lambda x: label_map.get(int(x), 'Safe') if pd.notna(x) else 'Safe')
+            
+            # Drop rows where Spoilage_Label is missing
+            df = df.dropna(subset=['Spoilage_Label'])
+            
+            # Handle missing feature values
+            for col in self.feature_names:
+                if col not in df.columns:
+                    df[col] = 0
+            df[self.feature_names] = df[self.feature_names].fillna(df[self.feature_names].median())
             
             # Prepare features and target
             X = df[self.feature_names]
@@ -49,11 +63,14 @@ class SmartBinModelTrainer:
                 X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
             )
             
-            print(f"✅ Data split: {len(X_train)} train, {len(X_test)} test samples")
+            print(f"\u2705 Data split: {len(X_train)} train, {len(X_test)} test samples")
+            print(f"   Classes: {dict(zip(self.label_encoder.classes_, np.bincount(y_encoded)))}")
             return X_train, X_test, y_train, y_test, df
             
         except Exception as e:
-            print(f"❌ Error loading data: {e}")
+            print(f"\u274c Error loading data: {e}")
+            import traceback
+            traceback.print_exc()
             return None, None, None, None, None
     
     def hyperparameter_tuning(self, X_train, y_train, n_trials=30):
@@ -130,13 +147,13 @@ class SmartBinModelTrainer:
     def save_model(self, metrics, best_params):
         """Save model and metadata"""
         try:
-            # Save model
-            joblib.dump(self.model, 'smartbin_model.pkl')
+            model_path = os.path.join(self.ml_dir, 'smartbin_model.pkl')
+            encoder_path = os.path.join(self.ml_dir, 'label_encoder.pkl')
+            metadata_path = os.path.join(self.ml_dir, 'model_metadata.json')
             
-            # Save label encoder
-            joblib.dump(self.label_encoder, 'label_encoder.pkl')
+            joblib.dump(self.model, model_path)
+            joblib.dump(self.label_encoder, encoder_path)
             
-            # Save metadata
             metadata = {
                 'model_type': 'XGBoost',
                 'version': '2.0.0',
@@ -147,14 +164,14 @@ class SmartBinModelTrainer:
                 'training_date': datetime.now().isoformat()
             }
             
-            with open('model_metadata.json', 'w') as f:
+            with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
             
-            print("✅ Model and metadata saved successfully")
+            print("\u2705 Model and metadata saved successfully")
             return True
             
         except Exception as e:
-            print(f"❌ Error saving model: {e}")
+            print(f"\u274c Error saving model: {e}")
             return False
     
     def incremental_training(self, new_data_path=None):
