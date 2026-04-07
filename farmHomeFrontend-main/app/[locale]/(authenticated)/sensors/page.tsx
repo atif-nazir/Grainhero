@@ -723,3 +723,4 @@ export default function SensorsPage() {
     </div>
   )
 }
+l
