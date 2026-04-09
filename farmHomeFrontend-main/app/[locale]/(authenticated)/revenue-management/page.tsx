@@ -5,7 +5,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Bar, BarChart, Pie, PieChart, Cell } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-export default function RevenueManagementPage() {
+export default function RevenueManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const mrrData = [
     { month: 'Jan', mrr: 0 },
     { month: 'Feb', mrr: 0 },

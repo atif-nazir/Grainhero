@@ -8,9 +8,6 @@ import { Progress } from "@/components/ui/progress"
 import {
     Activity,
     Server,
-    Database,
-    Cpu,
-    HardDrive,
     AlertTriangle,
     CheckCircle,
     XCircle,
@@ -18,7 +15,6 @@ import {
     TrendingUp,
     TrendingDown,
     Clock,
-    Zap,
     Globe
 } from "lucide-react"
 import { api } from "@/lib/api"
@@ -64,7 +60,7 @@ interface MonitoringData {
     metrics: SystemMetric[]
 }
 
-export default function SystemMonitoringPage() {
+export default function SystemMonitoringPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const [loading, setLoading] = useState(true)
     const [data, setData] = useState<MonitoringData | null>(null)
     const [alerts, setAlerts] = useState<Alert[]>([])
@@ -88,7 +84,7 @@ export default function SystemMonitoringPage() {
             if (alertsRes.ok && alertsRes.data) {
                 setAlerts(alertsRes.data)
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred loading monitoring data")
         } finally {
             setLoading(false)

@@ -11,8 +11,10 @@ import { usePathname, useRouter as useNextRouter } from "next/navigation"
 
 export default function AuthenticatedLayout({
   children,
+  params: _params
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
 }) {
   const { user, isLoading } = useAuth()
   const router = useRouter()

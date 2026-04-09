@@ -11,8 +11,6 @@ import {
     Mail,
     Shield,
     Search,
-    CheckCircle,
-    XCircle,
     UserCheck
 } from "lucide-react"
 import { api } from "@/lib/api"
@@ -40,10 +38,11 @@ interface User {
     is_active: boolean
     two_factor_enabled: boolean
     last_login?: string
+    [key: string]: unknown
 }
 
-export default function UserManagementPage() {
-    const [loading, setLoading] = useState(true)
+export default function UserManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
+    const [, setLoading] = useState(true)
     const [users, setUsers] = useState<User[]>([])
     const [searchQuery, setSearchQuery] = useState("")
 
@@ -60,7 +59,7 @@ export default function UserManagementPage() {
             } else {
                 toast.error("Failed to load users")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred loading users")
         } finally {
             setLoading(false)
@@ -78,7 +77,7 @@ export default function UserManagementPage() {
         {
             key: "user",
             label: "User",
-            render: (value: unknown, row: User) => (
+            render: (_value: unknown, row: User) => (
                 <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-medium">
                         {row.name.charAt(0).toUpperCase()}
@@ -93,7 +92,7 @@ export default function UserManagementPage() {
         {
             key: "role",
             label: "Role & Access",
-            render: (value: unknown, row: User) => (
+            render: (_value: unknown, row: User) => (
                 <div className="space-y-1">
                     <Badge variant={
                         row.role === 'admin' ? 'default' :
@@ -112,7 +111,7 @@ export default function UserManagementPage() {
         {
             key: "tenant",
             label: "Organization",
-            render: (value: unknown, row: User) => (
+            render: (_value: unknown, row: User) => (
                 <div className="flex items-center text-sm text-gray-600">
                     <Building2 className="h-3 w-3 mr-2" />
                     {row.tenant_id?.name || "No Organization"}
@@ -122,7 +121,7 @@ export default function UserManagementPage() {
         {
             key: "activity",
             label: "Last Active",
-            render: (value: unknown, row: User) => (
+            render: (_value: unknown, row: User) => (
                 <div className="text-sm text-gray-500">
                     {row.last_login ? new Date(row.last_login).toLocaleString() : "Never"}
                 </div>
@@ -131,7 +130,7 @@ export default function UserManagementPage() {
         {
             key: "status",
             label: "Status",
-            render: (value: unknown, row: User) => (
+            render: (_value: unknown, row: User) => (
                 <Badge variant={row.is_active ? "outline" : "destructive"}
                     className={row.is_active ? "text-green-600 border-green-200 bg-green-50" : ""}>
                     {row.is_active ? "Active" : "Inactive"}
@@ -145,7 +144,7 @@ export default function UserManagementPage() {
         {
             key: "actions",
             label: "Actions",
-            render: (value: unknown, row: User) => (
+            render: (_value: unknown, row: User) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">

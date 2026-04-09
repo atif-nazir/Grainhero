@@ -86,6 +86,7 @@ export default function UserAutocomplete({
     if (!multi && value && input !== (value as UserOption).name) {
       setInput((value as UserOption).name);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, multi]);
 
   return (

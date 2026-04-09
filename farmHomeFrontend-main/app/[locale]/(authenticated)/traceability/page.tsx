@@ -59,7 +59,7 @@ interface GrainBatch {
   }
 }
 
-export default function TraceabilityPage() {
+export default function TraceabilityPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [isLoading, setIsLoading] = useState(true)
   const [batches, setBatches] = useState<GrainBatch[]>([])
   const [searchTerm, setSearchTerm] = useState('')

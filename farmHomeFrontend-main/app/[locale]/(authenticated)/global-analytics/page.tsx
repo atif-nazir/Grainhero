@@ -55,7 +55,7 @@ interface TenantAnalytics extends Record<string, unknown> {
   lastActivity: string
 }
 
-export default function GlobalAnalyticsPage() {
+export default function GlobalAnalyticsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   //const [timeRange, setTimeRange] = useState("30d")
   //const [selectedMetric, setSelectedMetric] = useState("all")
 

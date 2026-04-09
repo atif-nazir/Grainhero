@@ -47,7 +47,7 @@ interface ActiveSession {
   current: boolean
 }
 
-export default function SecurityPage() {
+export default function SecurityPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')

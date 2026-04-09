@@ -13,6 +13,7 @@ const pricingData = [
       "AI Predictions",
     ],
     iotCharge: 7000,
+    iotChargeLabel: "Rs. 7,000 one-time setup fee",
 
     priceId: "price_starter_1499", // Update with actual Stripe price ID
     price: 1499,
@@ -44,6 +45,7 @@ const pricingData = [
       "AI Predictions",
     ],
     iotCharge: 7000,
+    iotChargeLabel: "Rs. 7,000 one-time setup fee",
 
     priceId: "price_professional_3899", // Update with actual Stripe price ID
     price: 3899,
@@ -75,6 +77,7 @@ const pricingData = [
       "AI Predictions",
     ],
     iotCharge: 7000,
+    iotChargeLabel: "Rs. 7,000 one-time setup fee",
 
     priceId: "price_enterprise_5999", // Update with actual Stripe price ID
     price: 5999,

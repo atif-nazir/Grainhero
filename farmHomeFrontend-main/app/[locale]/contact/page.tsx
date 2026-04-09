@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Wheat as WheatIcon, Mail, Phone, MapPin, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react"
 import { Link } from '@/i18n/navigation'
 
-export default function ContactPage() {
+export default function ContactPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const searchParams = useSearchParams()
     const planType = searchParams.get('plan')
 

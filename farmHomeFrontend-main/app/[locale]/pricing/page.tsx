@@ -7,7 +7,9 @@ import { useRouter } from '@/i18n/navigation'
 import { Wheat as WheatIcon, Check, Cpu, ArrowLeft } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 
-export default function PricingPage() {
+export default function PricingPage({ params: _params }: { params: Promise<{ locale: string }> }) {
+  // We don't strictly need to await params here if we don't use locale, 
+  // but it's good practice and satisfies Next.js 15 types.
   const t = useTranslations('PricingPage')
   const router = useRouter()
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(pricingData[1]?.id ?? pricingData[0]?.id ?? null)
@@ -97,8 +99,9 @@ export default function PricingPage() {
                       e.stopPropagation()
                       if (plan.id === 'custom') {
                         // Use link if present, or push to contact
-                        if (plan.link && plan.link.startsWith('mailto')) {
-                          window.location.href = plan.link
+                        const p = plan as { link?: string };
+                        if (p.link && p.link.startsWith('mailto')) {
+                          window.location.href = p.link
                         } else {
                           handleChoosePlan(plan.id)
                         }

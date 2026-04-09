@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts'
 
-export default function ServerMonitoringPage() {
+export default function ServerMonitoringPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const cpu = [
     { t: '00', v: 30 }, { t: '04', v: 35 }, { t: '08', v: 60 }, { t: '12', v: 48 }, { t: '16', v: 52 }, { t: '20', v: 40 }
   ]

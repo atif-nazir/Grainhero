@@ -3,7 +3,7 @@
 import { Wheat as WheatIcon, ArrowLeft } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 
-export default function FAQPage() {
+export default function FAQPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const faqs = [
         {
             q: 'How does GrainHero prevent grain spoilage?',

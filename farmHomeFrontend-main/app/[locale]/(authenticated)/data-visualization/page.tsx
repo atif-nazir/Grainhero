@@ -128,7 +128,7 @@ function StatusBadge({
 }
 
 /* ────────── Main Page ────────── */
-export default function DataVisualizationPage() {
+export default function DataVisualizationPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const deviceId =
     process.env.NEXT_PUBLIC_DEVICE_ID || '004B12387760';
   const [selectedRange, setSelectedRange] = useState<
@@ -438,7 +438,7 @@ export default function DataVisualizationPage() {
           <Filter className="h-4 w-4 text-gray-400" />
           <Select
             value={selectedRange}
-            onValueChange={(v: '5m' | '15m' | '1h' | '6h') =>
+            onValueChange={(v: '1h' | '6h' | '24h' | '7d') =>
               setSelectedRange(v)
             }
           >

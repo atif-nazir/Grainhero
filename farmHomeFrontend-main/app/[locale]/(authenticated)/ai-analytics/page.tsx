@@ -1,6 +1,6 @@
  "use client"
  
- import { useEffect, useState } from "react"
+ import { useCallback, useEffect, useState } from "react"
  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
  import { Button } from "@/components/ui/button"
  import { AnimatedBackground } from "@/components/animations/MotionGraphics"
@@ -25,13 +25,13 @@
    performance_trends: Record<string, unknown>
  }
  
- export default function AiAnalyticsPage() {
+ export default function AiAnalyticsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"
    const [perf, setPerf] = useState<ModelPerformanceSummary | null>(null)
    const [history, setHistory] = useState<TrainingHistory | null>(null)
    const [loading, setLoading] = useState(false)
  
-   const fetchData = async () => {
+   const fetchData = useCallback(async () => {
      try {
        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
        const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -40,11 +40,11 @@
        if (p.ok) setPerf(await p.json())
        if (h.ok) setHistory(await h.json())
      } catch {}
-   }
+   }, [backendUrl])
  
    useEffect(() => {
      fetchData()
-   }, [])
+   }, [fetchData])
  
    const retrain = async () => {
      try {

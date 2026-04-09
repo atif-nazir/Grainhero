@@ -83,7 +83,7 @@ interface TrainingHistory {
   performance_trends?: Record<string, number[]>
 }
 
-export default function ModelPerformancePage() {
+export default function ModelPerformancePage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [performance, setPerformance] = useState<ModelPerformance | null>(null)
   const [loading, setLoading] = useState(true)
   const [retraining, setRetraining] = useState(false)
@@ -194,7 +194,6 @@ export default function ModelPerformancePage() {
     } finally {
       setLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendUrl, selectedGrain])
 
   useEffect(() => {

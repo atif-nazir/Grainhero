@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Plus, Search, Smartphone, Wifi, Battery, AlertTriangle, CheckCircle, XCircle,
-  Thermometer, Activity, Sun, Droplets, Wind, Eye, Gauge, Bug, Fan
+  Thermometer, Activity, Sun, Droplets, Wind, Eye, Gauge, Fan
 } from 'lucide-react'
 import { useEnvironmentalHistory } from '@/lib/useEnvironmentalData'
-import { toast } from 'sonner'
+
 import { useLanguage } from '@/app/[locale]/providers'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import type { Socket } from 'socket.io-client'
@@ -56,7 +56,7 @@ interface TelemetryData {
   timestamp: number
 }
 
-export default function SensorsPage() {
+export default function SensorsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [sensors, setSensors] = useState<SensorDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,7 +75,7 @@ export default function SensorsPage() {
   const socketRef = useRef<Socket | null>(null)
   const [realtimeConnected, setRealtimeConnected] = useState(false)
   const [showDiagnostics, setShowDiagnostics] = useState(false)
-  const [diagnostics, setDiagnostics] = useState<Array<{ error: string; solution: string }>>([])
+  const [diagnostics, _setDiagnostics] = useState<Array<{ error: string; solution: string }>>([])
 
   // Initialize with fixed device id if provided
   useEffect(() => {
@@ -136,7 +136,7 @@ export default function SensorsPage() {
         }
       })()
     return () => { mounted = false }
-  }, [])
+  }, [backendUrl, siloId])
 
   // Realtime: Socket.IO subscription
   useEffect(() => {
@@ -527,13 +527,13 @@ export default function SensorsPage() {
           <div>
             <div className="text-xs uppercase text-muted-foreground">Sunrise</div>
             <div className="text-lg font-semibold">
-              {(latest?.environmental_context as any)?.sys?.sunrise ? new Date((latest?.environmental_context as any).sys.sunrise * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
+              {latest?.environmental_context?.sys?.sunrise ? new Date(latest.environmental_context.sys.sunrise * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
             </div>
           </div>
           <div>
             <div className="text-xs uppercase text-muted-foreground">Sunset</div>
             <div className="text-lg font-semibold">
-              {(latest?.environmental_context as any)?.sys?.sunset ? new Date((latest?.environmental_context as any).sys.sunset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
+              {latest?.environmental_context?.sys?.sunset ? new Date(latest.environmental_context.sys.sunset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
             </div>
           </div>
         </CardContent>
@@ -723,3 +723,4 @@ export default function SensorsPage() {
     </div>
   )
 }
+

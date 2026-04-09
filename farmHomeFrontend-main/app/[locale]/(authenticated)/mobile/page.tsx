@@ -114,7 +114,7 @@ const mobileFeatures = [
   },
 ]
 
-export default function MobilePage() {
+export default function MobilePage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [syncInProgress, setSyncInProgress] = useState(false)
   const { t } = useLanguage()
 

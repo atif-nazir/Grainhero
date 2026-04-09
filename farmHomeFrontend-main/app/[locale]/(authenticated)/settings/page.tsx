@@ -52,7 +52,7 @@ interface TenantSettings {
   }
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [settings, setSettings] = useState<TenantSettings>({
     name: '',
     email: '',
@@ -253,7 +253,7 @@ export default function SettingsPage() {
       }
 
       // Save tenant settings if available (excluding two_factor_auth since it's handled separately)
-      const { two_factor_auth, ...systemWithout2FA } = settings.system;
+      const { two_factor_auth: _two_factor_auth, ...systemWithout2FA } = settings.system;
       await api.put('/api/tenant/settings', {
         notifications: settings.notifications,
         system: systemWithout2FA,

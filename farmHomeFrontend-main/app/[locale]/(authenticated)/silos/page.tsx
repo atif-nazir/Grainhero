@@ -5,11 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye, Wifi, WifiOff } from 'lucide-react'
+import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye, WifiOff } from 'lucide-react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { AnimatedBackground } from "@/components/animations/MotionGraphics"
@@ -44,7 +44,7 @@ interface Silo {
   }
 }
 
-export default function SilosPage() {
+export default function SilosPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [silos, setSilos] = useState<Silo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -417,7 +417,7 @@ export default function SilosPage() {
           {/* Silos Grid */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredSilos.map((silo) => {
-              const occupancyPercentage = getOccupancyPercentage(silo.current_occupancy_kg || 0, silo.capacity_kg)
+              const _occupancyPercentage = getOccupancyPercentage(silo.current_occupancy_kg || 0, silo.capacity_kg)
 
               // Use Firebase real-time data, fallback to silo.current_conditions
               const liveTemp = firebaseSensor.connected && firebaseSensor.temperature !== null

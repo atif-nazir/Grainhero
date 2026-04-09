@@ -39,10 +39,11 @@ interface Subscription {
     start_date: string
     end_date: string
     payment_status: string
+    [key: string]: unknown
 }
 
-export default function SubscriptionManagementPage() {
-    const [loading, setLoading] = useState(true)
+export default function SubscriptionManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
+    const [, setLoading] = useState(true)
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
 
     useEffect(() => {
@@ -58,7 +59,7 @@ export default function SubscriptionManagementPage() {
             } else {
                 toast.error("Failed to load subscriptions")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred loading subscriptions")
         } finally {
             setLoading(false)
@@ -69,7 +70,7 @@ export default function SubscriptionManagementPage() {
         {
             key: "tenant",
             label: "Tenant",
-            render: (value: unknown, row: Subscription) => (
+            render: (_value: unknown, row: Subscription) => (
                 <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
                         <Building2 className="h-4 w-4" />
@@ -84,7 +85,7 @@ export default function SubscriptionManagementPage() {
         {
             key: "plan",
             label: "Plan Details",
-            render: (value: unknown, row: Subscription) => (
+            render: (_value: unknown, row: Subscription) => (
                 <div>
                     <div className="font-medium">{row.plan_name}</div>
                     <div className="text-sm text-gray-500 capitalize">{row.billing_cycle}</div>
@@ -94,7 +95,7 @@ export default function SubscriptionManagementPage() {
         {
             key: "price",
             label: "Amount",
-            render: (value: unknown, row: Subscription) => (
+            render: (_value: unknown, row: Subscription) => (
                 <div className="font-medium">
                     PKR {row.price_per_month.toLocaleString()} <span className="text-gray-400 font-normal">/mo</span>
                 </div>
@@ -103,7 +104,7 @@ export default function SubscriptionManagementPage() {
         {
             key: "dates",
             label: "Subscription Period",
-            render: (value: unknown, row: Subscription) => (
+            render: (_value: unknown, row: Subscription) => (
                 <div className="text-sm space-y-1">
                     <div className="flex items-center gap-2 text-gray-600">
                         <Calendar className="h-3 w-3" />
@@ -115,7 +116,7 @@ export default function SubscriptionManagementPage() {
         {
             key: "status",
             label: "Status",
-            render: (value: unknown, row: Subscription) => (
+            render: (_value: unknown, row: Subscription) => (
                 <div className="space-y-1">
                     <Badge variant={row.status === 'active' ? 'default' : 'secondary'}
                         className={row.status === 'active' ? "bg-green-100 text-green-700 hover:bg-green-200" : ""}>
@@ -140,7 +141,7 @@ export default function SubscriptionManagementPage() {
         {
             key: "actions",
             label: "Actions",
-            render: (value: unknown, row: Subscription) => (
+            render: (_value: unknown, row: Subscription) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">

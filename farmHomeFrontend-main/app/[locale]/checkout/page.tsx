@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Check, CreditCard, Shield, Clock, Users, Zap, Globe, Cpu, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react"
+import { Check, CreditCard, Shield, Clock, Users, Globe, Cpu, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react"
 import pricingData from '../pricing-data.js'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-export default function CheckoutPage() {
+export default function CheckoutPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const searchParams = useSearchParams()
     const [selectedPlan, setSelectedPlan] = useState<string | null>('intermediate')
     const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({})

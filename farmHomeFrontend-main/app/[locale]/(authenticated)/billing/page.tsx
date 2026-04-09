@@ -53,7 +53,7 @@ interface BillingHistory {
     description: string
 }
 
-export default function BillingPage() {
+export default function BillingPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null)

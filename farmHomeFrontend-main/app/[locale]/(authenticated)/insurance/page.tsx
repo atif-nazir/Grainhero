@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -26,6 +27,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Package,
   Upload,
   Download,
   X,
@@ -135,7 +137,7 @@ const EVENT_ICONS: Record<string, React.ReactNode> = {
 }
 
 // ── Component ───────────────────────────────────────────
-export default function InsurancePage() {
+export default function InsurancePage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [policies, setPolicies] = useState<InsurancePolicy[]>([])
   const [claims, setClaims] = useState<InsuranceClaim[]>([])
   const [batches, setBatches] = useState<GrainBatch[]>([])
@@ -146,7 +148,7 @@ export default function InsurancePage() {
 
   // Claim modal
   const [showClaimModal, setShowClaimModal] = useState(false)
-  const [claimSaving, setClaimSaving] = useState(false)
+  const [claimSaving, _setClaimSaving] = useState(false)
   const [claimPhotos, setClaimPhotos] = useState<File[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [claimForm, setClaimForm] = useState({
@@ -242,8 +244,9 @@ export default function InsurancePage() {
       if (res.ok) {
         toast.success('Spoilage event logged')
         // Upload photos if any
-        if (spoilagePhotos.length > 0 && (res.data as any)?.event?.event_id) {
-          const eventId = (res.data as any).event.event_id
+        const resData = res.data as { event: { event_id: string } }
+        if (spoilagePhotos.length > 0 && resData?.event?.event_id) {
+          const eventId = resData.event.event_id
           const fd = new FormData()
           spoilagePhotos.forEach(p => fd.append('photos', p))
           const token = localStorage.getItem('token')
@@ -252,7 +255,7 @@ export default function InsurancePage() {
           })
         }
         setShowSpoilageModal(false); setSpoilagePhotos([]); loadData()
-      } else toast.error((res as any).error || 'Failed to log spoilage event')
+      } else toast.error((res as { error?: string }).error || 'Failed to log spoilage event')
     } catch (e: unknown) { toast.error((e as Error).message) }
     finally { setSpoilageSaving(false) }
   }
@@ -300,7 +303,7 @@ export default function InsurancePage() {
         toast.success('Request sent to administrator!')
         setRequestForm({ preferred_provider: 'EFU', coverage_type: 'Comprehensive', message: '' })
       } else {
-        toast.error((res as any).error || 'Failed to send request')
+        toast.error((res as { error?: string }).error || 'Failed to send request')
       }
     } catch (e: unknown) { toast.error((e as Error).message || 'Failed to send') }
     finally { setRequestSending(false) }
@@ -426,7 +429,7 @@ export default function InsurancePage() {
                     <TableHead>Event ID</TableHead><TableHead>Batch</TableHead><TableHead>Type</TableHead><TableHead>Severity</TableHead><TableHead>Loss (kg)</TableHead><TableHead>Value Loss</TableHead><TableHead>Date</TableHead><TableHead>Photos</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
-                    {allSpoilageEvents.map((evt: any) => (
+                    {allSpoilageEvents.map((evt) => (
                       <TableRow key={evt.event_id}>
                         <TableCell className="font-mono text-xs">{evt.event_id}</TableCell>
                         <TableCell><Badge variant="outline">{evt.batch_id}</Badge></TableCell>
@@ -564,7 +567,13 @@ export default function InsurancePage() {
                             <div className="mt-3 grid grid-cols-4 gap-2">
                               {evt.photos.map((photo, pIdx) => (
                                 <a key={pIdx} href={photo.path} target="_blank" rel="noopener noreferrer" className="block">
-                                  <img src={photo.path} alt={photo.original_name || `Photo ${pIdx + 1}`} className="w-full h-20 object-cover rounded-lg border hover:opacity-80 transition-opacity" />
+                                  <Image
+                                    src={photo.path}
+                                    alt={photo.original_name || `Photo ${pIdx + 1}`}
+                                    width={100}
+                                    height={80}
+                                    className="w-full h-20 object-cover rounded-lg border hover:opacity-80 transition-opacity"
+                                  />
                                 </a>
                               ))}
                             </div>
@@ -706,7 +715,7 @@ export default function InsurancePage() {
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                 <input type="file" id="spoilage-photos" multiple accept="image/*" className="hidden" onChange={e => setSpoilagePhotos(Array.from(e.target.files || []))} />
                 <label htmlFor="spoilage-photos" className="cursor-pointer flex flex-col items-center space-y-1"><Upload className="h-6 w-6 text-gray-400" /><span className="text-sm text-gray-500">Click to upload photos</span></label>
-                {spoilagePhotos.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{spoilagePhotos.map((f, i) => <div key={i} className="relative"><img src={URL.createObjectURL(f)} alt="" className="w-full h-20 object-cover rounded" /><button type="button" onClick={() => setSpoilagePhotos(spoilagePhotos.filter((_, j) => j !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>)}</div>}
+                {spoilagePhotos.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{spoilagePhotos.map((f, i) => <div key={i} className="relative"><Image src={URL.createObjectURL(f)} alt="" width={100} height={80} className="w-full h-20 object-cover rounded" /><button type="button" onClick={() => setSpoilagePhotos(spoilagePhotos.filter((_, j) => j !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>)}</div>}
               </div>
             </div>
           </div>
@@ -734,7 +743,7 @@ export default function InsurancePage() {
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                 <input type="file" id="claim-photos" multiple accept="image/*" className="hidden" onChange={e => setClaimPhotos(Array.from(e.target.files || []))} />
                 <label htmlFor="claim-photos" className="cursor-pointer flex flex-col items-center space-y-1"><Upload className="h-6 w-6 text-gray-400" /><span className="text-sm text-gray-500">Click to upload damage photos</span><span className="text-xs text-gray-400">PNG, JPG up to 10MB each</span></label>
-                {claimPhotos.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{claimPhotos.map((f, i) => <div key={i} className="relative"><img src={URL.createObjectURL(f)} alt="" className="w-full h-24 object-cover rounded" /><button type="button" onClick={() => setClaimPhotos(claimPhotos.filter((_, j) => j !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>)}</div>}
+                {claimPhotos.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{claimPhotos.map((f, i) => <div key={i} className="relative"><Image src={URL.createObjectURL(f)} alt="" width={100} height={96} className="w-full h-24 object-cover rounded" /><button type="button" onClick={() => setClaimPhotos(claimPhotos.filter((_, j) => j !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>)}</div>}
               </div>
             </div>
           </div>

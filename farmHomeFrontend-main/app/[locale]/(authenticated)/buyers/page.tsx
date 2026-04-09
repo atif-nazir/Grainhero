@@ -135,7 +135,7 @@ const dispatchStatusClass = (status: string) => {
   }
 }
 
-export default function BuyersPage() {
+export default function BuyersPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [buyers, setBuyers] = useState<BuyerRecord[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [recentContracts, setRecentContracts] = useState<Contract[]>([])

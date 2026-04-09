@@ -4,14 +4,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import { Slider } from "@/components/ui/slider"
 import { toast } from "sonner"
 import {
   Fan,
   Lightbulb,
   Volume2,
-  Thermometer,
   VolumeX,
   Power,
   PowerOff,
@@ -20,7 +19,6 @@ import {
   CheckCircle,
   Zap,
   ThermometerSun,
-  Droplets,
   Wind,
   Shield,
   Timer,
@@ -53,7 +51,7 @@ interface LiveTelemetry {
   led4State?: boolean
 }
 
-export default function ActuatorsPage() {
+export default function ActuatorsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [live, setLive] = useState<LiveTelemetry | null>(null)
   const [pwmValue, setPwmValue] = useState(80)
   const [sending, setSending] = useState<string | null>(null)

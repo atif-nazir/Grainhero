@@ -54,7 +54,7 @@ function AlertForm({ onSubmit, loading }: { onSubmit: (data: Alert) => void, loa
   );
 }
 
-export default function NewAlertPage() {
+export default function NewAlertPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const t = useTranslations('AlertsNewPage');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +64,8 @@ export default function NewAlertPage() {
     setLoading(true);
     setError(null);
     const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
-    fetch("http://localhost:5000/alerts", {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+    fetch(`${backendUrl}/alerts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

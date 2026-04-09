@@ -3,7 +3,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import {
   Users,
   Building2,
@@ -15,15 +14,10 @@ import {
   Shield,
   BarChart3,
   Settings,
-  Crown,
   Zap,
   CreditCard,
-  Package,
-  Archive,
   Search,
-  Filter,
   MoreVertical,
-  Plus,
   Download
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -34,15 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,11 +100,20 @@ interface SystemAlert {
   status?: string;
 }
 
+interface Invoice {
+  id: string;
+  invoice_number: string;
+  tenant_name: string;
+  date: string;
+  amount: number;
+  status: string;
+}
+
 export function SuperAdminDashboard() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [systemStats, setSystemStats] = useState<SystemStat | null>(null);
-  const [recentTenants, setRecentTenants] = useState<RecentTenant[]>([]);
+  const [, setRecentTenants] = useState<RecentTenant[]>([]);
   const [allTenants, setAllTenants] = useState<RecentTenant[]>([]);
   const [systemAlerts, setSystemAlerts] = useState<SystemAlert[]>([]);
   const [monthlyTrend, setMonthlyTrend] = useState<MonthlyTrend[]>([]);
@@ -127,49 +122,10 @@ export function SuperAdminDashboard() {
 
   // Tenant Management States
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTenant, setSelectedTenant] = useState<RecentTenant | null>(null);
   const [tenantUsers, setTenantUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [isAddTenantOpen, setIsAddTenantOpen] = useState(false);
-  const [newTenantData, setNewTenantData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    phone: "",
-    business_type: "",
-    plan: "basic",
-    is_active: true
-  });
-
-  const handleAddTenant = async () => {
-    try {
-      const res = await api.post("/api/tenant-management/tenants", newTenantData);
-      if (res.ok && res.data) {
-        toast.success("Tenant added successfully");
-        setIsAddTenantOpen(false);
-        // Reset form data
-        setNewTenantData({
-          name: "",
-          email: "",
-          password: "",
-          phone: "",
-          business_type: "",
-          plan: "basic",
-          is_active: true
-        });
-        // Refresh tenants list
-        window.location.reload(); // Quick refresh to get new data
-      } else {
-        const errorData = res.data as any;
-        toast.error(errorData?.message || "Failed to add tenant");
-      }
-    } catch (error) {
-      console.error('Error adding tenant:', error);
-      toast.error("Failed to add tenant");
-    }
-  };
-
+  const [, _setIsAddTenantOpen] = useState(false);
 
   // Financial Stats
   const [financialStats, setFinancialStats] = useState({
@@ -178,7 +134,7 @@ export function SuperAdminDashboard() {
     pendingRevenue: 0,
     cancelledCount: 0
   });
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   // Edit Limits State
   const [isEditLimitsOpen, setIsEditLimitsOpen] = useState(false);
@@ -249,7 +205,7 @@ export function SuperAdminDashboard() {
         // The management endpoint returns enhanced data structure
         const fullTenantsList = allTenantsData.data?.tenants || [];
         // Map to RecentTenant format if needed or use as is (RecentTenant is a bit of a misnomer type now, but fits)
-        const mappedAllTenants = fullTenantsList.map((t: any) => ({
+        const mappedAllTenants = fullTenantsList.map((t: { _id: string; name: string; email?: string; plan?: string; status?: string; is_active?: boolean; revenue?: number; user_count?: number; subscription_end?: string; phone?: string }) => ({
           id: t._id, // Use real ID
           _id: t._id,
           name: t.name,
@@ -268,7 +224,7 @@ export function SuperAdminDashboard() {
         setSystemAlerts(alertsData.data || []);
 
         // Set monthly trend data
-        const formattedTrend = subscriptionRevenueData.monthlyTrend?.map((item: any) => ({
+        const formattedTrend = subscriptionRevenueData.monthlyTrend?.map((item: { date?: string; month?: string; revenue?: number; amount?: number }) => ({
           month: item.date || item.month,
           revenue: item.revenue || item.amount
         })) || [];
@@ -356,8 +312,8 @@ export function SuperAdminDashboard() {
         let csvContent = "";
         if (typeof res.data === 'string') {
           csvContent = res.data;
-        } else if ((res.data as any).data && typeof (res.data as any).data === 'string') {
-          csvContent = (res.data as any).data;
+        } else if ((res.data as { data?: string }).data && typeof (res.data as { data?: string }).data === 'string') {
+          csvContent = (res.data as { data: string }).data;
         }
 
         if (csvContent) {
@@ -405,11 +361,11 @@ export function SuperAdminDashboard() {
             : t
         ));
       } else {
-        const errorData = res.data as any;
+        const errorData = res.data as { message?: string };
         toast.error(errorData?.message || "Failed to update tenant status");
       }
-    } catch (error) {
-      console.error("Error suspending tenant:", error);
+    } catch (_error) {
+      console.error("Error suspending tenant:", _error);
       toast.error("An error occurred");
     }
   };
@@ -418,7 +374,7 @@ export function SuperAdminDashboard() {
     try {
       const res = await api.post(`/api/super-admin/tenants/${tenantId}/impersonate`, {});
       if (res.ok && res.data) {
-        const { token, user } = res.data as { token: string, user: any };
+        const { token, user } = res.data as { token: string, user: { name: string; email: string } };
         // Save token and redirect
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(user));
@@ -427,7 +383,7 @@ export function SuperAdminDashboard() {
       } else {
         toast.error("Failed to impersonate tenant");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Error impersonating tenant");
     }
   };
@@ -463,7 +419,7 @@ export function SuperAdminDashboard() {
       } else {
         toast.error("Failed to update limits");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Error updating limits");
     }
   };
@@ -493,7 +449,7 @@ export function SuperAdminDashboard() {
     }
   };
 
-  const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
+  const [, setActiveTenantId] = useState<string | null>(null);
 
   const handleViewTenantDetails = async (tenant: RecentTenant) => {
     // If tenant doesn't have _id (because it came from the formatted list which might only have numeric id),
@@ -547,8 +503,7 @@ export function SuperAdminDashboard() {
   const filteredTenants = allTenants.filter(tenant => {
     const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tenant.email?.toLowerCase() || "").includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || tenant.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
 
   if (loading) {

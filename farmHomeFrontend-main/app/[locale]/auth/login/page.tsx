@@ -19,7 +19,7 @@ import {
 } from "@/lib/validation";
 import { Link, useRouter } from "@/i18n/navigation"
 
-export default function LoginPage() {
+export default function LoginPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const t = useTranslations('AuthPage');
 
   // Form state

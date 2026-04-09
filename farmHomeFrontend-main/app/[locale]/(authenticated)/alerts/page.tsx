@@ -9,6 +9,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AnimatedBackground } from "@/components/animations/MotionGraphics";
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+
 // User type
 interface User {
   id: string;
@@ -75,7 +77,7 @@ function AlertForm({ initial = {}, onSubmit, loading, submitLabel }: AlertFormPr
   );
 }
 
-export default function AlertsPage() {
+export default function AlertsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -130,15 +132,15 @@ export default function AlertsPage() {
     setError(null);
     let url = "";
     if (role === "super_admin") {
-      url = "http://localhost:5000/alerts/all";
+      url = `${backendUrl}/alerts/all`;
     } else if (role === "admin") {
-      url = `http://localhost:5000/alerts/by-admin/${userId}`;
+      url = `${backendUrl}/alerts/by-admin/${userId}`;
     } else if (role === "manager") {
-      url = `http://localhost:5000/alerts/by-manager/${userId}`;
+      url = `${backendUrl}/alerts/by-manager/${userId}`;
     } else if (role === "assistant") {
-      url = `http://localhost:5000/alerts/by-assistant/${userId}`;
+      url = `${backendUrl}/alerts/by-assistant/${userId}`;
     } else {
-      url = "http://localhost:5000/alerts";
+      url = `${backendUrl}/alerts`;
     }
     fetch(url, {
       headers: { "Authorization": `Bearer ${token}` },
@@ -164,9 +166,10 @@ export default function AlertsPage() {
     if (!role || !userId) return;
     if (role === "super_admin") return; // No websocket for super_admin
     let wsUrl = "";
-    if (role === "admin") wsUrl = `ws://localhost:5000/alerts/admin/${userId}`;
-    else if (role === "manager") wsUrl = `ws://localhost:5000/alerts/manager/${userId}`;
-    else if (role === "assistant") wsUrl = `ws://localhost:5000/alerts/assistant/${userId}`;
+    const wsBase = backendUrl.replace(/^http/, 'ws');
+    if (role === "admin") wsUrl = `${wsBase}/alerts/admin/${userId}`;
+    else if (role === "manager") wsUrl = `${wsBase}/alerts/manager/${userId}`;
+    else if (role === "assistant") wsUrl = `${wsBase}/alerts/assistant/${userId}`;
     else return;
     console.log("WebSocket route:", wsUrl);
     const socket = new WebSocket(wsUrl);
@@ -194,7 +197,7 @@ export default function AlertsPage() {
     setEditLoading(true);
     setError(null);
     const token = localStorage.getItem("token");
-    fetch(`http://localhost:5000/alerts/${id}`, {
+    fetch(`${backendUrl}/alerts/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -224,7 +227,7 @@ export default function AlertsPage() {
     setDeleteLoadingId(id);
     setError(null);
     const token = localStorage.getItem("token");
-    fetch(`http://localhost:5000/alerts/${id}`, {
+    fetch(`${backendUrl}/alerts/${id}`, {
       method: "DELETE",
       headers: {
         "Authorization": `Bearer ${token}`,

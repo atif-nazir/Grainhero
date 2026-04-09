@@ -28,7 +28,6 @@ import {
   Sun,
   Bug,
   Database,
-  Info,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -129,7 +128,7 @@ const DATA_SOURCE_LABELS: Record<string, { label: string, color: string }> = {
 }
 
 /* ─── Component ─── */
-export default function AIPredictionsPage() {
+export default function AIPredictionsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [livePrediction, setLivePrediction] = useState<LivePrediction | null>(null)
   const [storedPredictions, setStoredPredictions] = useState<StoredPrediction[]>([])
   const [predictionHistory, setPredictionHistory] = useState<PredictionHistory[]>([])

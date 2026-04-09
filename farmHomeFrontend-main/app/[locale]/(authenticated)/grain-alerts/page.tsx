@@ -32,7 +32,7 @@ interface GrainAlert {
   }
 }
 
-export default function GrainAlertsPage() {
+export default function GrainAlertsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
 
   const [alerts, setAlerts] = useState<GrainAlert[]>([])
   const [loading, setLoading] = useState(true)
