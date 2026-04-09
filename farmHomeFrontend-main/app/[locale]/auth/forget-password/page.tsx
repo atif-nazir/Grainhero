@@ -11,7 +11,7 @@ import { config } from "@/config"
 import { useTranslations } from "next-intl"
 import { validateEmail, createFieldValidation, type FieldValidation } from "@/lib/validation"
 
-export default function ForgetPasswordPage() {
+export default function ForgetPasswordPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const t = useTranslations('AuthPage');
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)

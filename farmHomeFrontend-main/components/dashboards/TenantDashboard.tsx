@@ -3,12 +3,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import {
   Users,
   DollarSign,
   AlertTriangle,
-  Activity,
   Package,
   Smartphone,
   BarChart3,
@@ -21,7 +19,6 @@ import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { TeamInvitationForm } from "@/components/TeamInvitationForm"
 
 type DashboardResponse = {
   stats: Array<{ title: string; value: number | string }>

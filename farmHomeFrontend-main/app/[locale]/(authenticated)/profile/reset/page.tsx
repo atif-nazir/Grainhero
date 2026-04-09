@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/app/[locale]/providers";
 import { config } from "@/config";
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const { user } = useAuth();
   const [prevPass, setPrevPass] = useState("");
   const [newPass, setNewPass] = useState("");

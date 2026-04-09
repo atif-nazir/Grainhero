@@ -20,6 +20,10 @@ export interface EnvironmentalRecord {
       [key: string]: number | string | boolean | undefined;
     };
     air_quality_index?: number;
+    sys?: {
+      sunrise?: number;
+      sunset?: number;
+    };
   };
   derived_metrics?: {
     dew_point?: number;

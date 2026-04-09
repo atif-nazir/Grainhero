@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
+import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -60,7 +61,7 @@ interface AQIComponents {
 }
 
 /* ---------- Component ---------- */
-export default function EnvironmentalPage() {
+export default function EnvironmentalPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [cityQuery, setCityQuery] = useState("")
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null)
   const [current, setCurrent] = useState<OWCurrent | null>(null)
@@ -254,7 +255,7 @@ export default function EnvironmentalPage() {
             {current?.weather?.[0] && (
               <div className="flex items-center gap-2">
                 {weatherIcon(current.weather[0].icon) && (
-                  <img src={weatherIcon(current.weather[0].icon)!} alt="" className="h-14 w-14 -my-2" />
+                  <Image src={weatherIcon(current.weather[0].icon)!} alt="Weather icon" width={56} height={56} className="-my-2" />
                 )}
                 <span className="text-sm font-medium capitalize text-gray-600">{current.weather[0].description}</span>
               </div>

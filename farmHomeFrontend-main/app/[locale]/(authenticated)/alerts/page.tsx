@@ -75,7 +75,7 @@ function AlertForm({ initial = {}, onSubmit, loading, submitLabel }: AlertFormPr
   );
 }
 
-export default function AlertsPage() {
+export default function AlertsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);

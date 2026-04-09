@@ -268,7 +268,10 @@ function RopeVisual() {
   )
 }
 
-function FeatureCard({ feature, hoveredPhoto }: any) {
+function FeatureCard({ feature, hoveredPhoto }: { 
+  feature: { id: string; title: string; description: string; image: string }; 
+  hoveredPhoto: string | null 
+}) {
   return (
     <div
       className="relative bg-white p-4 pb-8 shadow-2xl cursor-pointer w-[280px]"

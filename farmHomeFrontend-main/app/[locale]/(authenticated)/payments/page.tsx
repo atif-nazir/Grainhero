@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   CreditCard,
   DollarSign,
-  Calendar,
   CheckCircle,
   Loader2,
   Download,
@@ -22,7 +21,6 @@ import {
   Search,
   RefreshCw,
   TrendingUp,
-  XCircle,
   AlertCircle,
   Package,
   ArrowUpRight
@@ -116,7 +114,7 @@ interface BatchesResponse {
   }
 }
 
-export default function PaymentsPage() {
+export default function PaymentsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [items, setItems] = useState<PaymentItem[]>([])
   const [summary, setSummary] = useState<PaymentsSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -366,7 +364,7 @@ export default function PaymentsPage() {
     }
   }
 
-  const handlePaymentGateway = async (batch: DispatchedBatch, amount: number, buyerName: string) => {
+  const _handlePaymentGateway = async (batch: DispatchedBatch, amount: number, buyerName: string) => {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       const backendUrl = config.backendUrl

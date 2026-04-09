@@ -23,12 +23,9 @@ import {
     FileText,
     BarChart3,
     Settings,
-    Bell,
     Eye,
-    Camera,
     Info,
     AlertCircle,
-    CheckCircle,
     XCircle,
 } from "lucide-react"
 import { api } from "@/lib/api"
@@ -78,7 +75,7 @@ const SEVERITY_CONFIG: Record<string, { label: string; color: string; icon: Reac
     critical: { label: "Critical", color: "bg-red-100 text-red-700 border-red-300", icon: <XCircle className="h-3 w-3" /> },
 }
 
-export default function ActivityLogsPage() {
+export default function ActivityLogsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const [logs, setLogs] = useState<ActivityLog[]>([])
     const [loading, setLoading] = useState(true)
     const [pagination, setPagination] = useState<Pagination>({

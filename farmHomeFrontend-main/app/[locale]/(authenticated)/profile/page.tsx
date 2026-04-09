@@ -54,7 +54,7 @@ interface UserProfile {
   lastLogin?: string
 }
 
-export default function ProfilePage() {
+export default function ProfilePage({ params: _params }: { params: Promise<{ locale: string }> }) {
   // Collapsible state for Notification Preferences
   const [showNotifications, setShowNotifications] = useState(false)
   // Collapsible state for Basic Information

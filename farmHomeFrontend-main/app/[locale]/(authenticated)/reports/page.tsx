@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
@@ -22,7 +22,6 @@ import {
   RefreshCw,
   Loader2,
   CheckCircle,
-  XCircle,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { config } from '@/config'
@@ -64,7 +63,7 @@ type DashboardData = {
   }
 }
 
-export default function ReportsPage() {
+export default function ReportsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState('month')
@@ -73,7 +72,7 @@ export default function ReportsPage() {
   const [dashData, setDashData] = useState<DashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const loadData = async (showRefresh = false) => {
+  const loadData = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true)
     else setLoading(true)
     setError(null)
@@ -98,11 +97,10 @@ export default function ReportsPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
-
+  }, [selectedPeriod])
   useEffect(() => {
     loadData()
-  }, [selectedPeriod])
+  }, [selectedPeriod, loadData])
 
   const formatter = useMemo(
     () =>

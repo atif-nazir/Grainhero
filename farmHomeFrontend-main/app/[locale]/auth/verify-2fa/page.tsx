@@ -9,11 +9,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { WheatIcon as Sheep, AlertCircle, CheckCircle } from "lucide-react"
 import { config } from "@/config"
-import { useTranslations } from 'next-intl';
 import { Link } from "@/i18n/navigation"
 
-export default function Verify2FAPage() {
-  const t = useTranslations('AuthPage');
+export default function Verify2FAPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const router = useRouter()
 
   // Form state
@@ -106,7 +104,7 @@ export default function Verify2FAPage() {
     try {
       // Resend code by calling login again with stored credentials
       const email = localStorage.getItem("email")
-      const password = localStorage.getItem("password") // This won't be available for security reasons
+      // const password = localStorage.getItem("password") // This won't be available for security reasons
       
       if (!email) {
         setMessage("Session expired. Please login again.")
@@ -117,7 +115,7 @@ export default function Verify2FAPage() {
 
       // For security, we'll redirect back to login
       setMessage("Please login again to receive a new verification code.")
-      setMessageType("info")
+      setMessageType(null)
       setTimeout(() => router.push("/auth/login"), 2000)
       
     } catch (err) {
@@ -208,7 +206,7 @@ export default function Verify2FAPage() {
                 className="text-sm text-blue-600 hover:underline disabled:opacity-50"
                 disabled={isLoading}
               >
-                Didn't receive the code? Try again
+                Didn&apos;t receive the code? Try again
               </button>
             </div>
           </form>

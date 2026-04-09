@@ -79,7 +79,7 @@ const incidentData = [
   }
 ]
 
-export default function IncidentsPage() {
+export default function IncidentsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [incidents] = useState(incidentData)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")

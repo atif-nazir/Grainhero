@@ -1,6 +1,6 @@
 'use client'
 
-import { Wheat, Check, Cpu } from 'lucide-react'
+import { Check, Cpu } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'

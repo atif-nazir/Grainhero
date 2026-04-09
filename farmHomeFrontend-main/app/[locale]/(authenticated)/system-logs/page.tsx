@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 
-export default function SystemLogsPage() {
+export default function SystemLogsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const logs = [
     { level: 'info', message: 'Server started', time: 'now' },
     { level: 'warn', message: 'Low storage on node-1', time: '2m' },

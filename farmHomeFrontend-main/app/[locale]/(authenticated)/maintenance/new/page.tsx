@@ -18,7 +18,7 @@ import { config } from "@/config"
 import { usePlan } from '@/app/[locale]/providers';
 import allowedPages from '../../../allowed-pages.js';
 
-export default function NewMaintenanceRecordPage() {
+export default function NewMaintenanceRecordPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const router = useRouter()
   const { t, currentLanguage } = useLanguage();
   const { plan } = usePlan();

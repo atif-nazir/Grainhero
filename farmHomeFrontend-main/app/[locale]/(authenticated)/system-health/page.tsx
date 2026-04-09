@@ -73,7 +73,7 @@ interface SystemStats {
   errorRate: number;
 }
 
-export default function SystemHealthPage() {
+export default function SystemHealthPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
 

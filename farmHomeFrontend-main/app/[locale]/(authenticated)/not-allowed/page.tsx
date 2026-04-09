@@ -17,7 +17,7 @@ import {
 import { useRouter } from "next/navigation"
 import { getRoleDisplayName } from "@/lib/auth-utils"
 
-export default function NotAllowedPage() {
+export default function NotAllowedPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const { user } = useAuth()
   const router = useRouter()
 

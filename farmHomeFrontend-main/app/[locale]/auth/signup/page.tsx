@@ -21,7 +21,7 @@ import {
 } from "@/lib/validation";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 
-export default function SignUpPage() {
+export default function SignUpPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const t = useTranslations('AuthPage');
   const router = useRouter();
   const searchParams = useSearchParams();

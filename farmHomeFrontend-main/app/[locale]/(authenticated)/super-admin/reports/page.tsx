@@ -5,14 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-    FileText,
     Download,
     Calendar,
     Filter,
-    BarChart,
     Users,
-    CreditCard,
-    Shield
+    BarChart,
+    Shield,
+    Globe
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -22,12 +21,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { DateRange } from "react-day-picker"
-import { addDays, format } from "date-fns"
+import { api } from "@/lib/api"
 
-export default function SuperAdminReportsPage() {
+const reportTypes = [
+    { id: 'users', title: 'User Activity', description: 'Platform-wide user login and action history', category: 'Usage', icon: Users, format: 'PDF/CSV' },
+    { id: 'telemetry', title: 'System Telemetry', description: 'Aggregated sensor data across all silos', category: 'IoT', icon: BarChart, format: 'PDF/XLSX' },
+    { id: 'security', title: 'Security Audit', description: 'Access logs and authentication events', category: 'Security', icon: Shield, format: 'PDF' },
+    { id: 'revenue', title: 'Financial Summary', description: 'Billing and subscription revenue metrics', category: 'Finance', icon: Globe, format: 'CSV' },
+]
+
+export default function SuperAdminReportsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const [generating, setGenerating] = useState<string | null>(null)
-    const [format, setFormat] = useState<string>("pdf") // Added state for format
+    const [format, _setFormat] = useState<string>("pdf")
+    const [date, _setDate] = useState<string>("last_30_days")
 
     const handleGenerateReport = async (reportId: string) => {
         try {
@@ -43,7 +49,7 @@ export default function SuperAdminReportsPage() {
             } else {
                 toast.error("Failed to generate report")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred generating report")
         } finally {
             setGenerating(null)

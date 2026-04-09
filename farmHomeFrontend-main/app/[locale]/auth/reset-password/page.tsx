@@ -13,7 +13,7 @@ import { useTranslations } from "next-intl"
 import { validatePassword, validateConfirmPassword, createFieldValidation, type FieldValidation, type PasswordStrength } from "@/lib/validation"
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator"
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const t = useTranslations('AuthPage');
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")

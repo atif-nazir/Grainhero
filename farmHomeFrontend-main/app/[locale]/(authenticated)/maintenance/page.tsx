@@ -74,7 +74,7 @@ const maintenanceData = [
   }
 ]
 
-export default function MaintenancePage() {
+export default function MaintenancePage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [records] = useState(maintenanceData)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")

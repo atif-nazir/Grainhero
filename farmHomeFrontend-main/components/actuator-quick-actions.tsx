@@ -116,11 +116,9 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
   const loadActuators = async () => {
     try {
       setLoading(true);
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(`${backendUrl}/api/iot/devices`, {
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
       if (response.ok) {
@@ -154,7 +152,6 @@ export function ActuatorQuickActions({ compact = false }: ActuatorQuickActionsPr
     const deviceId = device?._id || device?.name || process.env.NEXT_PUBLIC_DEVICE_ID || '004B12387760';
     try {
       setActionLoading((prev) => ({ ...prev, [shortcut]: true }));
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const requestBody: { action: string; value?: number } = { action };
       if (value !== undefined) {
         requestBody.value = value;

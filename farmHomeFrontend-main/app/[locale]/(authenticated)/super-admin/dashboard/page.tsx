@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
     Building2,
     Users,
@@ -13,7 +11,6 @@ import {
     Package,
     Archive,
     AlertTriangle,
-    Server
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -36,7 +33,7 @@ interface DashboardData {
     }
 }
 
-export default function SuperAdminDashboard() {
+export default function SuperAdminDashboardPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const [loading, setLoading] = useState(true)
     const [data, setData] = useState<DashboardData | null>(null)
 
@@ -53,8 +50,8 @@ export default function SuperAdminDashboard() {
             } else {
                 toast.error("Failed to load dashboard data")
             }
-        } catch (error) {
-            toast.error("An error occurred loading dashboard data")
+        } catch (_error) {
+            console.error('Error loading dashboard data:', _error)
         } finally {
             setLoading(false)
         }

@@ -15,14 +15,12 @@ import { useTranslations } from "next-intl";
 import { usePlan } from "@/app/[locale]/providers";
 import { CheckCircle2, Cpu } from "lucide-react";
 import { useEffect, useState } from "react";
-import { config } from "@/config";
-
 function encryptAccess(access: string): string {
   return btoa(access);
 }
-export default function PlansPage() {
+export default function PlansPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
+  const [_isLoading, setIsLoading] = useState(true);
   const { logout, user } = useAuth();
   const t = useTranslations("PricingPage");
   const { plan } = usePlan();
@@ -31,9 +29,9 @@ export default function PlansPage() {
     (async () => {
       setIsLoading(true);
       try {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const res = await fetch(`${config.backendUrl}/auth/me`, {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+        const res = await fetch(`${backendUrl}/auth/me`, {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             "Content-Type": "application/json",

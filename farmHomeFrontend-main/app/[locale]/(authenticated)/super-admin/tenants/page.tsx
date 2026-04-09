@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -49,10 +49,11 @@ interface Tenant {
         silos: number
         batches: number
     }
+    [key: string]: unknown
 }
 
-export default function TenantManagementPage() {
-    const [loading, setLoading] = useState(true)
+export default function TenantManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
+    const [, setLoading] = useState(true)
     const [tenants, setTenants] = useState<Tenant[]>([])
     const [searchQuery, setSearchQuery] = useState("")
 
@@ -69,7 +70,7 @@ export default function TenantManagementPage() {
             } else {
                 toast.error("Failed to load tenants")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred loading tenants")
         } finally {
             setLoading(false)
@@ -85,17 +86,17 @@ export default function TenantManagementPage() {
             } else {
                 toast.error("Failed to update tenant status")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred")
         }
     }
 
-    const [impersonating, setImpersonating] = useState<string | null>(null)
+    const [, setImpersonating] = useState<string | null>(null)
 
     const handleImpersonate = async (tenantId: string) => {
         try {
             setImpersonating(tenantId)
-            const res = await api.post<{ token: string, user: any }>(`/api/super-admin/tenants/${tenantId}/impersonate`, {})
+            const res = await api.post<{ token: string, user: { name: string; email: string } }>(`/api/super-admin/tenants/${tenantId}/impersonate`, {})
             if (res.ok && res.data) {
                 toast.success("Impersonation successful. Redirecting...")
                 // Store token and redirect (Implementation depends on auth provider, assuming localStorage for this custom auth)
@@ -106,7 +107,7 @@ export default function TenantManagementPage() {
             } else {
                 toast.error("Failed to impersonate tenant admin")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred during login")
         } finally {
             setImpersonating(null)
@@ -123,7 +124,7 @@ export default function TenantManagementPage() {
         {
             key: "name",
             label: "Organization",
-            render: (value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Tenant) => (
                 <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${row.is_active ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
                         }`}>
@@ -139,7 +140,7 @@ export default function TenantManagementPage() {
         {
             key: "admin",
             label: "Admin",
-            render: (value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Tenant) => (
                 <div className="text-sm">
                     <div className="font-medium">{row.created_by?.name || "N/A"}</div>
                     <div className="text-muted-foreground">{row.created_by?.email || row.email}</div>
@@ -149,7 +150,7 @@ export default function TenantManagementPage() {
         {
             key: "subscription",
             label: "Subscription",
-            render: (value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Tenant) => (
                 <div>
                     <Badge variant="outline" className="mb-1">
                         {row.subscription_id?.plan_name || "Free Trial"}
@@ -163,7 +164,7 @@ export default function TenantManagementPage() {
         {
             key: "stats",
             label: "Usage",
-            render: (value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Tenant) => (
                 <div className="text-sm space-y-1">
                     <div className="flex items-center gap-2">
                         <Users className="h-3 w-3 text-gray-400" />
@@ -179,7 +180,7 @@ export default function TenantManagementPage() {
         {
             key: "status",
             label: "Status",
-            render: (value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Tenant) => (
                 <Badge variant={row.is_active ? "default" : "destructive"} className={row.is_active ? "bg-green-100 text-green-700 hover:bg-green-200" : ""}>
                     {row.is_active ? (
                         <div className="flex items-center gap-1">
@@ -202,7 +203,7 @@ export default function TenantManagementPage() {
         {
             key: "actions",
             label: "Actions",
-            render: (value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Tenant) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">

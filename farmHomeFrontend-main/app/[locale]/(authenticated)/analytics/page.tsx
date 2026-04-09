@@ -78,7 +78,7 @@ interface PredictionRow {
   trend: PredictionTrend
 }
 
-export default function AnalyticsPage() {
+export default function AnalyticsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [range, setRange] = useState("30")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

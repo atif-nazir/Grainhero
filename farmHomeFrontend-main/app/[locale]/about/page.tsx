@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { Wheat as WheatIcon, ArrowLeft } from 'lucide-react'
 import { Link } from '@/i18n/navigation'
 
-export default function AboutPage() {
+export default function AboutPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     return (
         <main className="min-h-screen bg-white text-black">
             {/* Hero */}

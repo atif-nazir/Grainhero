@@ -2,7 +2,7 @@
 
 import { Wheat as WheatIcon } from 'lucide-react'
 
-export default function PrivacyPolicyPage() {
+export default function PrivacyPolicyPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'noreply.grainhero1@gmail.com'
     return (
         <main className="min-h-screen bg-white text-black">

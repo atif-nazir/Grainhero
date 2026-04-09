@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -10,7 +11,6 @@ import {
   LayoutDashboard,
   Users,
   BarChart3,
-  FileText,
   Cloud,
   Smartphone,
   Settings,
@@ -22,14 +22,7 @@ import {
   Sparkles,
   QrCode,
   CreditCard,
-  Building2,
-  Crown,
   Shield,
-  Globe,
-  Database,
-  Server,
-  Activity,
-  DollarSign,
   Brain,
   Zap,
   ClipboardList,
@@ -47,7 +40,7 @@ interface NavItem {
   name: string;
   label: string;
   href: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   roles: string[];
   badge?: string;
 }
@@ -326,8 +319,8 @@ export function Sidebar() {
     return item.roles.includes(userRole);
   };
 
-  const showOnlySuperAdmin = userRole === "super_admin";
-  const showOnlyAdmin = userRole === "admin";
+  const _showOnlySuperAdmin = userRole === "super_admin";
+  const _showOnlyAdmin = userRole === "admin";
   const showOnlyManager = userRole === "manager" || userRole === "admin";
   const showIoTSections = userRole === "admin" || userRole === "manager" || userRole === "technician";
   const showBusinessSections = userRole === "admin" || userRole === "manager" || userRole === "super_admin";
@@ -595,9 +588,11 @@ export function Sidebar() {
         >
           {/* Avatar or fallback */}
           {user?.avatarUrl ? (
-            <img
+            <Image
               src={user.avatarUrl}
               alt={user.name || "User"}
+              width={32}
+              height={32}
               className="w-8 h-8 rounded-full object-cover border border-gray-200"
             />
           ) : (

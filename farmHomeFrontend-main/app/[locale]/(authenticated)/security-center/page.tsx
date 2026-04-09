@@ -7,7 +7,7 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import {  XAxis, YAxis, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
-export default function SecurityCenterPage() {
+export default function SecurityCenterPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const authEvents = [
     { hour: '00', success: 12, failed: 1 },
     { hour: '04', success: 18, failed: 0 },

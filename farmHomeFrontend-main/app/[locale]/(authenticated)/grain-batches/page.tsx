@@ -68,6 +68,44 @@ interface GrainBatch {
   }
 }
 
+interface BuyerRecord {
+  _id: string
+  name: string
+  company_name?: string
+  contact_person: {
+    name: string
+    email?: string
+    phone?: string
+  }
+  location?: {
+    city?: string
+    state?: string
+    country?: string
+  }
+  status: string
+  rating?: number
+  totalOrders?: number
+  lastOrderDate?: string | null
+}
+
+interface DispatchData {
+  buyer_id?: string
+  sell_price_per_kg: number
+  dispatched_quantity_kg?: number
+  dispatch_details: {
+    vehicle_number?: string
+    driver_name?: string
+    driver_contact?: string
+    destination?: string
+  }
+}
+
+interface LogEventResponse {
+  event: {
+    event_id: string
+  }
+}
+
 interface Silo {
   _id: string
   name: string
@@ -76,7 +114,7 @@ interface Silo {
   current_occupancy_kg: number
 }
 
-export default function GrainBatchesPage() {
+export default function GrainBatchesPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const { user } = useAuth()
   const userRole = user?.role || 'technician'
   const [batches, setBatches] = useState<GrainBatch[]>([])
@@ -148,7 +186,7 @@ export default function GrainBatchesPage() {
     action_taken: ''
   })
   const [spoilagePhotos, setSpoilagePhotos] = useState<File[]>([])
-  const [availableBuyers, setAvailableBuyers] = useState<any[]>([])
+  const [availableBuyers, setAvailableBuyers] = useState<BuyerRecord[]>([])
 
   const fetchBatches = async () => {
     try {
@@ -343,7 +381,7 @@ export default function GrainBatchesPage() {
   // Fetch buyers for dispatch - Module 8: Final Dispatch & Buyer Trace
   const fetchBuyersForDispatch = async (batchId: string) => {
     try {
-      const res = await api.get<{ buyers?: any[] }>(`/api/grain-batches/${batchId}/buyers`)
+      const res = await api.get<{ buyers?: BuyerRecord[] }>(`/api/grain-batches/${batchId}/buyers`)
       if (res.ok && res.data) {
         setAvailableBuyers(res.data.buyers || [])
       }
@@ -365,7 +403,7 @@ export default function GrainBatchesPage() {
         return
       }
 
-      const dataToSend: any = {
+      const dataToSend: DispatchData = {
         buyer_id: dispatchData.buyer_id || undefined,
         sell_price_per_kg: Number(dispatchData.sell_price_per_kg),
         dispatched_quantity_kg: dispatchData.quantity_dispatched ? Number(dispatchData.quantity_dispatched) : undefined,
@@ -437,7 +475,7 @@ export default function GrainBatchesPage() {
 
       if (res.ok && res.data) {
         toast.success('Spoilage event logged successfully')
-        const eventId = (res.data as any).event.event_id
+        const eventId = (res.data as unknown as LogEventResponse).event.event_id
 
         // Upload photos if any
         if (spoilagePhotos.length > 0) {
@@ -1594,8 +1632,8 @@ export default function GrainBatchesPage() {
                                 ...dispatchData,
                                 buyer_id: value,
                                 buyer_name: buyer?.name || '',
-                                buyer_email: buyer?.contact?.email || '',
-                                buyer_contact: buyer?.contact?.phone || ''
+                                buyer_email: buyer?.contact_person?.email || '',
+                                buyer_contact: buyer?.contact_person?.phone || ''
                               })
                             }}
                           >
@@ -1605,7 +1643,7 @@ export default function GrainBatchesPage() {
                             <SelectContent>
                               {availableBuyers.map((buyer) => (
                                 <SelectItem key={buyer._id} value={buyer._id}>
-                                  {buyer.name} {buyer.company_name ? `(${buyer.company_name})` : ''} - {buyer.contact?.phone || buyer.contact?.email || ''}
+                                  {buyer.name} {buyer.company_name ? `(${buyer.company_name})` : ''} - {buyer.contact_person?.phone || buyer.contact_person?.email || ''}
                                 </SelectItem>
                               ))}
                             </SelectContent>

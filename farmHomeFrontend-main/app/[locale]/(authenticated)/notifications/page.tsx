@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -21,7 +21,6 @@ import {
   Settings,
   Check,
   RefreshCw,
-  Trash2,
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
@@ -59,7 +58,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   system: <Settings className="h-3.5 w-3.5" />,
 }
 
-export default function NotificationsPage() {
+export default function NotificationsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)

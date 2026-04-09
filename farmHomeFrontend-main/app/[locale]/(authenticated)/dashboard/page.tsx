@@ -7,18 +7,16 @@ import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
 import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
 import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import {
-  AlertCircle,
   Package,
   TrendingUp,
   Users,
   Activity,
   DollarSign,
   AlertTriangle,
-  Shield,
   Thermometer,
   Droplets,
   Wind,
@@ -146,7 +144,7 @@ interface DashboardApi {
 
 type IconType = typeof Package
 
-export default function DashboardPage() {
+export default function DashboardPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [dashboard, setDashboard] = useState<DashboardApi | null>(null)
@@ -318,7 +316,7 @@ export default function DashboardPage() {
                       <div className="space-y-6">
                         <div className="grid grid-cols-3 gap-4">
                           <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">Today's Intake</p>
+                            <p className="text-xs text-muted-foreground">Today&apos;s Intake</p>
                             <p className="text-2xl font-bold">{dashboard?.capacityStats?.todaysIntake ? dashboard.capacityStats.todaysIntake.toLocaleString() : 0}</p>
                             <p className="text-xs text-muted-foreground">kg</p>
                           </div>
@@ -547,7 +545,7 @@ export default function DashboardPage() {
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold">PKR {dashboard?.business?.monthlyProfit?.toLocaleString() ?? '0'}</div>
-                        <p className="text-xs text-muted-foreground">This month's profit</p>
+                        <p className="text-xs text-muted-foreground">This month&apos;s profit</p>
                       </CardContent>
                     </Card>
 

@@ -120,7 +120,7 @@ const premiumFeatureLabels: Record<string, string> = {
   mobile_app: "Mobile App"
 }
 
-export default function PlanManagementPage() {
+export default function PlanManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [plans, setPlans] = useState<PlanFeature[]>([])
   const [subscriptions, setSubscriptions] = useState<SubscriptionAnalyticsRow[]>([])
   const [summary, setSummary] = useState<SubscriptionSummary | null>(null)

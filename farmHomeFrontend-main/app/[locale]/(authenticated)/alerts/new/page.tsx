@@ -54,7 +54,7 @@ function AlertForm({ onSubmit, loading }: { onSubmit: (data: Alert) => void, loa
   );
 }
 
-export default function NewAlertPage() {
+export default function NewAlertPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const t = useTranslations('AlertsNewPage');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
