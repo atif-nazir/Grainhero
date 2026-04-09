@@ -1,4 +1,10 @@
 require("dotenv").config();
+
+// Force Google DNS for MongoDB Atlas SRV resolution
+// (home routers often can't resolve SRV records)
+const dns = require("dns");
+dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+
 const express = require("express");
 const mongoose = require("mongoose");
 const http = require("http");
