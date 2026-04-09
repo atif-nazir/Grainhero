@@ -107,18 +107,48 @@ function generateAdvisories(risks, features) {
 }
 
 async function callMlService(features) {
-  // If external service configured, use it
+  // If external ML service is configured, use it
   if (ML_SERVICE_URL) {
-    const { data } = await axios.post(`${ML_SERVICE_URL}/predict`, { features }, { timeout: 8000 });
-    return data;
+    try {
+      console.log(`[AI] Calling ML service at ${ML_SERVICE_URL}/predict`);
+      const { data } = await axios.post(`${ML_SERVICE_URL}/predict`, { features }, { timeout: 10000 });
+      console.log(`[AI] ML service responded: label=${data.label}, risk=${data.risk_score}`);
+      return data;
+    } catch (mlErr) {
+      console.error(`[AI] ML service error: ${mlErr.message}. Falling back to heuristic model.`);
+      // Fall through to heuristic below
+    }
   }
-  // Otherwise use embedded worker
-  // Use new ML system instead of old mlBridge
+
+  // Heuristic fallback when ML service is unavailable
+  // Uses environmental data to produce a reasonable risk estimate
+  const temp = features.temperature ?? 25;
+  const hum = features.humidity ?? 60;
+  const moist = features.moisture_content ?? 14;
+  const days = features.days_in_storage ?? 0;
+
+  let riskScore = 0;
+  // Moisture is the strongest spoilage indicator
+  if (moist > 16) riskScore += 35;
+  else if (moist > 14) riskScore += 15;
+  // High humidity accelerates spoilage
+  if (hum > 75) riskScore += 25;
+  else if (hum > 65) riskScore += 10;
+  // Temperature in the danger zone (25-35°C)
+  if (temp > 30) riskScore += 20;
+  else if (temp > 25) riskScore += 10;
+  // Longer storage increases risk
+  if (days > 90) riskScore += 15;
+  else if (days > 30) riskScore += 5;
+
+  riskScore = Math.min(100, Math.max(0, riskScore));
+  const label = riskScore >= 70 ? 'Spoiled' : riskScore >= 35 ? 'Risky' : 'Safe';
+
   return {
-    risk_score: Math.random() * 100,
-    label: 'Medium',
-    confidence: 0.8,
-    model_used: 'Legacy-AI-Route'
+    risk_score: riskScore,
+    label,
+    confidence: 0.65,
+    model_used: 'Heuristic-Fallback'
   };
 }
 
