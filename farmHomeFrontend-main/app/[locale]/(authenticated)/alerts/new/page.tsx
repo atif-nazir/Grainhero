@@ -64,7 +64,8 @@ export default function NewAlertPage({ params: _params }: { params: Promise<{ lo
     setLoading(true);
     setError(null);
     const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
-    fetch("http://localhost:5000/alerts", {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+    fetch(`${backendUrl}/alerts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
