@@ -1,0 +1,122 @@
+# ─────────────────────────────────────────────────────────────
+# GrainHero — Full Stack Docker Compose
+# Compatible with Docker 18.09+ and docker-compose v1
+#
+# Usage:
+#   1. Copy .env.production to .env and fill in your values
+#   2. docker-compose up -d --build
+#   3. Open http://<YOUR_SERVER_IP> in browser
+# ─────────────────────────────────────────────────────────────
+
+version: "3.7"
+
+services:
+  # ── Nginx Reverse Proxy ─────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: grainhero-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: always
+    networks:
+      - grainhero-net
+
+  # ── Next.js Frontend ────────────────────────────
+  frontend:
+    build:
+      context: ./farmHomeFrontend-main
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost}
+        NEXT_PUBLIC_FIREBASE_DATABASE_URL: ${FIREBASE_DATABASE_URL:-https://smart-silo-8ce12-default-rtdb.firebaseio.com}
+    container_name: grainhero-frontend
+    environment:
+      - NODE_ENV=production
+    restart: always
+    networks:
+      - grainhero-net
+
+  # ── Node.js Backend ─────────────────────────────
+  backend:
+    build:
+      context: ./farmHomeBackend-main
+      dockerfile: Dockerfile
+    container_name: grainhero-backend
+    environment:
+      - PORT=5000
+      - FRONT_END_URL=${FRONT_END_URL:-http://localhost}
+      - DATABASE_NAME=${DATABASE_NAME:-grainhero}
+      - MONGO_USER=${MONGO_USER}
+      - MONGO_PASS=${MONGO_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - API_KEY=${CLOUDINARY_API_KEY}
+      - API_SECRET=${CLOUDINARY_API_SECRET}
+      - CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - EMAIL_PASS=${EMAIL_PASS}
+      - EMAIL_USER=${EMAIL_USER}
+      - SUPPORT_EMAIL=${SUPPORT_EMAIL}
+      - NEXT_PUBLIC_SUPPORT_EMAIL=${SUPPORT_EMAIL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_SECRET_WEBHOOK=${STRIPE_SECRET_WEBHOOK}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - ML_SERVICE_URL=http://ml-service:8000
+      - MQTT_BROKER_URL=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_USERNAME=
+      - MQTT_PASSWORD=
+      - FIREBASE_ENABLED=true
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=./smart-silo-service-account.json
+      - MODEL_PATH=./ml/smartbin_model.pkl
+    volumes:
+      - backend-uploads:/app/uploads
+    depends_on:
+      - ml-service
+      - mosquitto
+    restart: always
+    networks:
+      - grainhero-net
+
+  # ── Python ML Microservice ──────────────────────
+  ml-service:
+    build:
+      context: ./SmartBin-RiceSpoilage-main/SmartBin-RiceSpoilage-main
+      dockerfile: Dockerfile
+    container_name: grainhero-ml
+    environment:
+      - MODEL_PATH=smartbin_model.pkl
+      - PORT=8000
+    restart: always
+    networks:
+      - grainhero-net
+
+  # ── Mosquitto MQTT Broker ───────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: grainhero-mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    restart: always
+    networks:
+      - grainhero-net
+
+networks:
+  grainhero-net:
+    driver: bridge
+
+volumes:
+  backend-uploads:
+  mosquitto-data:
+  mosquitto-log:

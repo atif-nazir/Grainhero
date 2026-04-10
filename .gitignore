@@ -96,3 +96,9 @@ ENV/
 
 # TypeScript
 *.tsbuildinfo
+
+# Docker
+docker-compose.override.yml
+
+# Deployment secrets (keep .env.production as template)
+.env

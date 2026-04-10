@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+.env*
+*.log
+*.md
+.vscode
+.vercel
+*.tsbuildinfo
+build_output*.log
+build_output*.txt
+tsc_output*.log
