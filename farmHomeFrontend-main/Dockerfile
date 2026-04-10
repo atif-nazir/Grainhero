@@ -6,7 +6,7 @@
 FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm install
+RUN rm -f package-lock.json && npm install
 
 # ── Stage 2: Build ──────────────────────────────────────────
 FROM node:20-slim AS builder
