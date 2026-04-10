@@ -162,6 +162,10 @@ const ROLE_PERMISSIONS = {
     "field.inspect",
     "notifications.view",
 
+    // Dashboard & Analytics
+    "dashboard.view",
+    "analytics.view",
+
     // User Profile Management
     "user.read",
     "user.update",
