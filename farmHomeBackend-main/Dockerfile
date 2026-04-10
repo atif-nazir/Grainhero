@@ -1,12 +1,13 @@
 # ─────────────────────────────────────────────────────────────
 # GrainHero Backend — Node.js / Express Docker Build
 # ─────────────────────────────────────────────────────────────
-FROM node:20-alpine
+FROM node:20-slim
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install build tools for native modules (bcrypt, sharp, etc.)
-RUN apk add --no-cache python3 make g++ 
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 # Copy package files for dependency caching
 COPY package.json package-lock.json ./
@@ -16,6 +17,7 @@ RUN npm ci --only=production
 
 # Copy source code
 COPY . .
+RUN mkdir -p data uploads
 
 # Expose the backend port
 EXPOSE 5000

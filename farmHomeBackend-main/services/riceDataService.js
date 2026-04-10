@@ -13,7 +13,16 @@ class RiceDataService {
 
     async loadDataset() {
         try {
-            const csvPath = path.join(__dirname, '../../SmartBin-RiceSpoilage-main/SmartBin-RiceSpoilage-main/smartbin_rice_storage_data_enhanced.csv');
+            // Updated path for Docker environment
+            const csvPath = path.join(__dirname, '../data/smartbin_rice_storage_data_enhanced.csv');
+            
+            // Safety check: if file doesn't exist, use mock data instead of crashing
+            if (!fs.existsSync(csvPath)) {
+                console.warn('⚠️ Rice dataset CSV not found at:', csvPath, '- Falling back to mock data');
+                this.generateMockData();
+                return;
+            }
+
             const results = [];
             
             return new Promise((resolve, reject) => {
