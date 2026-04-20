@@ -110,6 +110,4 @@ const buyerInvoiceSchema = new mongoose.Schema({
 buyerInvoiceSchema.index({ tenant_id: 1, buyer_id: 1 });
 buyerInvoiceSchema.index({ batch_id: 1 });
 buyerInvoiceSchema.index({ payment_status: 1 });
-buyerInvoiceSchema.index({ invoice_number: 1 });
-
 module.exports = mongoose.model('BuyerInvoice', buyerInvoiceSchema);
