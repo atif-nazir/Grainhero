@@ -96,3 +96,6 @@ ENV/
 
 # TypeScript
 *.tsbuildinfo
+
+# Live sensor data CSV (appended by hardware - causes merge conflicts)
+farmHomeBackend-main/ml/rice_spoilage_10k.csv
