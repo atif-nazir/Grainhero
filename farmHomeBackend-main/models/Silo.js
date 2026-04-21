@@ -80,6 +80,16 @@ const siloSchema = new mongoose.Schema({
     ref: 'GrainBatch'
   },
 
+  // Batch storage tracking — used by ML to compute accurate Storage_Days
+  batch_loaded_date: {
+    type: Date,
+    default: null
+  },
+  batch_dispatched_date: {
+    type: Date,
+    default: null
+  },
+
   // Environmental control systems
   ventilation_system: {
     has_fans: {
@@ -395,6 +405,8 @@ siloSchema.methods.addBatch = function (batchId, quantityKg) {
 
   this.current_batch_id = batchId;
   this.current_occupancy_kg += quantityKg;
+  this.batch_loaded_date = new Date(); // Track when batch entered for ML Storage_Days
+  this.batch_dispatched_date = null;   // Reset dispatch date for new batch
   this.statistics.total_batches_stored += 1;
   this.statistics.total_kg_processed += quantityKg;
   this.statistics.last_batch_date = new Date();
@@ -450,13 +462,14 @@ siloSchema.pre('validate', async function () {
   }
 });
 
-// Method to remove batch
+// Method to remove batch (dispatch)
 siloSchema.methods.removeBatch = function (quantityKg) {
   this.current_occupancy_kg = Math.max(0, this.current_occupancy_kg - quantityKg);
   this.statistics.utilization_percentage = Math.round((this.current_occupancy_kg / this.capacity_kg) * 100);
 
   if (this.current_occupancy_kg === 0) {
     this.current_batch_id = null;
+    this.batch_dispatched_date = new Date(); // Stop the storage day counter
   }
 
   return this.save();

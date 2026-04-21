@@ -546,7 +546,12 @@ class AISpoilageService extends EventEmitter {
     }
 
     calculateStorageDuration(batch) {
-        return Math.floor((new Date() - new Date(batch.created_at)) / (1000 * 60 * 60 * 24));
+        const refDate = new Date(batch.intake_date || batch.created_at);
+        // If batch is dispatched, stop counting at dispatch date
+        const endDate = (batch.status === 'dispatched' && batch.actual_dispatch_date)
+            ? new Date(batch.actual_dispatch_date)
+            : new Date();
+        return Math.max(0, Math.floor((endDate - refDate) / (1000 * 60 * 60 * 24)));
     }
 
     getSeason() {

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye, WifiOff } from 'lucide-react'
+import { Plus, Search, Package, Thermometer, Droplets, Wind, Edit, Trash2, Eye, WifiOff, Clock, CalendarDays } from 'lucide-react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { AnimatedBackground } from "@/components/animations/MotionGraphics"
@@ -32,6 +32,7 @@ interface Silo {
     address?: string
   }
   type?: string
+  created_at?: string
   updated_at?: string
   current_conditions?: {
     temperature?: { value: number; timestamp: string }
@@ -42,6 +43,12 @@ interface Silo {
     batch_id: string
     grain_type: string
   }
+  // Storage duration tracking
+  batch_loaded_date?: string | null
+  batch_dispatched_date?: string | null
+  storage_days?: number | null
+  storage_hours?: number | null
+  is_storage_active?: boolean
 }
 
 export default function SilosPage({ params: _params }: { params: Promise<{ locale: string }> }) {
@@ -119,6 +126,27 @@ export default function SilosPage({ params: _params }: { params: Promise<{ local
       mounted = false
     }
   }, [])
+
+  // Live storage duration counter — recalculates every 60 seconds
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 60000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Helper: compute live storage duration from batch_loaded_date
+  const getStorageDuration = (silo: Silo) => {
+    if (!silo.batch_loaded_date) return null
+    const start = new Date(silo.batch_loaded_date).getTime()
+    const end = silo.batch_dispatched_date
+      ? new Date(silo.batch_dispatched_date).getTime()
+      : Date.now()
+    const diffMs = Math.max(0, end - start)
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+    return { days, hours, minutes, isActive: !silo.batch_dispatched_date }
+  }
 
   // CRUD Operations
   const handleAddSilo = async () => {
@@ -461,6 +489,48 @@ export default function SilosPage({ params: _params }: { params: Promise<{ local
                         </div>
                       </div>
                     )}
+
+                    {/* Storage Duration Counter */}
+                    {(() => {
+                      const duration = getStorageDuration(silo)
+                      if (!duration) return null
+                      return (
+                        <div className={`p-3 rounded-lg border ${duration.isActive ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Clock className={`h-4 w-4 ${duration.isActive ? 'text-emerald-600' : 'text-gray-400'}`} />
+                              <span className={`text-sm font-medium ${duration.isActive ? 'text-emerald-900' : 'text-gray-600'}`}>
+                                Storage Duration
+                              </span>
+                            </div>
+                            {duration.isActive ? (
+                              <span className="flex items-center gap-1 text-xs text-emerald-600">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                </span>
+                                Counting
+                              </span>
+                            ) : (
+                              <Badge className="bg-gray-200 text-gray-600 text-xs">Stopped</Badge>
+                            )}
+                          </div>
+                          <div className="mt-2">
+                            <span className={`text-xl font-bold ${duration.isActive ? 'text-emerald-700' : 'text-gray-700'}`}>
+                              {duration.days}d {duration.hours}h {duration.minutes}m
+                            </span>
+                          </div>
+                          {silo.batch_loaded_date && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <CalendarDays className="h-3 w-3 text-gray-400" />
+                              <span className="text-xs text-gray-500">
+                                Since {new Date(silo.batch_loaded_date).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Environmental Conditions */}
                     <div className="space-y-2">
@@ -844,6 +914,59 @@ export default function SilosPage({ params: _params }: { params: Promise<{ local
                       </CardContent>
                     </Card>
                   </div>
+
+                  {/* Storage Duration Tracking */}
+                  {(() => {
+                    const dur = getStorageDuration(selectedSilo)
+                    if (!dur) return null
+                    return (
+                      <Card className={dur.isActive ? 'border-emerald-200' : 'border-gray-200'}>
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Clock className={`h-5 w-5 ${dur.isActive ? 'text-emerald-600' : 'text-gray-400'}`} />
+                            Storage Duration Tracking
+                            {dur.isActive ? (
+                              <Badge className="bg-emerald-100 text-emerald-700 text-xs ml-2">Active</Badge>
+                            ) : (
+                              <Badge className="bg-gray-200 text-gray-600 text-xs ml-2">Stopped (Dispatched)</Badge>
+                            )}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <p className="text-3xl font-bold text-gray-900">{dur.days}</p>
+                              <p className="text-sm text-muted-foreground">Days</p>
+                            </div>
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <p className="text-3xl font-bold text-gray-900">{dur.hours}</p>
+                              <p className="text-sm text-muted-foreground">Hours</p>
+                            </div>
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <p className="text-3xl font-bold text-gray-900">{dur.minutes}</p>
+                              <p className="text-sm text-muted-foreground">Minutes</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Batch Entered:</span>
+                              <span className="font-medium">{selectedSilo.batch_loaded_date ? new Date(selectedSilo.batch_loaded_date).toLocaleString('en-PK') : 'N/A'}</span>
+                            </div>
+                            {selectedSilo.batch_dispatched_date && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Batch Dispatched:</span>
+                                <span className="font-medium">{new Date(selectedSilo.batch_dispatched_date).toLocaleString('en-PK')}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">ML Storage_Days Input:</span>
+                              <span className="font-mono font-medium">{dur.days} days</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })()}
 
                   {/* Current Batch Section */}
                   {selectedSilo.current_batch_id && (

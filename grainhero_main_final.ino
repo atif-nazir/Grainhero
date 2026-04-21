@@ -33,7 +33,7 @@ String getDateTimeString() {
   return String(buf);
 }
 
-#define MQTT_BROKER "192.168.137.1" // Replace with your broker
+#define MQTT_BROKER "10.10.20.89" // Replace with your broker
 #define MQTT_PORT 1883
 #define MQTT_USERNAME "" // if needed
 #define MQTT_PASSWORD "" // if needed
@@ -182,7 +182,7 @@ bool lastServoSent = false;
 #define FIXED_DEVICE_ID "004B12387760"
 // --- GrainHero Patch: Dual-write to backend ---
 bool DUAL_WRITE_TO_BACKEND = true; // enable later for demo
-const char *BACKEND_BASE_URL = "http://192.168.137.1:5000/api/iot";
+const char *BACKEND_BASE_URL = "http://10.10.20.89:5000/api/iot";
 
 // Initialize sensors
 Adafruit_BME680 bme;

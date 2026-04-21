@@ -1445,32 +1445,44 @@ router.post('/predict-live', async (req, res) => {
         const pressure = liveData.pressure ?? 1013;
         const tvoc = liveData.tvoc_ppb ?? liveData.tvoc ?? liveData.voc ?? 0;
 
-        // ─── 4. STORAGE DAYS: Compute from active GrainBatch ───
+        // ─── 4. STORAGE DAYS: Compute from active GrainBatch or Silo batch_loaded_date ───
         let storageDays = storageDaysOverride ?? null;
         if (storageDays === null) {
             try {
                 const SensorDevice = require('../models/SensorDevice');
                 const GrainBatch = require('../models/GrainBatch');
+                const Silo = require('../models/Silo');
                 // Find the device to get its silo reference
                 const device = await SensorDevice.findOne({ device_id: device_id }).select('silo_id');
                 if (device && device.silo_id) {
-                    // Find the active batch in this silo
+                    // First try: active GrainBatch
                     const batch = await GrainBatch.findOne({
                         silo_id: device.silo_id,
                         status: { $in: ['stored', 'active', 'monitoring'] }
-                    }).sort({ created_at: -1 }).select('intake_date harvest_date created_at');
+                    }).sort({ created_at: -1 }).select('intake_date harvest_date created_at actual_dispatch_date status');
 
                     if (batch) {
                         const refDate = batch.intake_date || batch.harvest_date || batch.created_at;
-                        storageDays = Math.max(0, Math.round((Date.now() - new Date(refDate)) / (1000 * 60 * 60 * 24)));
+                        // If dispatched, stop counting at dispatch date
+                        const endDate = (batch.status === 'dispatched' && batch.actual_dispatch_date)
+                            ? new Date(batch.actual_dispatch_date) : Date.now();
+                        storageDays = Math.max(0, Math.round((endDate - new Date(refDate)) / (1000 * 60 * 60 * 24)));
                         console.log(`📦 Storage days computed from batch: ${storageDays} days (ref: ${refDate})`);
+                    } else {
+                        // Second try: silo batch_loaded_date
+                        const silo = await Silo.findById(device.silo_id).select('batch_loaded_date batch_dispatched_date');
+                        if (silo && silo.batch_loaded_date) {
+                            const endDate = silo.batch_dispatched_date ? new Date(silo.batch_dispatched_date) : Date.now();
+                            storageDays = Math.max(0, Math.round((endDate - new Date(silo.batch_loaded_date)) / (1000 * 60 * 60 * 24)));
+                            console.log(`📦 Storage days computed from silo batch_loaded_date: ${storageDays} days`);
+                        }
                     }
                 }
             } catch (e) {
                 console.log('Could not compute storage_days from batch:', e.message);
             }
-            // Final fallback: if no batch found, use a reasonable default
-            if (storageDays === null) storageDays = 30;
+            // Final fallback: if no batch/silo date found, use 0 (fresh/unknown)
+            if (storageDays === null) storageDays = 0;
         }
 
         // ─── 5. GRAIN MOISTURE: From capacitive moisture probe (soil_moisture) ───
@@ -1659,7 +1671,7 @@ router.post('/predict-live', async (req, res) => {
             data_sources: {
                 temperature: tempOverride ? 'manual_override' : (liveData.temperature !== undefined ? 'firebase_bme680' : 'default'),
                 humidity: humOverride ? 'manual_override' : (liveData.humidity !== undefined ? 'firebase_bme680' : 'default'),
-                storage_days: storageDaysOverride ? 'manual_override' : (storageDays !== 30 ? 'grain_batch_db' : 'default_30d'),
+                storage_days: storageDaysOverride ? 'manual_override' : (storageDays > 0 ? 'grain_batch_or_silo_db' : 'default_0d_fresh'),
                 grain_moisture: grainMoistureOverride ? 'manual_override' : ((liveData.soil_moisture || liveData.moisture !== undefined) ? 'capacitive_probe' : 'humidity_estimate'),
                 airflow: pwmSpeed !== null ? 'fan_pwm_telemetry' : (fanState !== null ? 'fan_state_binary' : 'default_off'),
                 ambient_light: (lightSensor || lightDirect !== undefined) ? 'ldr_sensor' : 'default',
@@ -1767,10 +1779,42 @@ router.get('/predictions-public', async (req, res) => {
                 ppScore = Math.min(1.0, Math.max(0.0, ppScore));
                 const pp = Math.round(ppScore * 10) / 10;
 
+                // Compute real storage_days from batch/silo (same logic as predict-live)
+                let pubStorageDays = 0;
+                try {
+                    const SensorDevice = require('../models/SensorDevice');
+                    const GrainBatch = require('../models/GrainBatch');
+                    const Silo = require('../models/Silo');
+                    const pubDevice = await SensorDevice.findOne({ device_id }).select('silo_id');
+                    if (pubDevice && pubDevice.silo_id) {
+                        // First try: active GrainBatch intake_date
+                        const pubBatch = await GrainBatch.findOne({
+                            silo_id: pubDevice.silo_id,
+                            status: { $in: ['stored', 'active', 'monitoring'] }
+                        }).sort({ created_at: -1 }).select('intake_date harvest_date created_at actual_dispatch_date status');
+                        if (pubBatch) {
+                            const refDate = pubBatch.intake_date || pubBatch.harvest_date || pubBatch.created_at;
+                            // If dispatched, count only until dispatch date; otherwise count until now
+                            const endDate = (pubBatch.status === 'dispatched' && pubBatch.actual_dispatch_date)
+                                ? new Date(pubBatch.actual_dispatch_date) : Date.now();
+                            pubStorageDays = Math.max(0, Math.round((endDate - new Date(refDate)) / (1000 * 60 * 60 * 24)));
+                        } else {
+                            // Fallback: silo batch_loaded_date
+                            const pubSilo = await Silo.findById(pubDevice.silo_id).select('batch_loaded_date batch_dispatched_date');
+                            if (pubSilo && pubSilo.batch_loaded_date) {
+                                const endDate = pubSilo.batch_dispatched_date ? new Date(pubSilo.batch_dispatched_date) : Date.now();
+                                pubStorageDays = Math.max(0, Math.round((endDate - new Date(pubSilo.batch_loaded_date)) / (1000 * 60 * 60 * 24)));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('Could not compute storage_days for predictions-public:', e.message);
+                }
+
                 const mlInput = {
                     temperature: temp,
                     humidity: hum,
-                    storage_days: 30,
+                    storage_days: pubStorageDays,
                     airflow: af,
                     dew_point: dewPt,
                     ambient_light: al,

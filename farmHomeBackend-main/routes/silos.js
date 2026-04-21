@@ -119,20 +119,38 @@ router.get(
       console.log("Total silos in DB:", total);
 
       // Map to frontend-friendly shape for current_batch_id and alias VOC
-      const mapped = silos.map((s) => ({
-        ...s,
-        current_batch_id: s.current_batch_id
-          ? {
-            batch_id: s.current_batch_id.batch_id,
-            grain_type: s.current_batch_id.grain_type,
-          }
-          : undefined,
-        current_conditions: s.current_conditions ? {
-          ...s.current_conditions,
-          tvoc: s.current_conditions.voc?.value,
-          tvoc_ppb: s.current_conditions.voc?.value
-        } : s.current_conditions
-      }));
+      const mapped = silos.map((s) => {
+        // Compute live storage_days from batch_loaded_date
+        let storage_days = null;
+        let storage_hours = null;
+        if (s.batch_loaded_date) {
+          const endDate = s.batch_dispatched_date ? new Date(s.batch_dispatched_date) : new Date();
+          const diffMs = endDate - new Date(s.batch_loaded_date);
+          storage_days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          storage_hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        }
+
+        return {
+          ...s,
+          current_batch_id: s.current_batch_id
+            ? {
+              batch_id: s.current_batch_id.batch_id,
+              grain_type: s.current_batch_id.grain_type,
+            }
+            : undefined,
+          current_conditions: s.current_conditions ? {
+            ...s.current_conditions,
+            tvoc: s.current_conditions.voc?.value,
+            tvoc_ppb: s.current_conditions.voc?.value
+          } : s.current_conditions,
+          // Storage tracking for frontend display
+          batch_loaded_date: s.batch_loaded_date || null,
+          batch_dispatched_date: s.batch_dispatched_date || null,
+          storage_days,
+          storage_hours,
+          is_storage_active: s.batch_loaded_date && !s.batch_dispatched_date,
+        };
+      });
 
       res.json({
         silos: mapped,
@@ -366,6 +384,8 @@ router.post(
         warehouse_id,
         created_by: req.user._id,
         current_occupancy_kg: 0,
+        batch_loaded_date: new Date(), // Track creation time for ML Storage_Days computation
+        batch_dispatched_date: null,
         current_conditions: {
           temperature: { value: 20, timestamp: new Date() },
           humidity: { value: 50, timestamp: new Date() },
