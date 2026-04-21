@@ -971,7 +971,7 @@ router.post(
  *         description: Unauthorized
  */
 // Route to change password
-router.patch("/auth/change-password", auth, async (req, res) => {
+router.patch("/change-password", auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
