@@ -222,7 +222,7 @@ const businessNav = [
 // System Administration - MINIMAL (Settings only for core functionality)
 const systemNav = [
   // COMMENTED OUT - Not in core 10 modules
-  // { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin"], badge: undefined },
+  { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin", "super_admin", "manager"], badge: undefined },
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 
