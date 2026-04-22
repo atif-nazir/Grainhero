@@ -78,7 +78,7 @@ interface InsurancePolicy {
 interface InsuranceClaim {
   _id: string
   claim_number: string
-  policy_id: string
+  policy_id: any // can be object or ID
   claim_type: string
   description: string
   amount_claimed: number
@@ -89,10 +89,48 @@ interface InsuranceClaim {
   approved_date?: string
   photos?: string[]
   batch_affected: {
-    batch_id: string
+    batch_id: any
     grain_type: string
     quantity_affected: number
   }
+  created_by?: any
+  reviewed_by?: any
+  review_date?: string
+  investigation?: {
+    findings: string
+    cause_of_loss: string
+    preventable: boolean
+    assigned_to: any
+    started_at: string
+    completed_at: string
+  }
+  assessment?: {
+    assessed_by: any
+    assessed_at: string
+    estimated_damage_value: number
+    repair_estimate: number
+    settlement_recommendation: number
+    internal_notes: string
+  }
+  payment?: {
+    amount: number
+    payment_method: string
+    payment_reference: string
+    payment_date: string
+    processed_by: any
+  }
+  communications?: Array<{
+    from_user: any
+    message: string
+    sent_at: string
+  }>
+  supporting_documents?: Array<{
+    document_type: string
+    file_url: string
+    original_name: string
+    uploaded_by: any
+    uploaded_at: string
+  }>
 }
 
 interface SpoilageEvent {

@@ -1,55 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const Alert = require('../models/Alert');
+const mongoose = require('mongoose');
+const GrainAlert = require('../models/GrainAlert');
 const { auth } = require('../middleware/auth');
-const superadmin = require('../middleware/superadmin');
-const User = require('../models/User');
+const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const LoggingService = require('../services/loggingService');
+const { ALERT_PRIORITIES, ALERT_ESCALATION_STATUSES } = require('../configs/enum');
+const { body, validationResult, param } = require('express-validator');
 
 /**
  * @swagger
  * tags:
  *   name: Alerts
- *   description: Alert management
- */
-
-/**
- * @swagger
- * /alerts:
- *   post:
- *     summary: Create a new alert
- *     tags: [Alerts]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - title
- *               - category
- *               - location
- *               - description
- *             properties:
- *               title:
- *                 type: string
- *               category:
- *                 type: string
- *               location:
- *                 type: string
- *               description:
- *                 type: string
- *     responses:
- *       201:
- *         description: Alert created
- *       400:
- *         description: Bad request
- *       403:
- *         description: Access denied. Super admin only.
- */
-
-/**
  * @swagger
  * /alerts/{id}:
  *   put:

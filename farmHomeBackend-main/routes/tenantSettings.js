@@ -123,6 +123,12 @@ router.put('/settings', auth, async (req, res) => {
 
     await tenant.save();
 
+    // Log settings update
+    try {
+      const LoggingService = require('../services/loggingService');
+      await LoggingService.logSettingsUpdated(req.user, 'tenant', req.body, req.ip);
+    } catch (logErr) { console.error('Logging error:', logErr.message); }
+
     res.json({ message: 'Tenant settings updated successfully' });
   } catch (error) {
     console.error('Error updating tenant settings:', error);
