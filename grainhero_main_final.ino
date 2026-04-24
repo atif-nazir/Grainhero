@@ -119,9 +119,9 @@ int soilIndex = 0;       // current index
 // Output control pins
 #define SERVO_PIN 27  // Servo control pin
 #define PWM_PIN 26    // PWM control pin (GPIO 26 - was RELAY_PIN)
-#define LED2_PIN 14   // LED 2 control pin (green)
-#define LED3_PIN 12   // LED 3 control pin (yellow)
-#define LED4_PIN 25   // LED 4 control pin (red - also visual alarm)
+#define LED2_PIN 14   // LED 2 - Risky (yellow)
+#define LED3_PIN 12   // LED 3 - Good (green)
+#define LED4_PIN 25   // LED 4 - Spoiled (red)
 #define FAN_PWM_PIN PWM_PIN
 
 // PWM Configuration
@@ -210,10 +210,10 @@ const unsigned long CONTROL_CHECK_INTERVAL = 2000;    // 2 seconds
 
 // Control state variables
 bool servoState = false;  // Controls servo (open/close lid)
-bool led2State = false;   // Controls LED 2 (green)
-bool led3State = false;   // Controls LED 3 (yellow)
-bool led4State = false;   // Controls LED 4 (red)
-bool alarmActive = false; // Visual alarm mode (blinks red LED4 rapidly)
+bool led2State = false;   // Controls LED 2 - Risky (yellow)
+bool led3State = false;   // Controls LED 3 - Good (green)
+bool led4State = false;   // Controls LED 4 - Spoiled (red)
+bool alarmActive = false; // Kept for compatibility but unused
 
 // ---------- ACTUATOR TIMING SAFETY ----------
 const unsigned long MIN_LID_OPEN_TIME_MS = 3UL * 1000UL;  // 3 seconds
@@ -593,7 +593,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
       controlMode = MANUAL;
       humanOverrideActive = true;
       humanRequestedFan = true;
-      targetFanSpeed = value > 0 ? value : 60; // Use requested speed or default 60%
+      targetFanSpeed = value > 0 ? value : 60;
       lastHumanCommandTime = millis();
       Serial.printf("🧑 Human requested FAN ON at %d%%\n", targetFanSpeed);
     }
@@ -608,7 +608,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     }
 
     else if (action == "set_value") {
-      // Only treat as fan speed if no LED key present
       bool isLedControl = doc.containsKey("led2") || doc.containsKey("led3") || doc.containsKey("led4");
       if (!isLedControl) {
         controlMode = MANUAL;
@@ -632,7 +631,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     }
   }
 
-  // --- LED control (handled independently of action) ---
+  // --- LED control (handled independently, track state) ---
   if (doc.containsKey("led2")) {
     led2State = doc["led2"] ? true : false;
     digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
@@ -648,9 +647,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     digitalWrite(LED4_PIN, led4State ? HIGH : LOW);
     Serial.printf("💡 LED4 %s via MQTT\n", led4State ? "ON" : "OFF");
   }
-
 }
-
 
 float calculateDewPoint(float temperature, float humidity) {
   // Magnus formula approximation
@@ -764,7 +761,7 @@ void loop() {
   static unsigned long ntpWaitStart = 0;
   if (time(nullptr) < 1700000000) {
     if (ntpWaitStart == 0) ntpWaitStart = millis();
-    if (millis() - ntpWaitStart < 10000) { // max 10s wait
+    if (millis() - ntpWaitStart < 10000) {
       Serial.println(F("⏳ Waiting for valid NTP time..."));
       delay(500);
       return;
@@ -908,8 +905,9 @@ void setPWMSpeed(int speedPercent) {
   if (!lidIsOpen) {
     pwmSpeed = 0;
     pwmDutyCycle = 0.0;
-    pwm.writeScaled(pwmDutyCycle);  // MUST use writeScaled (0.0-1.0)
-    return; // silently block
+    pwm.write(pwmDutyCycle);
+    Serial.println(F("⚠️ FAN BLOCKED: Lid is CLOSED → PWM forced to 0%"));
+    return;
   }
   // ---------------------------------------------
 
@@ -918,7 +916,7 @@ void setPWMSpeed(int speedPercent) {
 
   pwmSpeed = speedPercent;
   pwmDutyCycle = speedPercent / 100.0;
-  pwm.writeScaled(pwmDutyCycle);  // MUST use writeScaled (0.0-1.0)
+  pwm.write(pwmDutyCycle);
 
   Serial.print(F("PWM Speed set to: "));
   Serial.print(speedPercent);
@@ -1553,7 +1551,7 @@ void checkFirebaseControls() {
   if (!wifiConnected)
     return;
 
-  // Check every 5 seconds
+  // Check every 2 seconds
   if (millis() - lastControlCheck < CONTROL_CHECK_INTERVAL &&
       lastControlCheck != 0) {
     return;
@@ -1561,10 +1559,13 @@ void checkFirebaseControls() {
 
   lastControlCheck = millis();
 
-  // Get control data from Firebase for this device
+  // Get control data from Firebase for Device ID 004B12387760
   String path = String(CONTROL_URL) + "/" + currentData.deviceID + ".json";
   String fullURL = "https://" + String(FIREBASE_HOST) + path +
                    "?auth=" + String(FIREBASE_AUTH);
+
+  Serial.print(F("Checking controls for device: "));
+  Serial.println(currentData.deviceID);
 
   if (client.connect(FIREBASE_HOST, 443)) {
     String request =
@@ -1578,6 +1579,7 @@ void checkFirebaseControls() {
     unsigned long timeout = millis();
     while (client.available() == 0) {
       if (millis() - timeout > 5000) {
+        Serial.println(F("Control check timeout!"));
         client.stop();
         return;
       }
@@ -1603,63 +1605,113 @@ void checkFirebaseControls() {
       DeserializationError error = deserializeJson(doc, response);
 
       if (!error) {
-        // ── Fan control via centralized state (backend writes these keys) ──
-        bool fbHumanRequested = doc["humanRequestedFan"] | doc["human_requested_fan"] | false;
-        int  fbTargetSpeed    = doc["targetFanSpeed"]    | doc["target_fan_speed"]    | doc["pwm"] | 0;
+        bool newServoState = doc["servo"] | false;
+        int newPwmSpeed = doc["pwm"] | 0; // Read PWM speed (0-100)
+        bool newLed2State = doc["led2"] | false;
+        bool newLed3State = doc["led3"] | false;
+        bool newLed4State = doc["led4"] | false;
 
-        // Apply fan control through the state machine (human override)
-        if (fbHumanRequested && !humanRequestedFan) {
-          controlMode = MANUAL;
-          humanOverrideActive = true;
-          humanRequestedFan = true;
-          targetFanSpeed = fbTargetSpeed > 0 ? fbTargetSpeed : 60;
-          lastHumanCommandTime = millis();
-          Serial.printf("🔥 Firebase: Human FAN ON at %d%%\n", targetFanSpeed);
-        } else if (!fbHumanRequested && humanRequestedFan && humanOverrideActive) {
-          humanRequestedFan = false;
-          targetFanSpeed = 0;
-          lastHumanCommandTime = millis();
-          Serial.println(F("🔥 Firebase: Human FAN OFF"));
+        // Update states if changed
+        if (newServoState != servoState) {
+          servoState = newServoState;
+          Serial.print(F("Servo state changed to: "));
+          Serial.println(servoState ? "ON" : "OFF");
         }
 
-        // ── LED control (direct GPIO) ──
-        bool newLed2State = doc["led2"] | led2State;
-        bool newLed3State = doc["led3"] | led3State;
-        bool newLed4State = doc["led4"] | led4State;
+        if (newPwmSpeed != pwmSpeed) {
+          pwmSpeed = newPwmSpeed;
+          Serial.print(F("PWM speed changed to: "));
+          Serial.print(pwmSpeed);
+          Serial.println(F("%"));
+        }
 
         if (newLed2State != led2State) {
           led2State = newLed2State;
-          digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
-          Serial.printf("🔥 Firebase: LED2 %s\n", led2State ? "ON" : "OFF");
+          Serial.print(F("LED2 state changed to: "));
+          Serial.println(led2State ? "ON" : "OFF");
         }
+
         if (newLed3State != led3State) {
           led3State = newLed3State;
-          digitalWrite(LED3_PIN, led3State ? HIGH : LOW);
-          Serial.printf("🔥 Firebase: LED3 %s\n", led3State ? "ON" : "OFF");
+          Serial.print(F("LED3 state changed to: "));
+          Serial.println(led3State ? "ON" : "OFF");
         }
+
         if (newLed4State != led4State) {
           led4State = newLed4State;
-          digitalWrite(LED4_PIN, led4State ? HIGH : LOW);
-          Serial.printf("🔥 Firebase: LED4 %s\n", led4State ? "ON" : "OFF");
+          Serial.print(F("LED4 (GPIO 25) state changed to: "));
+          Serial.println(led4State ? "ON" : "OFF");
         }
 
-        // ── Alarm control REMOVED — no buzzer hardware ──
-
-        // Update currentData
+        // Update currentData with control states
         currentData.servo = servoState;
         currentData.pwm = pwmSpeed;
         currentData.led2 = led2State;
         currentData.led3 = led3State;
         currentData.led4 = led4State;
+
+        // === Dual-write: send updated actuator states to backend ===
+        if (DUAL_WRITE_TO_BACKEND) {
+          Serial.println(F("Sending actuator states to backend..."));
+          DynamicJsonDocument ctrlDoc(256);
+          ctrlDoc["deviceID"] = currentData.deviceID;
+          ctrlDoc["servo"] = servoState;
+          ctrlDoc["pwm"] = pwmSpeed;
+          ctrlDoc["led2"] = led2State;
+          ctrlDoc["led3"] = led3State;
+          ctrlDoc["led4"] = led4State;
+
+          String ctrlPayload;
+          serializeJson(ctrlDoc, ctrlPayload);
+
+          HTTPClient http;
+
+          String controlURL = String(BACKEND_BASE_URL) + "/" +
+                              currentData.deviceID + "/control_state";
+
+          http.begin(controlURL);
+
+          // 6D
+          Serial.print("[HTTP] POST → ");
+          Serial.println(controlURL);
+
+          // 6C
+          http.setTimeout(5000);
+
+          http.addHeader("Content-Type", "application/json");
+          int code = http.POST(ctrlPayload);
+
+          if (code > 0)
+            Serial.println(F("Control POST success"));
+          else
+            Serial.println(F("Control POST failed"));
+
+          http.end();
+        }
+
+      } else {
+        // JSON parse failed
+        Serial.print(F("Failed to parse control JSON: "));
+        Serial.println(error.c_str());
+        Serial.print(F("Response was: "));
+        Serial.println(response);
       }
+
+    } else {
+      Serial.println(F("No control data found in Firebase for this device."));
+      Serial.println(
+          F("Please set up Firebase with control/004B12387760 path"));
     }
+
+  } else {
+    Serial.println(F("Failed to connect for control check"));
   }
 }
 
 void updateControlOutputs() {
-  // Servo/fan are handled by processLidFanStateMachine() — do NOT override here
+  // Servo/fan handled by processLidFanStateMachine() — do NOT override here
 
-  // Update LED outputs — always follow state directly, no blinking overrides
+  // Update LED outputs — always follow state directly
   digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
   digitalWrite(LED3_PIN, led3State ? HIGH : LOW);
   digitalWrite(LED4_PIN, led4State ? HIGH : LOW);

@@ -108,42 +108,32 @@ try {
       try {
         const payload = JSON.parse(message.toString());
         const parts = topic.split('/');
-        // topic format: grainhero/{type}/{deviceId}/{action}
         const deviceId = parts[2];
         const action = parts[3];
 
         if (action === 'readings') {
-          // Sensor readings from ESP32
           const r = payload.readings || payload;
           const temperature = Number(r.temperature ?? 0);
           const humidity = Number(r.humidity ?? 0);
           const tvoc = Number(r.tvoc ?? 0);
           const mlDecision = payload.mlDecision || ((humidity > 75 || tvoc > 600) ? 'fan_on' : 'idle');
-
-          // Merge with existing cache (keep actuator state from feedback)
           const existing = lastTelemetry.get(deviceId) || {};
           const update = {
             ...existing,
-            temperature,
-            humidity,
-            tvoc,
+            temperature, humidity, tvoc,
             pressure: Number(r.pressure ?? existing.pressure ?? 0),
             mlDecision: payload.control_authority === 'FAILSAFE' ? 'failsafe' : mlDecision,
             controlAuthority: payload.control_authority || existing.controlAuthority || 'UNKNOWN',
             timestamp: Date.now()
           };
-
-          // Also extract actuator state if present in readings (added in firmware v2)
           if (payload.fanState) update.fanState = payload.fanState;
           if (payload.lidState) update.lidState = payload.lidState;
           if (payload.pwm_speed !== undefined) update.pwm_speed = Number(payload.pwm_speed);
-
           lastTelemetry.set(deviceId, update);
           console.log(`📡 MQTT readings cached for ${deviceId} [${payload.control_authority || 'N/A'}] fan=${update.fanState || '?'} lid=${update.lidState || '?'}`);
         }
 
         if (action === 'feedback') {
-          // Actuator feedback from ESP32 — actual hardware state
           const existing = lastTelemetry.get(deviceId) || {};
           lastTelemetry.set(deviceId, {
             ...existing,
@@ -157,11 +147,8 @@ try {
             controlAuthority: payload.control_authority || existing.controlAuthority || 'UNKNOWN',
             timestamp: Date.now()
           });
-          // console.log(`📡 MQTT feedback cached for ${deviceId}: fan=${payload.pwm > 0 ? 'on' : 'off'} lid=${payload.servo ? 'open' : 'closed'}`);
         }
-      } catch (e) {
-        // Silently ignore parse errors
-      }
+      } catch (e) { /* silently ignore parse errors */ }
     });
 
     mqttClient.on('error', (error) => {
@@ -477,6 +464,9 @@ router.post('/devices/:id/control-public', [noCache], async (req, res) => {
     // LED control keys (Arduino expects led2/led3/led4)
     if (led) controlMessage[led] = ledState !== undefined ? ledState : true;
 
+    // Alarm actions
+    if (action === 'alarm_on') controlMessage.action = 'alarm_on';
+    if (action === 'alarm_off') controlMessage.action = 'alarm_off';
 
     // Fan state requests
     if (action === 'turn_on') {
@@ -511,6 +501,9 @@ router.post('/devices/:id/control-public', [noCache], async (req, res) => {
 
       // LED state mirroring
       if (led) fbState[led] = ledState !== undefined ? ledState : true;
+      // Alarm mirroring
+      if (action === 'alarm_on') fbState.alarm = true;
+      if (action === 'alarm_off') fbState.alarm = false;
 
       await firebaseRealtimeService.writeControlState(id, fbState);
     } catch (e) {
@@ -613,7 +606,6 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
     // ━━━ PRIORITY 1: MQTT cache (real-time, local, always fresh) ━━━
     const cached = lastTelemetry.get(siloId);
     if (cached && cached.timestamp && (Date.now() - cached.timestamp < 30000)) {
-      // Cache is fresh (< 30s old) — use it directly
       const temperature = cached.temperature ?? 0;
       const humidity = cached.humidity ?? 0;
       const tvoc = cached.tvoc ?? 0;
@@ -623,11 +615,8 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
         (tvoc > 500 ? 25 : tvoc * 0.03)
       ));
       const dewPoint = humidity > 0 ? Math.round((temperature - ((100 - humidity) / 5)) * 10) / 10 : null;
-
       return res.json({
-        temperature,
-        humidity,
-        tvoc,
+        temperature, humidity, tvoc,
         fanState: cached.fanState || 'off',
         lidState: cached.lidState || 'closed',
         alarmState: 'off',
@@ -636,11 +625,8 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
         controlAuthority: cached.controlAuthority || 'UNKNOWN',
         guardrails: [],
         pressure: cached.pressure || null,
-        light: null,
-        dewPoint,
-        soilMoisture: null,
-        pestRiskScore: null,
-        riskIndex,
+        light: null, dewPoint,
+        soilMoisture: null, pestRiskScore: null, riskIndex,
         pwm_speed: cached.pwm_speed ?? 0,
         led2State: !!cached.led2State,
         led3State: !!cached.led3State,
@@ -684,26 +670,16 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
       if (ts && ts < 2000000000) ts = ts * 1000;
       if (!ts || ts < 1600000000000) ts = Date.now();
 
-      // Merge: use MQTT cache for actuator state if available (more reliable than Firebase)
       const mqttActuator = cached || {};
-
       res.json({
-        temperature,
-        humidity,
-        tvoc: tvocRaw,
+        temperature, humidity, tvoc: tvocRaw,
         fanState: mqttActuator.fanState || fanState,
         lidState: mqttActuator.lidState || lidState,
         alarmState: 'off',
-        mlDecision,
-        humanOverride: mqttActuator.humanOverride !== undefined ? mqttActuator.humanOverride : humanOverride,
+        mlDecision, humanOverride: mqttActuator.humanOverride !== undefined ? mqttActuator.humanOverride : humanOverride,
         controlAuthority: payload.control_mode || mqttActuator.controlAuthority || (humanOverride ? 'HUMAN' : 'ML_AUTO'),
-        guardrails,
-        pressure,
-        light: null,
-        dewPoint,
-        soilMoisture: null,
-        pestRiskScore: null,
-        riskIndex,
+        guardrails, pressure, light: null, dewPoint,
+        soilMoisture: null, pestRiskScore: null, riskIndex,
         pwm_speed: mqttActuator.pwm_speed ?? (payload.pwm_speed !== undefined ? Number(payload.pwm_speed) : 0),
         led2State: mqttActuator.led2State !== undefined ? mqttActuator.led2State : !!payload.led2_state,
         led3State: mqttActuator.led3State !== undefined ? mqttActuator.led3State : !!payload.led3_state,
