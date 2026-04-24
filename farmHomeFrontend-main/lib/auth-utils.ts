@@ -30,7 +30,7 @@ export function canManageUser(managerRole: string, targetRole: string): boolean 
 export function hasRouteAccess(userRole: string, route: string): boolean {
   const routePermissions: { [key: string]: string[] } = {
     // Super Admin only routes
-    '/tenant-management': ['super_admin'],
+    '/admin-management': ['super_admin'],
     '/plan-management': ['super_admin'],
     '/system-health': ['super_admin'],
     '/global-analytics': ['super_admin'],
@@ -81,7 +81,7 @@ export function getDashboardRedirect(userRole: string): string {
     case 'super_admin':
       return '/dashboard' // Super admin sees their own dashboard
     case 'admin':
-      return '/dashboard' // Admin sees tenant dashboard
+      return '/dashboard' // Admin sees customer dashboard
     case 'manager':
       return '/dashboard' // Manager sees manager dashboard
     case 'technician':
@@ -110,20 +110,20 @@ export function getAvailableRolesForCreation(userRole: string): string[] {
 }
 
 /**
- * Check if user can access tenant data
+ * Check if user can access customer data
  */
-export function canAccessTenant(userRole: string, userTenantId?: string, targetTenantId?: string): boolean {
-  // Super admin can access all tenants
+export function canAccessCustomer(userRole: string, userCustomerId?: string, targetCustomerId?: string): boolean {
+  // Super admin can access all customers
   if (userRole === 'super_admin') {
     return true
   }
   
-  // Other roles can only access their own tenant
-  if (!userTenantId || !targetTenantId) {
+  // Other roles can only access their own customer
+  if (!userCustomerId || !targetCustomerId) {
     return false
   }
   
-  return userTenantId === targetTenantId
+  return userCustomerId === targetCustomerId
 }
 
 /**
@@ -167,9 +167,9 @@ export function hasPermission(userRole: string, permission: string): boolean {
     'user.read': ['super_admin', 'admin'],
     'user.update': ['super_admin', 'admin'],
     'user.delete': ['super_admin', 'admin'],
-    'tenant.manage': ['super_admin'],
-    'tenant.read': ['super_admin', 'admin'],
-    'tenant.update': ['super_admin', 'admin'],
+    'customer.manage': ['super_admin'],
+    'customer.read': ['super_admin', 'admin'],
+    'customer.update': ['super_admin', 'admin'],
     'system.manage': ['super_admin'],
     'system.monitor': ['super_admin'],
     'warehouse.manage': ['super_admin', 'admin'],
@@ -199,7 +199,7 @@ export function hasPermission(userRole: string, permission: string): boolean {
     'reports.create': ['super_admin', 'admin', 'manager'],
     'reports.read': ['super_admin', 'admin', 'manager', 'technician'],
     'analytics.global': ['super_admin'],
-    'analytics.tenant': ['super_admin', 'admin'],
+    'analytics.customer': ['super_admin', 'admin'],
     'analytics.read': ['super_admin', 'admin', 'manager', 'technician']
   }
   
@@ -224,12 +224,12 @@ export function validateUserSession(user: User | null, currentPath: string): { i
 }
 
 /**
- * Get user's tenant information for display
+ * Get user's customer information for display
  */
-export function getUserTenantInfo(): { name: string; type: 'owned' | 'member' | 'none' } {
+export function getUserCustomerInfo(): { name: string; type: 'owned' | 'member' | 'none' } {
   // This would need to be implemented based on your data structure
   // For now, returning placeholder
-  return { name: 'Default Tenant', type: 'member' }
+  return { name: 'Default Customer', type: 'member' }
 }
 
 /**
@@ -249,7 +249,7 @@ export function getSidebarNavigation(userRole: string): Array<{ name: string; la
     { name: 'team-management', label: 'Team Management', href: '/team-management', icon: 'Users', roles: ['super_admin', 'admin', 'manager'] },
     { name: 'users', label: 'Users', href: '/users', icon: 'UserCog', roles: ['super_admin', 'admin'] },
     { name: 'reports', label: 'Reports', href: '/reports', icon: 'FileText', roles: ['super_admin', 'admin', 'manager'] },
-    { name: 'tenant-management', label: 'Tenant Management', href: '/tenant-management', icon: 'Building2', roles: ['super_admin'] },
+    { name: 'admin-management', label: 'Customer Management', href: '/admin-management', icon: 'Building2', roles: ['super_admin'] },
     { name: 'settings', label: 'Settings', href: '/settings', icon: 'Settings', roles: ['super_admin', 'admin'] }
   ]
   

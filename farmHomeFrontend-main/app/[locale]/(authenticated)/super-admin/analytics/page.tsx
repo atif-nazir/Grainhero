@@ -44,7 +44,7 @@ export default function PlatformAnalyticsPage({ params: _params }: { params: Pro
     // In a real system, these would also be fetched from the API
     const [metrics, _setMetrics] = useState<AnalyticsMetric[]>([
         { name: "Total Users", value: 12470, change: 12.5, trend: "up", unit: "users", icon: Users },
-        { name: "Active Tenants", value: 245, change: 8.2, trend: "up", unit: "tenants", icon: Building2 },
+        { name: "Active Customers", value: 245, change: 8.2, trend: "up", unit: "customers", icon: Building2 },
         { name: "Monthly Revenue", value: 1250000, change: 15.8, trend: "up", unit: "PKR", icon: DollarSign },
         { name: "API Requests", value: 12500000, change: 23.1, trend: "up", unit: "reqs", icon: Activity },
         { name: "Data Stored", value: 2.4, change: 18.7, trend: "up", unit: "TB", icon: Database },

@@ -31,7 +31,7 @@ interface User {
     name: string
     email: string
     role: string
-    tenant_id?: {
+    admin_id?: {
         name: string
         _id: string
     }
@@ -70,7 +70,7 @@ export default function UserManagementPage({ params: _params }: { params: Promis
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.tenant_id?.name.toLowerCase().includes(searchQuery.toLowerCase())
+        user.admin_id?.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     const columns = [
@@ -109,12 +109,12 @@ export default function UserManagementPage({ params: _params }: { params: Promis
             )
         },
         {
-            key: "tenant",
+            key: "customer",
             label: "Organization",
             render: (_value: unknown, row: User) => (
                 <div className="flex items-center text-sm text-gray-600">
                     <Building2 className="h-3 w-3 mr-2" />
-                    {row.tenant_id?.name || "No Organization"}
+                    {row.admin_id?.name || "No Organization"}
                 </div>
             )
         },
@@ -182,7 +182,7 @@ export default function UserManagementPage({ params: _params }: { params: Promis
                         User Management
                     </h2>
                     <p className="text-muted-foreground">
-                        Monitor and manage users across all tenants
+                        Monitor and manage users across all customers
                     </p>
                 </div>
                 <div className="flex gap-2">

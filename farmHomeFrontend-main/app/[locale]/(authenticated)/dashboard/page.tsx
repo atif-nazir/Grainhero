@@ -3,7 +3,7 @@
 import { useAuth } from "@/app/[locale]/providers"
 import { useState, useEffect } from 'react'
 import { SuperAdminDashboard } from "@/components/dashboards/SuperAdminDashboard"
-import { TenantDashboard } from "@/components/dashboards/TenantDashboard"
+import { AdminDashboard } from "@/components/dashboards/AdminDashboard"
 import { ManagerDashboard } from "@/components/dashboards/ManagerDashboard"
 import { TechnicianDashboard } from "@/components/dashboards/TechnicianDashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -218,7 +218,7 @@ export default function DashboardPage({ params: _params }: { params: Promise<{ l
         // This is handled by main render, but for safety
         return <SuperAdminDashboard />
       case "admin":
-        return <TenantDashboard />
+        return <AdminDashboard />
       case "manager":
         return <ManagerDashboard />
       case "technician":

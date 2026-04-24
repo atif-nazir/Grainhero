@@ -29,7 +29,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-interface Tenant {
+interface Customer {
     _id: string
     name: string
     email: string
@@ -52,39 +52,39 @@ interface Tenant {
     [key: string]: unknown
 }
 
-export default function TenantManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
+export default function CustomerManagementPage({ params: _params }: { params: Promise<{ locale: string }> }) {
     const [, setLoading] = useState(true)
-    const [tenants, setTenants] = useState<Tenant[]>([])
+    const [customers, setCustomers] = useState<Customer[]>([])
     const [searchQuery, setSearchQuery] = useState("")
 
     useEffect(() => {
-        loadTenants()
+        loadCustomers()
     }, [])
 
-    const loadTenants = async () => {
+    const loadCustomers = async () => {
         try {
             setLoading(true)
-            const res = await api.get<Tenant[]>("/api/super-admin/tenants")
+            const res = await api.get<Customer[]>("/api/super-admin/admins")
             if (res.ok && res.data) {
-                setTenants(res.data)
+                setCustomers(res.data)
             } else {
-                toast.error("Failed to load tenants")
+                toast.error("Failed to load customers")
             }
         } catch (_error) {
-            toast.error("An error occurred loading tenants")
+            toast.error("An error occurred loading customers")
         } finally {
             setLoading(false)
         }
     }
 
-    const handleStatusChange = async (tenantId: string, isActive: boolean) => {
+    const handleStatusChange = async (customerId: string, isActive: boolean) => {
         try {
-            const res = await api.patch(`/api/super-admin/tenants/${tenantId}`, { is_active: isActive })
+            const res = await api.patch(`/api/super-admin/admins/${customerId}`, { is_active: isActive })
             if (res.ok) {
-                toast.success(`Tenant ${isActive ? 'activated' : 'deactivated'} successfully`)
-                loadTenants()
+                toast.success(`Customer ${isActive ? 'activated' : 'deactivated'} successfully`)
+                loadCustomers()
             } else {
-                toast.error("Failed to update tenant status")
+                toast.error("Failed to update customer status")
             }
         } catch (_error) {
             toast.error("An error occurred")
@@ -93,10 +93,10 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
 
     const [, setImpersonating] = useState<string | null>(null)
 
-    const handleImpersonate = async (tenantId: string) => {
+    const handleImpersonate = async (customerId: string) => {
         try {
-            setImpersonating(tenantId)
-            const res = await api.post<{ token: string, user: { name: string; email: string } }>(`/api/super-admin/tenants/${tenantId}/impersonate`, {})
+            setImpersonating(customerId)
+            const res = await api.post<{ token: string, user: { name: string; email: string } }>(`/api/super-admin/admins/${customerId}/impersonate`, {})
             if (res.ok && res.data) {
                 toast.success("Impersonation successful. Redirecting...")
                 // Store token and redirect (Implementation depends on auth provider, assuming localStorage for this custom auth)
@@ -105,7 +105,7 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
                 // Force reload to apply new auth state
                 window.location.href = '/dashboard'
             } else {
-                toast.error("Failed to impersonate tenant admin")
+                toast.error("Failed to impersonate customer admin")
             }
         } catch (_error) {
             toast.error("An error occurred during login")
@@ -114,17 +114,17 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
         }
     }
 
-    const filteredTenants = tenants.filter(tenant =>
-        tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tenant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tenant.created_by?.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredCustomers = customers.filter(customer =>
+        customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        customer.created_by?.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     const columns = [
         {
             key: "name",
             label: "Organization",
-            render: (_value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Customer) => (
                 <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${row.is_active ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
                         }`}>
@@ -140,7 +140,7 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
         {
             key: "admin",
             label: "Admin",
-            render: (_value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Customer) => (
                 <div className="text-sm">
                     <div className="font-medium">{row.created_by?.name || "N/A"}</div>
                     <div className="text-muted-foreground">{row.created_by?.email || row.email}</div>
@@ -150,7 +150,7 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
         {
             key: "subscription",
             label: "Subscription",
-            render: (_value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Customer) => (
                 <div>
                     <Badge variant="outline" className="mb-1">
                         {row.subscription_id?.plan_name || "Free Trial"}
@@ -164,7 +164,7 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
         {
             key: "stats",
             label: "Usage",
-            render: (_value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Customer) => (
                 <div className="text-sm space-y-1">
                     <div className="flex items-center gap-2">
                         <Users className="h-3 w-3 text-gray-400" />
@@ -180,7 +180,7 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
         {
             key: "status",
             label: "Status",
-            render: (_value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Customer) => (
                 <Badge variant={row.is_active ? "default" : "destructive"} className={row.is_active ? "bg-green-100 text-green-700 hover:bg-green-200" : ""}>
                     {row.is_active ? (
                         <div className="flex items-center gap-1">
@@ -203,7 +203,7 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
         {
             key: "actions",
             label: "Actions",
-            render: (_value: unknown, row: Tenant) => (
+            render: (_value: unknown, row: Customer) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">
@@ -232,9 +232,9 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
                             onClick={() => handleStatusChange(row._id, !row.is_active)}
                         >
                             {row.is_active ? (
-                                <><ShieldAlert className="mr-2 h-4 w-4" /> Deactivate Tenant</>
+                                <><ShieldAlert className="mr-2 h-4 w-4" /> Deactivate Customer</>
                             ) : (
-                                <><CheckCircle className="mr-2 h-4 w-4" /> Activate Tenant</>
+                                <><CheckCircle className="mr-2 h-4 w-4" /> Activate Customer</>
                             )}
                         </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -249,21 +249,21 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                        Tenant Management
+                        Customer Management
                     </h2>
                     <p className="text-muted-foreground">
                         Manage organizations and their access
                     </p>
                 </div>
                 <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md">
-                    <Plus className="mr-2 h-4 w-4" /> Add Tenant
+                    <Plus className="mr-2 h-4 w-4" /> Add Customer
                 </Button>
             </div>
 
             <div className="flex items-center py-4 bg-white p-4 rounded-lg border shadow-sm space-x-2">
                 <Search className="h-4 w-4 text-gray-500" />
                 <Input
-                    placeholder="Filter tenants..."
+                    placeholder="Filter customers..."
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     className="max-w-sm border-0 focus-visible:ring-0 pl-1"
@@ -274,10 +274,10 @@ export default function TenantManagementPage({ params: _params }: { params: Prom
                 <CardContent className="p-0">
                     <DataTable
                         title=""
-                        data={filteredTenants}
+                        data={filteredCustomers}
                         columns={columnsWithActions}
                         actions={[]} // Using custom action column
-                        emptyMessage="No tenants found"
+                        emptyMessage="No customers found"
                     />
                 </CardContent>
             </Card>

@@ -44,7 +44,7 @@ interface GeographicData {
   percentage: number
 }
 
-interface TenantAnalytics extends Record<string, unknown> {
+interface CustomerAnalytics extends Record<string, unknown> {
   id: string
   name: string
   users: number
@@ -62,7 +62,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
   // Mock data - in real app, this would come from API
   // const globalStats = {
   //   totalUsers: 12470,
-  //   totalTenants: 245,
+  //   totalCustomers: 245,
   //   totalRevenue: 1250000,
   //   averageSessionTime: 24.5,
   //   bounceRate: 12.3,
@@ -79,11 +79,11 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
       icon: Users
     },
     {
-      name: "Active Tenants",
+      name: "Active Customers",
       value: 245,
       change: 8.2,
       trend: "up",
-      unit: "tenants",
+      unit: "customers",
       icon: Building2
     },
     {
@@ -130,7 +130,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
     { country: "Others", users: 1530, revenue: 153000, growth: 14.6, percentage: 12.2 }
   ]
 
-  const topTenants: TenantAnalytics[] = [
+  const topCustomers: CustomerAnalytics[] = [
     { id: "T001", name: "Green Valley Farms", users: 1250, revenue: 12500, growth: 18.5, plan: "Pro", status: "active", lastActivity: "2 hours ago" },
     { id: "T002", name: "Golden Harvest Co.", users: 980, revenue: 9800, growth: 12.3, plan: "Enterprise", status: "active", lastActivity: "1 hour ago" },
     { id: "T003", name: "Sunrise Agriculture", users: 750, revenue: 7500, growth: 8.7, plan: "Pro", status: "active", lastActivity: "30 min ago" },
@@ -158,9 +158,9 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
 
   const columns = [
     {
-      key: "tenant",
-      label: "Tenant",
-      render: (value: unknown, row: TenantAnalytics) => (
+      key: "customer",
+      label: "Customer",
+      render: (value: unknown, row: CustomerAnalytics) => (
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
             <Building2 className="h-4 w-4 text-blue-600" />
@@ -175,7 +175,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
     {
       key: "users",
       label: "Users",
-      render: (value: unknown, row: TenantAnalytics) => (
+      render: (value: unknown, row: CustomerAnalytics) => (
         <div className="text-center">
           <div className="font-medium">{row.users.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">active users</div>
@@ -185,7 +185,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
     {
       key: "revenue",
       label: "Revenue",
-      render: (value: unknown, row: TenantAnalytics) => (
+      render: (value: unknown, row: CustomerAnalytics) => (
         <div className="text-center">
           <div className="font-medium">${row.revenue.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">per month</div>
@@ -195,7 +195,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
     {
       key: "growth",
       label: "Growth",
-      render: (value: unknown, row: TenantAnalytics) => (
+      render: (value: unknown, row: CustomerAnalytics) => (
         <div className="flex items-center space-x-2">
           {getTrendIcon("up")}
           <span className={`font-medium ${getTrendColor("up")}`}>
@@ -207,7 +207,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
     {
       key: "plan",
       label: "Plan",
-      render: (value: unknown, row: TenantAnalytics) => (
+      render: (value: unknown, row: CustomerAnalytics) => (
         <Badge variant={row.plan === "Enterprise" ? "default" : "secondary"}>
           {row.plan}
         </Badge>
@@ -216,7 +216,7 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
     {
       key: "lastActivity",
       label: "Last Activity",
-      render: (value: unknown, row: TenantAnalytics) => (
+      render: (value: unknown, row: CustomerAnalytics) => (
         <div className="text-sm text-muted-foreground">
           {row.lastActivity}
         </div>
@@ -227,14 +227,14 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
   const actions: {
     label: string;
     icon?: LucideIcon;
-    onClick: (row: TenantAnalytics) => void;
+    onClick: (row: CustomerAnalytics) => void;
     variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
-    show?: (row: TenantAnalytics) => boolean;
+    show?: (row: CustomerAnalytics) => boolean;
   }[] = [
     {
       label: "View",
       icon: Eye,
-      onClick: (row: TenantAnalytics) => console.log("View tenant:", row.id),
+      onClick: (row: CustomerAnalytics) => console.log("View customer:", row.id),
       variant: "outline" as const
     }
   ]
@@ -324,24 +324,24 @@ export default function GlobalAnalyticsPage({ params: _params }: { params: Promi
         </CardContent>
       </Card>
 
-      {/* Top Performing Tenants */}
+      {/* Top Performing Customers */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
             <BarChart3 className="h-5 w-5 mr-2" />
-            Top Performing Tenants
+            Top Performing Customers
           </CardTitle>
           <CardDescription>
-            Highest revenue generating tenants this month
+            Highest revenue generating customers this month
           </CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
             title=""
-            data={topTenants}
+            data={topCustomers}
             columns={columns}
             actions={actions}
-            emptyMessage="No tenant data available"
+            emptyMessage="No customer data available"
           />
         </CardContent>
       </Card>

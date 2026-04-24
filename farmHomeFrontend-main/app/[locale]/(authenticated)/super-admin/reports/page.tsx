@@ -87,13 +87,13 @@ export default function SuperAdminReportsPage({ params: _params }: { params: Pro
                         </div>
                     </div>
                     <div className="space-y-2 flex-1">
-                        <label className="text-sm font-medium">Tenant Filter (Optional)</label>
+                        <label className="text-sm font-medium">Customer Filter (Optional)</label>
                         <Select>
                             <SelectTrigger>
-                                <SelectValue placeholder="All Tenants" />
+                                <SelectValue placeholder="All Customers" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">All Tenants</SelectItem>
+                                <SelectItem value="all">All Customers</SelectItem>
                                 <SelectItem value="t1">Green Valley Farms</SelectItem>
                                 <SelectItem value="t2">Golden Harvest Co.</SelectItem>
                             </SelectContent>

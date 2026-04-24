@@ -48,7 +48,7 @@ interface RecentBatch {
   actual_dispatch_date?: string
 }
 
-export function TenantDashboard() {
+export function AdminDashboard() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [data, setData] = useState<DashboardResponse | null>(null)
@@ -168,7 +168,7 @@ export function TenantDashboard() {
       return sum + (b.quantity_kg * pricePerKg)
     }, 0)
 
-  const tenantStats = {
+  const adminStats = {
     totalUsers: usageStats?.users?.total || users.length,
     totalBatches: totalBatches > 0 ? totalBatches : (usageStats?.grain_batches || (recentBatches.length > 0 ? recentBatches.length : 0)),
     totalRevenue: totalRevenue,
@@ -217,7 +217,7 @@ export function TenantDashboard() {
   }
 
   const systemAlerts = [
-    ...(tenantStats.criticalIssues > 0
+    ...(adminStats.criticalIssues > 0
       ? [{ id: 1, type: "critical", message: "Storage near capacity detected", time: "just now", location: "Multiple Silos" }]
       : []),
     // Add plan-based alerts
@@ -256,7 +256,7 @@ export function TenantDashboard() {
     <div className="space-y-8">
 
 
-      {/* Tenant Overview Cards */}
+      {/* Admin Overview Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -264,13 +264,13 @@ export function TenantDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{tenantStats.totalUsers}</div>
+            <div className="text-2xl font-bold">{adminStats.totalUsers}</div>
             <p className="text-xs text-muted-foreground">
               {planDetails.usage.users.used}/{planDetails.usage.users.limit} limit
             </p>
             <Progress value={
               planDetails.usage.users.limit === "unlimited" ? 0 :
-                typeof planDetails.usage.users.limit === 'number' ? (tenantStats.totalUsers / planDetails.usage.users.limit) * 100 : 0
+                typeof planDetails.usage.users.limit === 'number' ? (adminStats.totalUsers / planDetails.usage.users.limit) * 100 : 0
             } className="mt-2" />
           </CardContent>
         </Card> */}
@@ -281,7 +281,7 @@ export function TenantDashboard() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{tenantStats.totalBatches}</div>
+            <div className="text-2xl font-bold">{adminStats.totalBatches}</div>
             <p className="text-xs text-muted-foreground">
               {recentBatches.length > 0 ? `${recentBatches.length} recent` : 'No batches yet'}
             </p>
@@ -294,7 +294,7 @@ export function TenantDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">PKR {tenantStats.totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">PKR {adminStats.totalRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               +15% from last month
             </p>
@@ -304,7 +304,7 @@ export function TenantDashboard() {
       </div>
 
       {/* Critical Alerts - Only show if there are actual critical issues */}
-      {tenantStats.criticalIssues > 0 && systemAlerts.filter(alert => alert.type === "critical").length > 0 && (
+      {adminStats.criticalIssues > 0 && systemAlerts.filter(alert => alert.type === "critical").length > 0 && (
         <Card className="border-red-200 bg-red-50">
           <CardHeader>
             <CardTitle className="flex items-center text-red-800">

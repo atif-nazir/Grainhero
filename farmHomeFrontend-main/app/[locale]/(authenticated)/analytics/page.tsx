@@ -180,7 +180,7 @@ export default function AnalyticsPage({ params: _params }: { params: Promise<{ l
         <Alert className="max-w-md border-red-200 bg-red-50">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-600">
-            {error || "Unable to load analytics for this tenant."}
+            {error || "Unable to load analytics for this customer."}
           </AlertDescription>
         </Alert>
       </div>

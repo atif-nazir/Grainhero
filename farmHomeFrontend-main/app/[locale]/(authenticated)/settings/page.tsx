@@ -22,7 +22,7 @@ import {
 import { api } from '@/lib/api'
 import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
-interface TenantSettings {
+interface CustomerSettings {
   name: string
   email: string
   phone: string
@@ -53,7 +53,7 @@ interface TenantSettings {
 }
 
 export default function SettingsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
-  const [settings, setSettings] = useState<TenantSettings>({
+  const [settings, setSettings] = useState<CustomerSettings>({
     name: '',
     email: '',
     phone: '',
@@ -107,8 +107,8 @@ export default function SettingsPage({ params: _params }: { params: Promise<{ lo
       }
 
       if (user) {
-        // Define type for tenant settings response
-        interface TenantSettingsResponse {
+        // Define type for customer settings response
+        interface CustomerSettingsResponse {
           business_type?: string;
           location?: {
             address?: string;
@@ -135,33 +135,33 @@ export default function SettingsPage({ params: _params }: { params: Promise<{ lo
           };
         }
         
-        const tenantRes = await api.get('/api/tenant/settings').catch(() => null)
-        const tenantData: TenantSettingsResponse | null = tenantRes?.data || null;
+        const customerRes = await api.get('/api/customer/settings').catch(() => null)
+        const customerData: CustomerSettingsResponse | null = customerRes?.data || null;
         
         const loadedSettings = {
           name: user.name || '',
           email: user.email || '',
           phone: user.phone || '',
-          business_type: tenantData?.business_type || 'farm',
+          business_type: customerData?.business_type || 'farm',
           location: {
-            address: tenantData?.location?.address || '',
-            city: tenantData?.location?.city || '',
-            country: tenantData?.location?.country || 'Pakistan'
+            address: customerData?.location?.address || '',
+            city: customerData?.location?.city || '',
+            country: customerData?.location?.country || 'Pakistan'
           },
-          notifications: tenantData?.notifications || {
+          notifications: customerData?.notifications || {
             email_alerts: true,
             sms_alerts: false,
             push_notifications: true,
             weekly_reports: true,
             monthly_reports: true
           },
-          system: tenantData?.system || {
+          system: customerData?.system || {
             auto_backup: true,
             data_retention_days: 365,
             session_timeout_minutes: 60,
             two_factor_auth: false
           },
-          integrations: tenantData?.integrations || {
+          integrations: customerData?.integrations || {
             weather_api: true,
             market_prices: true,
             government_data: false
@@ -252,16 +252,16 @@ export default function SettingsPage({ params: _params }: { params: Promise<{ lo
         profileRes = { ok: false, data: null };
       }
 
-      // Save tenant settings if available (excluding two_factor_auth since it's handled separately)
+      // Save customer settings if available (excluding two_factor_auth since it's handled separately)
       const { two_factor_auth: _two_factor_auth, ...systemWithout2FA } = settings.system;
-      await api.put('/api/tenant/settings', {
+      await api.put('/api/customer/settings', {
         notifications: settings.notifications,
         system: systemWithout2FA,
         integrations: settings.integrations,
         location: settings.location
       }).catch(() => {
-        // If tenant settings endpoint doesn't exist, that's okay
-        console.log('Tenant settings endpoint not available')
+        // If customer settings endpoint doesn't exist, that's okay
+        console.log('Customer settings endpoint not available')
       })
 
       // Check if profile update was successful
@@ -288,7 +288,7 @@ export default function SettingsPage({ params: _params }: { params: Promise<{ lo
     }
   }
 
-  const updateSettings = (section: keyof TenantSettings, field: string, value: unknown) => {
+  const updateSettings = (section: keyof CustomerSettings, field: string, value: unknown) => {
     setSettings(prev => ({
       ...prev,
       [section]: {

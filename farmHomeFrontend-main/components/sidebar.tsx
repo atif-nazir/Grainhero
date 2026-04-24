@@ -73,7 +73,7 @@ const systemNav = [
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
 const superAdminNav: NavItem[] = [
-  { name: "tenant-management", label: "Tenant Management", href: "/super-admin/tenants", icon: Building2, roles: ["super_admin"], badge: "CORE" },
+  { name: "admin-management", label: "Customer Management", href: "/super-admin/customers", icon: Building2, roles: ["super_admin"], badge: "CORE" },
   { name: "plan-management", label: "Plan Management", href: "/super-admin/subscriptions", icon: CreditCard, roles: ["super_admin"], badge: "BIZ" },
   { name: "system-health", label: "System Health", href: "/system-health", icon: Activity, roles: ["super_admin"], badge: "LIVE" },
   { name: "global-analytics", label: "Global Analytics", href: "/global-analytics", icon: BarChart3, roles: ["super_admin"], badge: "DATA" },
@@ -86,7 +86,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const t = useTranslations('Sidebar')
   const isMobile = useIsMobile()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const router = useRouter()
   const { currentLanguage } = useLanguage()
   const userRole = user?.role || "technician"

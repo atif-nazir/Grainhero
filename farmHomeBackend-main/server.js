@@ -353,7 +353,7 @@ app.get("/status", (req, res) => {
 // Helper: get filtered alerts for a user by role
 async function getFilteredAlerts(role, userId) {
   // For grain management, return all alerts for now
-  // TODO: Implement tenant-based filtering for grain alerts
+  // TODO: Implement admin-based filtering for grain alerts
   const alerts = await Alert.find();
   return alerts;
 }

@@ -529,7 +529,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
             <Card className="border-t-4 border-t-amber-500">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-amber-500" />Super Admin Claim Review Queue</CardTitle>
-                <CardDescription>Review, investigate, assess, and process payments for filed claims across all tenants.</CardDescription>
+                <CardDescription>Review, investigate, assess, and process payments for filed claims across all customers.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1071,7 +1071,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                     </div>
                     <div className="pt-2 border-t border-amber-200">
                       <p className="text-[10px] text-amber-600 uppercase font-bold mb-1">Policy Holder</p>
-                      <p className="text-xs font-medium">GrainHero Tenant</p>
+                      <p className="text-xs font-medium">GrainHero Customer</p>
                     </div>
                   </div>
                 </div>

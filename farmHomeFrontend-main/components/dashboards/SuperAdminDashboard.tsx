@@ -45,7 +45,7 @@ import { api } from "@/lib/api"
 import { useAuth } from "@/app/[locale]/providers"
 
 interface SystemStat {
-  totalTenants: number;
+  totalCustomers: number;
   totalUsers: number;
   totalRevenue: number;
   systemHealth: number;
@@ -59,7 +59,7 @@ interface MonthlyTrend {
   revenue: number;
 }
 
-interface RecentTenant {
+interface RecentCustomer {
   id: string | number;
   _id?: string;
   name: string;
@@ -91,7 +91,7 @@ interface SystemAlert {
   message: string;
   time: string;
   timestamp: string;
-  tenant: string;
+  customer: string;
   createdBy: string;
   resolved: boolean;
   details: string;
@@ -103,7 +103,7 @@ interface SystemAlert {
 interface Invoice {
   id: string;
   invoice_number: string;
-  tenant_name: string;
+  admin_name: string;
   date: string;
   amount: number;
   status: string;
@@ -113,19 +113,19 @@ export function SuperAdminDashboard() {
   const { user: _user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [systemStats, setSystemStats] = useState<SystemStat | null>(null);
-  const [, setRecentTenants] = useState<RecentTenant[]>([]);
-  const [allTenants, setAllTenants] = useState<RecentTenant[]>([]);
+  const [, setRecentCustomers] = useState<RecentCustomer[]>([]);
+  const [allCustomers, setAllCustomers] = useState<RecentCustomer[]>([]);
   const [systemAlerts, setSystemAlerts] = useState<SystemAlert[]>([]);
   const [monthlyTrend, setMonthlyTrend] = useState<MonthlyTrend[]>([]);
   const [loading, setLoading] = useState(true);
   const [subscriptionDist, setSubscriptionDist] = useState<Record<string, number>>({});
 
-  // Tenant Management States
+  // Customer Management States
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTenant, setSelectedTenant] = useState<RecentTenant | null>(null);
-  const [tenantUsers, setTenantUsers] = useState<User[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<RecentCustomer | null>(null);
+  const [customerUsers, setCustomerUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [, _setIsAddTenantOpen] = useState(false);
+  const [, _setIsAddCustomerOpen] = useState(false);
 
   // Financial Stats
   const [financialStats, setFinancialStats] = useState({
@@ -156,24 +156,24 @@ export function SuperAdminDashboard() {
         const dashboardData = dashboardRes.data;
         const metrics = dashboardData.metrics;
 
-        // Fetch additional super admin specific data AND full tenant list
-        const [tenantsRes, alertsRes, subscriptionRevenueRes, allTenantsRes, finStatsRes, invoicesRes] = await Promise.all([
-          api.get<any>("/api/super-admin/tenants"),
+        // Fetch additional super admin specific data AND full customer list
+        const [customersRes, alertsRes, subscriptionRevenueRes, allCustomersRes, finStatsRes, invoicesRes] = await Promise.all([
+          api.get<any>("/api/super-admin/admins"),
           api.get<any>("/api/super-admin/alerts"),
           api.get<any>("/api/super-admin/subscription-revenue"),
-          api.get<any>("/api/tenant-management/tenants?limit=100"),
+          api.get<any>("/api/admin-management/customers?limit=100"),
           api.get<any>("/api/super-admin/financials/stats"),
           api.get<any>("/api/super-admin/financials/invoices")
         ]);
 
-        const tenantsData = tenantsRes.data || { data: [] };
+        const customersData = customersRes.data || { data: [] };
         const alertsData = alertsRes.data || { data: [] };
         const subscriptionRevenueData = subscriptionRevenueRes.data || { revenue: 0, monthlyTrend: [] };
-        const allTenantsData = allTenantsRes.data || { data: { tenants: [] } };
+        const allCustomersData = allCustomersRes.data || { data: { customers: [] } };
 
         // Map the API response to our system stats
         setSystemStats({
-          totalTenants: metrics?.total_tenants || 0,
+          totalCustomers: metrics?.total_customers || 0,
           totalUsers: metrics?.active_users || 0,
           totalRevenue: metrics?.mrr || 0,
           systemHealth: metrics?.critical_alerts === 0 ? 100 : 80,
@@ -184,12 +184,12 @@ export function SuperAdminDashboard() {
 
         setSubscriptionDist(dashboardData.distributions?.subscriptions || {});
 
-        // Set tenants data
-        const recentTenantsList = tenantsData.data || [];
-        setRecentTenants(recentTenantsList.slice(0, 5));
+        // Set customers data
+        const recentCustomersList = customersData.data || [];
+        setRecentCustomers(recentCustomersList.slice(0, 5));
 
-        const fullTenantsList = allTenantsData.data?.tenants || [];
-        const mappedAllTenants = fullTenantsList.map((t: any) => ({
+        const fullCustomersList = allCustomersData.data?.customers || [];
+        const mappedAllCustomers = fullCustomersList.map((t: any) => ({
           id: t._id,
           _id: t._id,
           name: t.name,
@@ -202,7 +202,7 @@ export function SuperAdminDashboard() {
           phone: t.phone
         }));
 
-        setAllTenants(mappedAllTenants);
+        setAllCustomers(mappedAllCustomers);
         setSystemAlerts(alertsData.data || []);
 
         const formattedTrend = subscriptionRevenueData.monthlyTrend?.map((item: any) => ({
@@ -317,34 +317,34 @@ export function SuperAdminDashboard() {
     }
   };
 
-  const handleSuspendTenant = async (tenantId: string, currentStatus: string) => {
+  const handleSuspendCustomer = async (customerId: string, currentStatus: string) => {
     try {
       const isSuspending = currentStatus === 'active';
-      const res = await api.put(`/api/tenant-management/tenants/${tenantId}`, {
+      const res = await api.put(`/api/admin-management/customers/${customerId}`, {
         is_active: !isSuspending
       });
 
       if (res.ok) {
-        toast.success(`Tenant ${isSuspending ? 'suspended' : 'activated'} successfully`);
+        toast.success(`Customer ${isSuspending ? 'suspended' : 'activated'} successfully`);
         // Update local state
-        setAllTenants(allTenants.map(t =>
-          t.id === tenantId
+        setAllCustomers(allCustomers.map(t =>
+          t.id === customerId
             ? { ...t, status: isSuspending ? 'suspended' : 'active' }
             : t
         ));
       } else {
         const errorData = res.data as { message?: string };
-        toast.error(errorData?.message || "Failed to update tenant status");
+        toast.error(errorData?.message || "Failed to update customer status");
       }
     } catch (_error) {
-      console.error("Error suspending tenant:", _error);
+      console.error("Error suspending customer:", _error);
       toast.error("An error occurred");
     }
   };
 
-  const handleImpersonate = async (tenantId: string) => {
+  const handleImpersonate = async (customerId: string) => {
     try {
-      const res = await api.post(`/api/super-admin/tenants/${tenantId}/impersonate`, {});
+      const res = await api.post(`/api/super-admin/admins/${customerId}/impersonate`, {});
       if (res.ok && res.data) {
         const { token, user } = res.data as { token: string, user: { name: string; email: string } };
         // Save token and redirect
@@ -353,23 +353,23 @@ export function SuperAdminDashboard() {
         // Force reload to pick up new user context
         window.location.href = '/dashboard';
       } else {
-        toast.error("Failed to impersonate tenant");
+        toast.error("Failed to impersonate customer");
       }
     } catch (_error) {
-      toast.error("Error impersonating tenant");
+      toast.error("Error impersonating customer");
     }
   };
 
-  const handleEditLimits = (tenant: RecentTenant) => {
+  const handleEditLimits = (customer: RecentCustomer) => {
     // We need to fetch current limits or assume defaults/existing if we had them.
     // For now, let's open modal with some default or fetched values.
-    // Since we don't have limits in `RecentTenant` interface fully, we might default or need to fetch details.
+    // Since we don't have limits in `RecentCustomer` interface fully, we might default or need to fetch details.
     // Let's assume we use defaults or existing mocked values if mapped.
-    // Better: Fetch tenant details first? Or just allow overwrite.
+    // Better: Fetch customer details first? Or just allow overwrite.
     // Let's set some reasonable defaults or current if available.
     // We'll just open the modal with empty/default and let user set new limits.
     setEditLimitsData({
-      id: tenant.id as string, // Ensure ID is string
+      id: customer.id as string, // Ensure ID is string
       user_limit: 10, // Default or fetch
       storage_limit_gb: 5,
       device_limit: 20
@@ -379,7 +379,7 @@ export function SuperAdminDashboard() {
 
   const saveLimits = async () => {
     try {
-      const res = await api.put(`/api/tenant-management/tenants/${editLimitsData.id}`, {
+      const res = await api.put(`/api/admin-management/customers/${editLimitsData.id}`, {
         user_limit: editLimitsData.user_limit,
         storage_limit_gb: editLimitsData.storage_limit_gb,
         device_limit: editLimitsData.device_limit
@@ -396,22 +396,22 @@ export function SuperAdminDashboard() {
     }
   };
 
-  const loadTenantUsers = async (tenantId: string) => {
+  const loadCustomerUsers = async (customerId: string) => {
     setLoadingUsers(true);
     try {
-      // Use the passed tenantId directly as state update might not be reflected yet
-      if (!tenantId) {
+      // Use the passed customerId directly as state update might not be reflected yet
+      if (!customerId) {
         setLoadingUsers(false);
         return;
       }
 
-      const res = await api.get(`/api/user-management/users?tenant_id=${tenantId}`);
+      const res = await api.get(`/api/user-management/users?admin_id=${customerId}`);
       if (res.ok && res.data) {
         const data = res.data as { users: User[] };
-        console.log("Loaded users for tenant:", tenantId, data.users);
-        setTenantUsers(data.users);
+        console.log("Loaded users for customer:", customerId, data.users);
+        setCustomerUsers(data.users);
       } else {
-        toast.error("Failed to load tenant users");
+        toast.error("Failed to load customer users");
       }
     } catch (error) {
       console.error(error);
@@ -421,45 +421,45 @@ export function SuperAdminDashboard() {
     }
   };
 
-  const [, setActiveTenantId] = useState<string | null>(null);
+  const [, setActiveCustomerId] = useState<string | null>(null);
 
-  const handleViewTenantDetails = async (tenant: RecentTenant) => {
-    // If tenant doesn't have _id (because it came from the formatted list which might only have numeric id),
+  const handleViewCustomerDetails = async (customer: RecentCustomer) => {
+    // If customer doesn't have _id (because it came from the formatted list which might only have numeric id),
     // we need to find the real one or rely on what we have.
     // The previous implementation mapped id: index+1. We need to fix the backend to return real IDs or
-    // find the tenant in the raw list if we kept it.
-    // For now, let's assume we can get the ID from the tenant object if we updated the backend to provide it,
+    // find the customer in the raw list if we kept it.
+    // For now, let's assume we can get the ID from the customer object if we updated the backend to provide it,
     // or if the frontend mapping preserves it.
     // We will update the backend mapping in the view logic if needed, but for now let's try.
     // Actually, let's fix the backend mapping first or adjust frontend one.
     // The backend `superAdmin.js` maps `id: index + 1`. This is problematic for lookups.
-    // We should rely on `_id` if possible. But `recentTenants` comes from `super-admin/tenants`.
+    // We should rely on `_id` if possible. But `recentCustomers` comes from `super-admin/customers`.
 
-    // For this specific 'Tenant Management' feature we need the real ID.
-    // Let's optimistically assume we can use the `tenant-management/tenants` endpoint for the full list
-    // which returns real `_id`s, or update `super-admin/tenants` to return `_id`.
-    // I will check if I can access `_id` from `allTenants` if I fetch from `tenant-management`.
+    // For this specific 'Customer Management' feature we need the real ID.
+    // Let's optimistically assume we can use the `admin-management/customers` endpoint for the full list
+    // which returns real `_id`s, or update `super-admin/customers` to return `_id`.
+    // I will check if I can access `_id` from `allCustomers` if I fetch from `admin-management`.
 
-    // Changing approach: Let's use `handleViewTenantDetails` to just open the modal,
-    // but we need to fetch users. We need the real tenant ID (mongo ID).
-    // The current `SuperAdminDashboard` uses `api/super-admin/tenants` which formats IDs.
-    // We should switch to `api/tenant-management/tenants` for the "Tenant Management" tab to get full data.
+    // Changing approach: Let's use `handleViewCustomerDetails` to just open the modal,
+    // but we need to fetch users. We need the real customer ID (mongo ID).
+    // The current `SuperAdminDashboard` uses `api/super-admin/customers` which formats IDs.
+    // We should switch to `api/admin-management/customers` for the "Customer Management" tab to get full data.
 
-    setSelectedTenant(tenant);
+    setSelectedCustomer(customer);
     // If we have a real ID (let's assume we might attach it as _id or fallback)
-    const realId = tenant._id || tenant.id.toString();
-    setActiveTenantId(realId);
+    const realId = customer._id || customer.id.toString();
+    setActiveCustomerId(realId);
 
     // If it looks like a mongo ID (24 chars hex), load users
     if (realId.match(/^[0-9a-fA-F]{24}$/)) {
-      loadTenantUsers(realId);
+      loadCustomerUsers(realId);
     }
   };
 
-  const closeTenantModal = () => {
-    setSelectedTenant(null);
-    setTenantUsers([]);
-    setActiveTenantId(null);
+  const closeCustomerModal = () => {
+    setSelectedCustomer(null);
+    setCustomerUsers([]);
+    setActiveCustomerId(null);
   };
 
   const [selectedAlert, setSelectedAlert] = useState<SystemAlert | null>(null);
@@ -472,9 +472,9 @@ export function SuperAdminDashboard() {
     setSelectedAlert(null);
   };
 
-  const filteredTenants = allTenants.filter(tenant => {
-    const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (tenant.email?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+  const filteredCustomers = allCustomers.filter(customer => {
+    const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (customer.email?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -501,8 +501,8 @@ export function SuperAdminDashboard() {
           <Button variant={activeTab === "overview" ? "default" : "outline"} onClick={() => setActiveTab("overview")}>
             Overview
           </Button>
-          <Button variant={activeTab === "tenants" ? "default" : "outline"} onClick={() => setActiveTab("tenants")}>
-            Tenant Management
+          <Button variant={activeTab === "customers" ? "default" : "outline"} onClick={() => setActiveTab("customers")}>
+            Customer Management
           </Button>
           <Button variant={activeTab === "financials" ? "default" : "outline"} onClick={() => setActiveTab("financials")}>
             Financial Control
@@ -524,8 +524,8 @@ export function SuperAdminDashboard() {
               trend={{ value: 12, label: "vs last month", positive: true }}
             />
             <StatCard
-              title="Active Tenants"
-              value={(systemStats?.totalTenants || 0).toLocaleString()}
+              title="Active Customers"
+              value={(systemStats?.totalCustomers || 0).toLocaleString()}
               description="Total organizations on platform"
               icon={Building2}
               className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-100"
@@ -535,7 +535,7 @@ export function SuperAdminDashboard() {
             <StatCard
               title="Total Users"
               value={(systemStats?.totalUsers || 0).toLocaleString()}
-              description="Active users across all tenants"
+              description="Active users across all customers"
               icon={Users}
               className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-100"
               iconClassName="text-purple-600"
@@ -592,7 +592,7 @@ export function SuperAdminDashboard() {
               <CardHeader>
                 <CardTitle>Subscription Distribution</CardTitle>
                 <CardDescription>
-                  Active plans across tenants
+                  Active plans across customers
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -645,7 +645,7 @@ export function SuperAdminDashboard() {
                           alert.type === "warning" ? "text-yellow-600" :
                             "text-blue-600"
                           }`}>
-                          Tenant: {alert.tenant} | Silo: {alert.silo} | {alert.time}
+                          Customer: {alert.customer} | Silo: {alert.silo} | {alert.time}
                         </p>
                       </div>
                       <div className="flex space-x-2">
@@ -688,9 +688,9 @@ export function SuperAdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Button className="h-20 flex flex-col items-center justify-center space-y-2" onClick={() => setActiveTab("tenants")}>
+                  <Button className="h-20 flex flex-col items-center justify-center space-y-2" onClick={() => setActiveTab("customers")}>
                     <Building2 className="h-6 w-6" />
-                    <span>Manage Tenants</span>
+                    <span>Manage Customers</span>
                   </Button>
                   <Button className="h-20 flex flex-col items-center justify-center space-y-2" variant="outline">
                     <Settings className="h-6 w-6" />
@@ -711,14 +711,14 @@ export function SuperAdminDashboard() {
         </>
       )}
 
-      {activeTab === "tenants" && (
+      {activeTab === "customers" && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div className="flex gap-2 items-center flex-1 max-w-sm">
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search tenants..."
+                  placeholder="Search customers..."
                   className="pl-8"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -749,8 +749,8 @@ export function SuperAdminDashboard() {
             <Dialog open={isEditLimitsOpen} onOpenChange={setIsEditLimitsOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Edit Tenant Limits</DialogTitle>
-                  <DialogDescription>Update resource limits for this tenant.</DialogDescription>
+                  <DialogTitle>Edit Customer Limits</DialogTitle>
+                  <DialogDescription>Update resource limits for this customer.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
@@ -796,30 +796,30 @@ export function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {filteredTenants.length > 0 ? (
-                  filteredTenants.map((tenant) => (
-                    <div key={tenant.id} className="flex items-center justify-between p-4 bg-accent/40 rounded-lg border hover:bg-accent/60 transition-colors">
+                {filteredCustomers.length > 0 ? (
+                  filteredCustomers.map((customer) => (
+                    <div key={customer.id} className="flex items-center justify-between p-4 bg-accent/40 rounded-lg border hover:bg-accent/60 transition-colors">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-lg">{tenant.name}</h4>
-                          <Badge variant={tenant.status === 'active' ? 'default' : 'secondary'}>
-                            {tenant.status}
+                          <h4 className="font-semibold text-lg">{customer.name}</h4>
+                          <Badge variant={customer.status === 'active' ? 'default' : 'secondary'}>
+                            {customer.status}
                           </Badge>
-                          <Badge variant="outline">{tenant.plan}</Badge>
+                          <Badge variant="outline">{customer.plan}</Badge>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <div className="flex items-center gap-1">
                             <Users className="h-3 w-3" />
-                            <span>{tenant.users} users</span>
+                            <span>{customer.users} users</span>
                           </div>
                           <div className="flex items-center gap-1">
                             <DollarSign className="h-3 w-3" />
-                            <span>PKR {tenant.revenue}</span>
+                            <span>PKR {customer.revenue}</span>
                           </div>
-                          {tenant.daysLeft !== undefined && (
+                          {customer.daysLeft !== undefined && (
                             <div className="flex items-center gap-1">
                               <Activity className="h-3 w-3" />
-                              <span>{tenant.daysLeft} days left</span>
+                              <span>{customer.daysLeft} days left</span>
                             </div>
                           )}
                         </div>
@@ -835,21 +835,21 @@ export function SuperAdminDashboard() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleViewTenantDetails(tenant)}>
+                            <DropdownMenuItem onClick={() => handleViewCustomerDetails(customer)}>
                               <Users className="mr-2 h-4 w-4" /> View Users
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleImpersonate(tenant.id as string)}>
-                              <Activity className="mr-2 h-4 w-4" /> Login as Tenant
+                            <DropdownMenuItem onClick={() => handleImpersonate(customer.id as string)}>
+                              <Activity className="mr-2 h-4 w-4" /> Login as Customer
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditLimits(tenant)}>
+                            <DropdownMenuItem onClick={() => handleEditLimits(customer)}>
                               <Settings className="mr-2 h-4 w-4" /> Edit Limits
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => handleSuspendTenant(tenant.id as string, tenant.status)}
-                              className={tenant.status === 'active' ? "text-red-600" : "text-green-600"}
+                              onClick={() => handleSuspendCustomer(customer.id as string, customer.status)}
+                              className={customer.status === 'active' ? "text-red-600" : "text-green-600"}
                             >
-                              {tenant.status === 'active' ? (
+                              {customer.status === 'active' ? (
                                 <>
                                   <AlertTriangle className="mr-2 h-4 w-4" /> Suspend Access
                                 </>
@@ -866,7 +866,7 @@ export function SuperAdminDashboard() {
                   ))
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
-                    No tenants found matching your filters.
+                    No customers found matching your filters.
                   </div>
                 )}
               </div>
@@ -914,7 +914,7 @@ export function SuperAdminDashboard() {
               <div className="rounded-md border">
                 <div className="grid grid-cols-5 bg-muted/50 p-4 font-medium text-sm">
                   <div>Invoice ID</div>
-                  <div>Tenant</div>
+                  <div>Customer</div>
                   <div>Date</div>
                   <div>Amount</div>
                   <div>Status</div>
@@ -923,7 +923,7 @@ export function SuperAdminDashboard() {
                   {invoices.length > 0 ? invoices.map((inv) => (
                     <div key={inv.id} className="grid grid-cols-5 p-4 text-sm items-center hover:bg-muted/50 transition-colors">
                       <div className="font-mono">{inv.invoice_number}</div>
-                      <div className="font-medium">{inv.tenant_name}</div>
+                      <div className="font-medium">{inv.admin_name}</div>
                       <div>{new Date(inv.date).toLocaleDateString()}</div>
                       <div>PKR {inv.amount}</div>
                       <div>
@@ -945,32 +945,32 @@ export function SuperAdminDashboard() {
         </div>
       )}
 
-      {/* Tenant Detail Modal (View Users) */}
+      {/* Customer Detail Modal (View Users) */}
       {
-        selectedTenant && (
+        selectedCustomer && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-background rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border">
               <div className="p-6 border-b flex justify-between items-center">
                 <div>
-                  <h3 className="text-xl font-bold">{selectedTenant.name}</h3>
-                  <p className="text-sm text-muted-foreground">Tenant Administration & Users</p>
+                  <h3 className="text-xl font-bold">{selectedCustomer.name}</h3>
+                  <p className="text-sm text-muted-foreground">Customer Administration & Users</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={closeTenantModal}>✕</Button>
+                <Button variant="ghost" size="icon" onClick={closeCustomerModal}>✕</Button>
               </div>
 
               <div className="p-6 overflow-y-auto flex-1 space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-muted-foreground uppercase">Plan</span>
-                    <div className="font-medium">{selectedTenant.plan}</div>
+                    <div className="font-medium">{selectedCustomer.plan}</div>
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-muted-foreground uppercase">Status</span>
-                    <div className="font-medium capitalize">{selectedTenant.status}</div>
+                    <div className="font-medium capitalize">{selectedCustomer.status}</div>
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-muted-foreground uppercase">Revenue</span>
-                    <div className="font-medium">PKR {selectedTenant.revenue}</div>
+                    <div className="font-medium">PKR {selectedCustomer.revenue}</div>
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-muted-foreground uppercase">Admin</span>
@@ -982,7 +982,7 @@ export function SuperAdminDashboard() {
                 <div>
                   <h4 className="font-semibold mb-3 flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    Registered Users ({tenantUsers.length})
+                    Registered Users ({customerUsers.length})
                   </h4>
                   {loadingUsers ? (
                     <div className="text-center py-8">
@@ -991,8 +991,8 @@ export function SuperAdminDashboard() {
                     </div>
                   ) : (
                     <div className="rounded-md border divide-y">
-                      {tenantUsers.length > 0 ? (
-                        tenantUsers.map(user => (
+                      {customerUsers.length > 0 ? (
+                        customerUsers.map(user => (
                           <div key={user._id} className="grid grid-cols-12 gap-4 p-3 items-center hover:bg-muted/50 transition-colors">
                             <div className="col-span-5 flex items-center gap-3">
                               <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
@@ -1026,7 +1026,7 @@ export function SuperAdminDashboard() {
                         ))
                       ) : (
                         <div className="text-center py-6 text-muted-foreground text-sm">
-                          No users found for this tenant.
+                          No users found for this customer.
                         </div>
                       )}
                     </div>
@@ -1035,7 +1035,7 @@ export function SuperAdminDashboard() {
               </div>
 
               <div className="p-6 border-t bg-muted/20 flex justify-end">
-                <Button onClick={closeTenantModal}>Close Details</Button>
+                <Button onClick={closeCustomerModal}>Close Details</Button>
               </div>
             </div>
           </div>
@@ -1057,8 +1057,8 @@ export function SuperAdminDashboard() {
                   <span className="capitalize">{selectedAlert.type}</span>
                 </div>
                 <div className="flex justify-between border-b pb-2">
-                  <span className="font-medium text-muted-foreground">Tenant</span>
-                  <span>{selectedAlert.tenant}</span>
+                  <span className="font-medium text-muted-foreground">Customer</span>
+                  <span>{selectedAlert.customer}</span>
                 </div>
                 <div className="flex justify-between border-b pb-2">
                   <span className="font-medium text-muted-foreground">Silo</span>

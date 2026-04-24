@@ -34,7 +34,7 @@ import { AnimatedBackground } from "@/components/animations/MotionGraphics"
 
 interface PaymentItem {
   _id: string
-  tenant_id: string
+  admin_id: string
   plan_name: string
   price_per_month: number
   billing_cycle: string

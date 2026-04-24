@@ -35,7 +35,7 @@ import { config } from "@/config"
 
 interface ActivityLog {
     _id: string
-    tenant_id: string
+    admin_id: string
     user_id: string
     user_name: string
     user_role: string

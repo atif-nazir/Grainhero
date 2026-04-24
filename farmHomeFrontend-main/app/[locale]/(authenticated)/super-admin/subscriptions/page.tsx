@@ -29,7 +29,7 @@ import {
 interface Subscription {
     _id: string
     plan_name: string
-    tenant_id?: {
+    admin_id?: {
         name: string
         email: string
     }
@@ -68,16 +68,16 @@ export default function SubscriptionManagementPage({ params: _params }: { params
 
     const columns = [
         {
-            key: "tenant",
-            label: "Tenant",
+            key: "customer",
+            label: "Customer",
             render: (_value: unknown, row: Subscription) => (
                 <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
                         <Building2 className="h-4 w-4" />
                     </div>
                     <div>
-                        <div className="font-medium text-gray-900">{row.tenant_id?.name || "Unknown Tenant"}</div>
-                        <div className="text-sm text-gray-500">{row.tenant_id?.email || "No email"}</div>
+                        <div className="font-medium text-gray-900">{row.admin_id?.name || "Unknown Customer"}</div>
+                        <div className="text-sm text-gray-500">{row.admin_id?.email || "No email"}</div>
                     </div>
                 </div>
             )
@@ -177,7 +177,7 @@ export default function SubscriptionManagementPage({ params: _params }: { params
                         Subscription Management
                     </h2>
                     <p className="text-muted-foreground">
-                        Monitor revenue and manage tenant subscriptions
+                        Monitor revenue and manage customer subscriptions
                     </p>
                 </div>
                 <div className="flex gap-2">

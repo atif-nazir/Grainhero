@@ -25,7 +25,7 @@ export default function AuthenticatedLayout({
 
   // Super-admin exclusive routes (without locale prefix)
   const superAdminOnlyRoutes = useMemo(() => new Set([
-    "/tenant-management",
+    "/admin-management",
     "/plan-management",
     "/system-health",
     "/global-analytics",

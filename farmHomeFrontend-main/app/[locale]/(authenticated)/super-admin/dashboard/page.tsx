@@ -17,7 +17,7 @@ import { StatCard } from "@/components/dashboard/StatCard"
 import { toast } from "sonner"
 
 interface DashboardMetrics {
-    total_tenants: number
+    total_customers: number
     active_users: number
     active_subscriptions: number
     mrr: number
@@ -90,8 +90,8 @@ export default function SuperAdminDashboardPage({ params: _params }: { params: P
                         trend={{ value: 12, label: "vs last month", positive: true }}
                     />
                     <StatCard
-                        title="Active Tenants"
-                        value={(metrics?.total_tenants || 0).toLocaleString()}
+                        title="Active Customers"
+                        value={(metrics?.total_customers || 0).toLocaleString()}
                         description="Total organizations on platform"
                         icon={Building2}
                         className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-100"
@@ -101,7 +101,7 @@ export default function SuperAdminDashboardPage({ params: _params }: { params: P
                     <StatCard
                         title="Total Users"
                         value={(metrics?.active_users || 0).toLocaleString()}
-                        description="Active users across all tenants"
+                        description="Active users across all customers"
                         icon={Users}
                         className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-100"
                         iconClassName="text-purple-600"
@@ -126,7 +126,7 @@ export default function SuperAdminDashboardPage({ params: _params }: { params: P
                     <CardHeader>
                         <CardTitle>Platform Activity</CardTitle>
                         <CardDescription>
-                            Recent activity across all tenants
+                            Recent activity across all customers
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="pl-2">
@@ -143,7 +143,7 @@ export default function SuperAdminDashboardPage({ params: _params }: { params: P
                     <CardHeader>
                         <CardTitle>Subscription Distribution</CardTitle>
                         <CardDescription>
-                            Active plans across tenants
+                            Active plans across customers
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

@@ -48,7 +48,7 @@ export default function SecurityCenterPage({ params: _params }: { params: Promis
           <h2 className="font-medium mb-2">Auth & Roles</h2>
           <p className="text-sm text-gray-600 mb-4">Overview of authentication status, role assignments and privileged users.</p>
           <div className="flex gap-2">
-            <Link href="../tenant-management" className="text-blue-600 hover:underline">Manage Tenants</Link>
+            <Link href="../admin-management" className="text-blue-600 hover:underline">Manage Customers</Link>
             <Link href="../plan-management" className="text-blue-600 hover:underline">Manage Plans</Link>
           </div>
         </section>

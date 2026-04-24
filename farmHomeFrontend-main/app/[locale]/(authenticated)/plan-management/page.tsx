@@ -73,7 +73,7 @@ interface SubscriptionSummary {
 interface SubscriptionAnalyticsRow {
   subscription_id: string
   plan_name: string
-  tenant: string
+  customer: string
   status: string
   price_per_month: number
   usage: {
@@ -235,7 +235,7 @@ export default function PlanManagementPage({ params: _params }: { params: Promis
     const term = searchTerm.toLowerCase()
     return (
       sub.plan_name.toLowerCase().includes(term) ||
-      (sub.tenant || "").toLowerCase().includes(term) ||
+      (sub.customer || "").toLowerCase().includes(term) ||
       sub.status.toLowerCase().includes(term)
     )
   })
@@ -251,7 +251,7 @@ export default function PlanManagementPage({ params: _params }: { params: Promis
           </div>
           <div>
             <div className="font-medium">{row.plan_name}</div>
-            <div className="text-sm text-muted-foreground">{row.tenant || "Unassigned tenant"}</div>
+            <div className="text-sm text-muted-foreground">{row.customer || "Unassigned customer"}</div>
           </div>
         </div>
       )
@@ -356,7 +356,7 @@ export default function PlanManagementPage({ params: _params }: { params: Promis
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Plan Management</h2>
           <p className="text-muted-foreground">
-            Manage subscription plans, usage, and billing for every tenant
+            Manage subscription plans, usage, and billing for every customer
           </p>
         </div>
         <Button onClick={() => setShowCreateForm(true)}>
@@ -376,7 +376,7 @@ export default function PlanManagementPage({ params: _params }: { params: Promis
         <StatCard
           title="Active Subscriptions"
           value={planStats.activeSubscriptions}
-          description="Across all tenants"
+          description="Across all customers"
           icon={Users}
         />
         <StatCard
@@ -483,14 +483,14 @@ export default function PlanManagementPage({ params: _params }: { params: Promis
         <CardHeader>
           <CardTitle>Active Subscriptions</CardTitle>
           <CardDescription>
-            Monitor tenant subscriptions, usage, and limits
+            Monitor customer subscriptions, usage, and limits
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center space-x-4 mb-6">
             <div className="relative flex-1">
               <Input
-                placeholder="Enter plan name, tenant, or status to search..."
+                placeholder="Enter plan name, customer, or status to search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -519,7 +519,7 @@ export default function PlanManagementPage({ params: _params }: { params: Promis
             <CardHeader>
               <CardTitle>Create New Plan</CardTitle>
               <CardDescription>
-                Create a new subscription plan for tenants
+                Create a new subscription plan for customers
               </CardDescription>
             </CardHeader>
             <CardContent>

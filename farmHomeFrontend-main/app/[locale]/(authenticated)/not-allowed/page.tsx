@@ -49,7 +49,7 @@ export default function NotAllowedPage({ params: _params }: { params: Promise<{ 
       case "super_admin":
         return [
           { name: "System Management", description: "Manage the entire platform", icon: Crown },
-          { name: "Tenant Management", description: "Create and manage all tenants", icon: Users },
+          { name: "Customer Management", description: "Create and manage all customers", icon: Users },
           { name: "Global Analytics", description: "View system-wide analytics", icon: Users },
           { name: "Security Center", description: "Monitor system security", icon: Shield }
         ]
@@ -58,7 +58,7 @@ export default function NotAllowedPage({ params: _params }: { params: Promise<{ 
           { name: "User Management", description: "Manage team members", icon: Users },
           { name: "Grain Management", description: "Oversee grain operations", icon: Users },
           { name: "Reports", description: "Generate business reports", icon: Users },
-          { name: "Settings", description: "Configure tenant settings", icon: Wrench }
+          { name: "Settings", description: "Configure customer settings", icon: Wrench }
         ]
       case "manager":
         return [

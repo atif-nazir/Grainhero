@@ -127,8 +127,8 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
         setError(null);
         const token =
           typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const tenantId =
-          (typeof window !== "undefined" && localStorage.getItem("tenantId")) ||
+        const customerId =
+          (typeof window !== "undefined" && localStorage.getItem("customerId")) ||
           "default";
 
         const params = new URLSearchParams({ limit: String(limit) });
@@ -142,7 +142,7 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
         }
 
         // Check cache first (only if not forcing fresh)
-        const cacheKey = `env-history-${tenantId}-${limit}-${latitude}-${longitude}`;
+        const cacheKey = `env-history-${customerId}-${limit}-${latitude}-${longitude}`;
         if (!forceFresh) {
           const cached = getCachedResponse<EnvironmentalRecord[]>(cacheKey);
           if (cached && mounted) {
@@ -153,7 +153,7 @@ export function useEnvironmentalHistory(options: UseEnvHistoryOptions = {}) {
         }
 
         const resp = await fetch(
-          `${backendUrl}/api/environmental/history/${tenantId}?${params.toString()}`,
+          `${backendUrl}/api/environmental/history/${customerId}?${params.toString()}`,
           {
             headers: {
               "Content-Type": "application/json",
