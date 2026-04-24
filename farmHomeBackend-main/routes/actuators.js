@@ -5,7 +5,7 @@ const SensorReading = require('../models/SensorReading');
 const Silo = require('../models/Silo');
 const GrainAlert = require('../models/GrainAlert');
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission } = require('../middleware/permission');
 const { body, validationResult, param, query } = require('express-validator');
 const { ACTUATOR_TYPES, ACTUATOR_ACTIONS, ACTUATOR_TRIGGERED_BY, ACTUATOR_TRIGGER_TYPES } = require('../configs/enum');
 const firebaseRealtimeService = require('../services/firebaseRealtimeService');
@@ -60,7 +60,6 @@ const admin = require('firebase-admin');
 router.post('/', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess,
     [
         body('actuator_id').notEmpty().withMessage('Actuator ID is required'),
         body('name').notEmpty().withMessage('Actuator name is required'),
@@ -77,7 +76,7 @@ router.post('/', [
         // Check if silo exists
         const silo = await Silo.findOne({
             _id: req.body.silo_id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!silo) {
@@ -86,7 +85,7 @@ router.post('/', [
 
         const actuator = new Actuator({
             ...req.body,
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id,
             created_by: req.user._id
         });
 
@@ -128,14 +127,13 @@ router.post('/', [
 router.get('/', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const skip = (page - 1) * limit;
 
-        const filter = { tenant_id: req.user.tenant_id };
+        const filter = { admin_id: req.user.admin_id };
 
         if (req.query.status) filter.status = req.query.status;
         if (req.query.silo_id) filter.silo_id = req.query.silo_id;
@@ -188,13 +186,12 @@ router.get('/', [
 router.get('/:id', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required')
 ], async (req, res) => {
     try {
         const actuator = await Actuator.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         }).populate('silo_id');
 
         if (!actuator) {
@@ -230,13 +227,12 @@ router.get('/:id', [
 router.put('/:id', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required')
 ], async (req, res) => {
     try {
         const actuator = await Actuator.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!actuator) {
@@ -284,7 +280,6 @@ router.post('/:id/control', [
     auth,
     noCache, // Critical: Actuator control must never be cached
     requirePermission('actuator.control'),
-    requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required'),
     [
         body('action').isIn(['on', 'off', 'toggle', 'set_power']).withMessage('Valid action is required'),
@@ -300,7 +295,7 @@ router.post('/:id/control', [
 
         const actuator = await Actuator.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!actuator) {
@@ -383,7 +378,6 @@ router.post('/:id/control', [
 router.post('/:id/ai-trigger', [
     auth,
     requirePermission('actuator.autoFanOn.enable'),
-    requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required'),
     [
         body('risk_score').isFloat({ min: 0, max: 100 }).withMessage('Risk score must be 0-100'),
@@ -400,7 +394,7 @@ router.post('/:id/ai-trigger', [
 
         const actuator = await Actuator.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!actuator) {
@@ -483,7 +477,6 @@ router.post('/:id/ai-trigger', [
 router.post('/:id/schedule', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required'),
     [
         body('enabled').isBoolean().withMessage('Enabled must be boolean'),
@@ -500,7 +493,7 @@ router.post('/:id/schedule', [
 
         const actuator = await Actuator.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!actuator) {
@@ -543,7 +536,6 @@ router.post('/:id/schedule', [
 router.post('/:id/maintenance', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess,
     param('id').isMongoId().withMessage('Valid actuator ID is required'),
     [
         body('maintenance_type').isString().withMessage('Maintenance type is required'),
@@ -559,7 +551,7 @@ router.post('/:id/maintenance', [
 
         const actuator = await Actuator.findOne({
             _id: req.params.id,
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id
         });
 
         if (!actuator) {
@@ -613,7 +605,6 @@ router.post('/:id/maintenance', [
 router.post('/bulk-control', [
     auth,
     requirePermission('actuator.control'),
-    requireTenantAccess,
     [
         body('actuator_ids').isArray({ min: 1 }).withMessage('Actuator IDs array is required'),
         body('action').isIn(['on', 'off', 'toggle']).withMessage('Valid action is required'),
@@ -633,7 +624,7 @@ router.post('/bulk-control', [
             try {
                 const actuator = await Actuator.findOne({
                     _id: actuatorId,
-                    tenant_id: req.user.tenant_id
+                    admin_id: req.user.admin_id
                 });
 
                 if (!actuator) {

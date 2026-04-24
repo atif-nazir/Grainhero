@@ -149,47 +149,34 @@ export function SuperAdminDashboard() {
     const fetchSuperAdminData = async () => {
       try {
         setLoading(true);
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
         // Fetch main dashboard data
-        const dashboardRes = await fetch(`${backendUrl}/api/super-admin/dashboard`, {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          }
-        });
-
-        const dashboardData = await dashboardRes.json();
+        const dashboardRes = await api.get<any>("/api/super-admin/dashboard");
+        if (!dashboardRes.ok || !dashboardRes.data) throw new Error("Failed to load metrics");
+        const dashboardData = dashboardRes.data;
         const metrics = dashboardData.metrics;
 
         // Fetch additional super admin specific data AND full tenant list
-        const [tenantsRes, alertsRes, subscriptionRevenueRes, allTenantsRes] = await Promise.all([
-          fetch(`${backendUrl}/api/super-admin/tenants`, {
-            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-          }),
-          fetch(`${backendUrl}/api/super-admin/alerts`, {
-            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-          }),
-          fetch(`${backendUrl}/api/super-admin/subscription-revenue`, {
-            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-          }),
-          // Fetch ALL tenants from management endpoint
-          fetch(`${backendUrl}/api/tenant-management/tenants?limit=100`, {
-            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-          })
+        const [tenantsRes, alertsRes, subscriptionRevenueRes, allTenantsRes, finStatsRes, invoicesRes] = await Promise.all([
+          api.get<any>("/api/super-admin/tenants"),
+          api.get<any>("/api/super-admin/alerts"),
+          api.get<any>("/api/super-admin/subscription-revenue"),
+          api.get<any>("/api/tenant-management/tenants?limit=100"),
+          api.get<any>("/api/super-admin/financials/stats"),
+          api.get<any>("/api/super-admin/financials/invoices")
         ]);
 
-        const tenantsData = tenantsRes.ok ? await tenantsRes.json() : { data: [] };
-        const alertsData = alertsRes.ok ? await alertsRes.json() : { data: [] };
-        const subscriptionRevenueData = subscriptionRevenueRes.ok ? await subscriptionRevenueRes.json() : { revenue: 0, monthlyTrend: [] };
-        const allTenantsData = allTenantsRes.ok ? await allTenantsRes.json() : { data: { tenants: [] } };
+        const tenantsData = tenantsRes.data || { data: [] };
+        const alertsData = alertsRes.data || { data: [] };
+        const subscriptionRevenueData = subscriptionRevenueRes.data || { revenue: 0, monthlyTrend: [] };
+        const allTenantsData = allTenantsRes.data || { data: { tenants: [] } };
 
         // Map the API response to our system stats
         setSystemStats({
           totalTenants: metrics?.total_tenants || 0,
           totalUsers: metrics?.active_users || 0,
           totalRevenue: metrics?.mrr || 0,
-          systemHealth: metrics?.critical_alerts === 0 ? 100 : 80, // Example logic, 100 is healthy
+          systemHealth: metrics?.critical_alerts === 0 ? 100 : 80,
           activeAlerts: metrics?.critical_alerts || 0,
           criticalIssues: metrics?.critical_alerts || 0,
           activeSubscriptions: metrics?.active_subscriptions || 0
@@ -201,12 +188,9 @@ export function SuperAdminDashboard() {
         const recentTenantsList = tenantsData.data || [];
         setRecentTenants(recentTenantsList.slice(0, 5));
 
-        // Process ALL tenants for the management view
-        // The management endpoint returns enhanced data structure
         const fullTenantsList = allTenantsData.data?.tenants || [];
-        // Map to RecentTenant format if needed or use as is (RecentTenant is a bit of a misnomer type now, but fits)
-        const mappedAllTenants = fullTenantsList.map((t: { _id: string; name: string; email?: string; plan?: string; status?: string; is_active?: boolean; revenue?: number; user_count?: number; subscription_end?: string; phone?: string }) => ({
-          id: t._id, // Use real ID
+        const mappedAllTenants = fullTenantsList.map((t: any) => ({
+          id: t._id,
           _id: t._id,
           name: t.name,
           email: t.email,
@@ -219,32 +203,20 @@ export function SuperAdminDashboard() {
         }));
 
         setAllTenants(mappedAllTenants);
-
-        // Set system alerts data
         setSystemAlerts(alertsData.data || []);
 
-        // Set monthly trend data
-        const formattedTrend = subscriptionRevenueData.monthlyTrend?.map((item: { date?: string; month?: string; revenue?: number; amount?: number }) => ({
+        const formattedTrend = subscriptionRevenueData.monthlyTrend?.map((item: any) => ({
           month: item.date || item.month,
           revenue: item.revenue || item.amount
         })) || [];
 
         setMonthlyTrend(formattedTrend);
 
-        setMonthlyTrend(formattedTrend);
-
-        // Fetch Financial Stats
-        const [finStatsRes, invoicesRes] = await Promise.all([
-          fetch(`${backendUrl}/api/super-admin/financials/stats`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }),
-          fetch(`${backendUrl}/api/super-admin/financials/invoices`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-        ]);
-
-        if (finStatsRes.ok) {
-          setFinancialStats(await finStatsRes.json());
+        if (finStatsRes.ok && finStatsRes.data) {
+          setFinancialStats(finStatsRes.data);
         }
-        if (invoicesRes.ok) {
-          const invData = await invoicesRes.json();
-          setInvoices(invData.data || []);
+        if (invoicesRes.ok && invoicesRes.data) {
+          setInvoices(invoicesRes.data.data || []);
         }
 
       } catch (error) {

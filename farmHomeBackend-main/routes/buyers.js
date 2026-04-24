@@ -7,11 +7,8 @@ const { BUYER_STATUSES } = require("../configs/enum");
 const { body, validationResult } = require("express-validator");
 const LoggingService = require("../services/loggingService");
 
-const resolveTenantId = (user) =>
-  user?.tenant_id || user?.owned_tenant_id || user?._id;
-
-const buildSearchFilters = (tenantId, query) => {
-  const filters = { tenant_id: tenantId };
+const buildSearchFilters = (adminId, query) => {
+  const filters = { admin_id: adminId };
   if (!query) return filters;
 
   const { q, status, city } = query;
@@ -52,12 +49,9 @@ const mapBuyerStats = (buyers, stats) => {
 
 router.get("/dashboard", auth, async (req, res) => {
   try {
-    const tenantId = resolveTenantId(req.user);
-    if (!tenantId) {
-      return res.status(400).json({ message: "Tenant context missing" });
-    }
+    const adminId = req.user.admin_id || req.user._id;
 
-    const filters = buildSearchFilters(tenantId, req.query);
+    const filters = buildSearchFilters(adminId, req.query);
     filters.deleted_at = null;  // Only include non-deleted buyers
     const buyers = await Buyer.find(filters).sort({ created_at: -1 }).lean();
     const buyerIds = buyers.map((b) => b._id);
@@ -68,7 +62,7 @@ router.get("/dashboard", auth, async (req, res) => {
         {
           $match: {
             buyer_id: { $in: buyerIds },
-            admin_id: req.user._id,
+            admin_id: adminId,
           },
         },
         {
@@ -84,18 +78,18 @@ router.get("/dashboard", auth, async (req, res) => {
     const buyersWithStats = mapBuyerStats(buyers, batchStats);
 
     const summaryPromise = Promise.all([
-      Buyer.countDocuments({ tenant_id: tenantId, deleted_at: null }),
+      Buyer.countDocuments({ admin_id: adminId, deleted_at: null }),
       GrainBatch.countDocuments({
-        admin_id: req.user._id,
+        admin_id: adminId,
         buyer_id: { $ne: null },
         status: { $in: ["processing", "on_hold", "stored"] },
       }),
       GrainBatch.countDocuments({
-        admin_id: req.user._id,
+        admin_id: adminId,
         buyer_id: { $ne: null },
         expected_dispatch_date: { $gte: new Date() },
       }),
-      Buyer.findOne({ tenant_id: tenantId, deleted_at: null }).sort({ rating: -1 }).lean(),
+      Buyer.findOne({ admin_id: adminId, deleted_at: null }).sort({ rating: -1 }).lean(),
     ]);
 
     const [totalBuyers, activeContracts, scheduledDispatches, topBuyer] =
@@ -107,7 +101,7 @@ router.get("/dashboard", auth, async (req, res) => {
     }, {});
 
     const recentContractsRaw = await GrainBatch.find({
-      admin_id: req.user._id,
+      admin_id: adminId,
       buyer_id: { $ne: null },
     })
       .sort({ updated_at: -1 })
@@ -124,7 +118,7 @@ router.get("/dashboard", auth, async (req, res) => {
     }));
 
     const upcomingDispatchesRaw = await GrainBatch.find({
-      admin_id: req.user._id,
+      admin_id: adminId,
       buyer_id: { $ne: null },
       expected_dispatch_date: { $ne: null },
     })
@@ -187,17 +181,13 @@ router.post(
     }
 
     try {
-      const tenantId = resolveTenantId(req.user);
-      if (!tenantId) {
-        return res.status(400).json({ message: "Tenant context missing" });
-      }
+      const adminId = req.user.admin_id || req.user._id;
 
       const payload = req.body;
 
       // Check for duplicate buyer by email or phone (same logic as dispatch)
       const duplicateQuery = {
-        tenant_id: tenantId,
-        admin_id: req.user._id,
+        admin_id: adminId,
         $or: [],
       };
 
@@ -215,8 +205,7 @@ router.post(
       // If no email or phone provided, can't check for duplicates - proceed with create
       if (duplicateQuery.$or.length === 0) {
         const buyer = await Buyer.create({
-          tenant_id: tenantId,
-          admin_id: req.user._id,
+          admin_id: adminId,
           name: payload.name,
           company_name: payload.companyName || payload.name,
           buyer_type: payload.buyerType,
@@ -256,8 +245,7 @@ router.post(
 
       // No duplicate found, create new buyer
       const buyer = await Buyer.create({
-        tenant_id: tenantId,
-        admin_id: req.user._id,
+        admin_id: adminId,
         name: payload.name,
         company_name: payload.companyName || payload.name,
         buyer_type: payload.buyerType,
@@ -331,14 +319,11 @@ router.put(
     }
 
     try {
-      const tenantId = resolveTenantId(req.user);
-      if (!tenantId) {
-        return res.status(400).json({ message: "Tenant context missing" });
-      }
+      const adminId = req.user.admin_id || req.user._id;
 
       const buyer = await Buyer.findOne({
         _id: req.params.id,
-        tenant_id: tenantId,
+        admin_id: adminId,
       });
 
       if (!buyer) {
@@ -395,14 +380,11 @@ router.put(
 
 router.delete("/:id", auth, async (req, res) => {
   try {
-    const tenantId = resolveTenantId(req.user);
-    if (!tenantId) {
-      return res.status(400).json({ message: "Tenant context missing" });
-    }
+    const adminId = req.user.admin_id || req.user._id;
 
     const buyer = await Buyer.findOne({
       _id: req.params.id,
-      tenant_id: tenantId,
+      admin_id: adminId,
     });
 
     if (!buyer) {

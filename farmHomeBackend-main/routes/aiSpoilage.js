@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission } = require('../middleware/permission');
 const { spawn } = require('child_process');
 const path = require('path');
 const riceDataService = require('../services/riceDataService');
@@ -220,7 +220,6 @@ async function callSmartBinModel(inputData) {
 router.post('/predict', [
     auth,
     requirePermission('ai.predict'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const inputData = req.body;
@@ -288,7 +287,7 @@ router.post('/predict', [
             created_at: new Date(),
             updated_at: new Date(),
             model_used: 'SmartBin-RiceSpoilage',
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id || req.user._id
         };
 
         res.json({
@@ -431,8 +430,8 @@ router.post('/retrain', [
     requireTenantAccess
 ], async (req, res) => {
     try {
-        const tenantId = req.user.tenant_id || req.user._id;
-        const trainingData = await trainingDataService.prepareTrainingData({ tenantId });
+        const adminId = req.user.admin_id || req.user._id;
+        const trainingData = await trainingDataService.prepareTrainingData({ adminId });
         const exportedPath = await trainingDataService.exportToCSV(trainingData, path.join(__dirname, '../ml/combined_training_data.csv'));
         const python = spawn('python', ['-c', `
 import sys, json
@@ -878,7 +877,6 @@ function parseTrainingOutput(output) {
 router.post('/predictions', [
     auth,
     requirePermission('ai.predict'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const inputData = req.body;
@@ -946,7 +944,7 @@ router.post('/predictions', [
             created_at: new Date(),
             updated_at: new Date(),
             model_used: 'SmartBin-RiceSpoilage',
-            tenant_id: req.user.tenant_id
+            admin_id: req.user.admin_id || req.user._id
         };
 
         // Add to data service
@@ -967,7 +965,6 @@ router.post('/predictions', [
 router.put('/predictions/:id', [
     auth,
     requirePermission('ai.predict'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const { id } = req.params;
@@ -988,7 +985,6 @@ router.put('/predictions/:id', [
 router.delete('/predictions/:id', [
     auth,
     requirePermission('ai.predict'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const { id } = req.params;
@@ -1008,7 +1004,6 @@ router.delete('/predictions/:id', [
 router.delete('/advisories/:id', [
     auth,
     requirePermission('ai.predict'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const { id } = req.params;
@@ -1029,7 +1024,6 @@ router.delete('/advisories/:id', [
 router.get('/training-data/export', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const {
@@ -1039,8 +1033,9 @@ router.get('/training-data/export', [
             onlyLabeled = 'true'
         } = req.query;
 
+        const adminId = req.user.admin_id || req.user._id;
         const trainingData = await trainingDataService.prepareTrainingData({
-            tenantId: req.user.tenant_id,
+            adminId: adminId,
             siloId,
             startDate,
             endDate,
@@ -1070,7 +1065,6 @@ router.get('/training-data/export', [
 router.get('/training-data/download', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const { path: filePath } = req.query;
@@ -1100,7 +1094,6 @@ router.get('/training-data/download', [
 router.post('/training-data/label', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const { readingId, label, notes } = req.body;
@@ -1159,10 +1152,11 @@ router.get('/training-data/stats', [
     requireTenantAccess
 ], async (req, res) => {
     try {
+        const adminId = req.user.admin_id || req.user._id;
         const { siloId, startDate, endDate } = req.query;
 
         const trainingData = await trainingDataService.prepareTrainingData({
-            tenantId: req.user.tenant_id,
+            adminId: adminId,
             siloId,
             startDate,
             endDate,
@@ -1187,7 +1181,6 @@ router.get('/training-data/stats', [
 router.post('/predictions/:id/validate', [
     auth,
     requirePermission('ai.predict'),
-    requireTenantAccess
 ], async (req, res) => {
     try {
         const { id } = req.params;
@@ -1199,9 +1192,10 @@ router.post('/predictions/:id/validate', [
             validation_notes
         } = req.body;
 
+        const adminId = req.user.admin_id || req.user._id;
         const prediction = await SpoilagePrediction.findOne({
             prediction_id: id,
-            tenant_id: req.user.tenant_id
+            admin_id: adminId
         });
 
         if (!prediction) {
@@ -1245,9 +1239,10 @@ router.get('/model-performance/validation', [
         const { days = 30 } = req.query;
         const startDate = new Date(Date.now() - parseInt(days) * 24 * 60 * 60 * 1000);
 
+        const adminId = req.user.admin_id || req.user._id;
         // Get all validated predictions
         const validatedPredictions = await SpoilagePrediction.find({
-            tenant_id: req.user.tenant_id,
+            admin_id: adminId,
             validation_status: { $in: ['validated', 'false_positive', 'false_negative'] },
             'actual_outcome.validated_at': { $gte: startDate }
         }).select('risk_score risk_level validation_status actual_outcome model_info');

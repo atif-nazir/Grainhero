@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission } = require('../middleware/permission');
 const GrainBatch = require('../models/GrainBatch');
 const SensorDevice = require('../models/SensorDevice');
 const SensorReading = require('../models/SensorReading');
@@ -153,7 +153,7 @@ async function callMlService(features) {
 }
 
 // POST /ai/predict (manual feature input)
-router.post('/predict', [auth, requirePermission('ai.enable'), requireTenantAccess], async (req, res) => {
+router.post('/predict', [auth, requirePermission('ai.enable')], async (req, res) => {
   try {
     const features = buildFeatureVector(req.body || {});
     const result = await callMlService(features);
@@ -176,10 +176,11 @@ router.post('/predict', [auth, requirePermission('ai.enable'), requireTenantAcce
 });
 
 // POST /ai/predict-batch/:batchId -> fetch latest env features + batch info, call ML, persist
-router.post('/predict-batch/:batchId', [auth, requirePermission('ai.enable'), requireTenantAccess], async (req, res) => {
+router.post('/predict-batch/:batchId', [auth, requirePermission('ai.enable')], async (req, res) => {
   try {
     const { batchId } = req.params;
-    const batch = await GrainBatch.findOne({ _id: batchId, tenant_id: req.user.tenant_id }).populate('silo_id');
+    const adminId = req.user.admin_id || req.user._id;
+    const batch = await GrainBatch.findOne({ _id: batchId, admin_id: adminId }).populate('silo_id');
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
     // Get latest reading for the silo
@@ -211,7 +212,7 @@ router.post('/predict-batch/:batchId', [auth, requirePermission('ai.enable'), re
     if (result.risk_score >= 70) {
       try {
         await new GrainAlert({
-          tenant_id: batch.tenant_id,
+          admin_id: batch.admin_id,
           silo_id: batch.silo_id?._id,
           title: 'AI High Risk Prediction',
           message: `Batch ${batch.batch_id} predicted high risk (${result.risk_score}%)`,
@@ -245,10 +246,11 @@ router.post('/predict-batch/:batchId', [auth, requirePermission('ai.enable'), re
 });
 
 // GET /ai/advisories/:batchId -> get specific advisories for a batch
-router.get('/advisories/:batchId', [auth, requirePermission('advisories.view'), requireTenantAccess], async (req, res) => {
+router.get('/advisories/:batchId', [auth, requirePermission('advisories.view')], async (req, res) => {
   try {
     const { batchId } = req.params;
-    const batch = await GrainBatch.findOne({ _id: batchId, tenant_id: req.user.tenant_id }).populate('silo_id');
+    const adminId = req.user.admin_id || req.user._id;
+    const batch = await GrainBatch.findOne({ _id: batchId, admin_id: adminId }).populate('silo_id');
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
     // Get latest reading for the silo
@@ -285,10 +287,11 @@ router.get('/advisories/:batchId', [auth, requirePermission('advisories.view'), 
 });
 
 // GET /ai/predictions/overview -> summarize batches by risk for dashboards
-router.get('/predictions/overview', [auth, requirePermission('batch.view'), requireTenantAccess], async (req, res) => {
+router.get('/predictions/overview', [auth, requirePermission('batch.view')], async (req, res) => {
   try {
+    const adminId = req.user.admin_id || req.user._id;
     const agg = await GrainBatch.aggregate([
-      { $match: { tenant_id: req.user.tenant_id } },
+      { $match: { admin_id: adminId } },
       {
         $group: {
           _id: null,
@@ -300,7 +303,7 @@ router.get('/predictions/overview', [auth, requirePermission('batch.view'), requ
       }
     ]);
     const overview = agg[0] || { total: 0, high_risk: 0, avg_risk: 0, avg_conf: 0 };
-    const recent = await GrainBatch.find({ tenant_id: req.user.tenant_id })
+    const recent = await GrainBatch.find({ admin_id: adminId })
       .select('batch_id grain_type risk_score spoilage_label ai_prediction_confidence updated_at silo_id')
       .sort({ updated_at: -1 })
       .limit(20)
@@ -359,10 +362,9 @@ router.get('/sample-predict', async (req, res) => {
 });
 
 // POST /ai/mock-seed -> create comprehensive demo data for presentation
-router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAccess], async (req, res) => {
+router.post('/mock-seed', [auth, requirePermission('ai.enable')], async (req, res) => {
   try {
-    const tenantId = req.user.tenant_id;
-    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+    const adminId = req.user.admin_id || req.user._id;
 
     const { comprehensive = false } = req.body;
     const createdEntities = {
@@ -385,9 +387,9 @@ router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAc
 
     const silos = [];
     for (const siloInfo of siloData) {
-      let silo = await Silo.findOne({ name: siloInfo.name, tenant_id: tenantId });
+      let silo = await Silo.findOne({ name: siloInfo.name, admin_id: adminId });
       if (!silo) {
-        silo = new Silo({ ...siloInfo, tenant_id: tenantId });
+        silo = new Silo({ ...siloInfo, admin_id: adminId, created_by: req.user._id, warehouse_id: new mongoose.Types.ObjectId() }); // dummy warehouse for mock
         await silo.save();
         createdEntities.silos.push(silo.name);
       }
@@ -404,7 +406,7 @@ router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAc
         const sensor = new SensorDevice({
           device_id: `GH-SENSOR-${silo.name.replace(' ', '')}-${Date.now()}`,
           device_name: `${silo.name} Environmental Monitor`,
-          tenant_id: tenantId,
+          admin_id: adminId,
           silo_id: silo._id,
           sensor_types: ['temperature', 'humidity', 'co2', 'voc', 'moisture'],
           status: Math.random() > 0.8 ? 'offline' : 'active',
@@ -468,7 +470,7 @@ router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAc
       const batch = new GrainBatch({
         batch_id,
         ...batchInfo,
-        tenant_id: tenantId,
+        admin_id: adminId,
         silo_id: silo._id,
         created_by: req.user._id,
         intake_date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
@@ -520,7 +522,7 @@ router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAc
       for (const alertInfo of alertData) {
         const alert = new GrainAlert({
           alert_id: `GH-ALERT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          tenant_id: tenantId,
+          admin_id: adminId,
           silo_id: silos[Math.floor(Math.random() * silos.length)]._id,
           ...alertInfo,
           alert_type: 'in-app',
@@ -548,7 +550,7 @@ router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAc
           const user = new User({
             ...userInfo,
             password: 'password123', // Will be hashed automatically
-            tenant_id: tenantId,
+            admin_id: adminId,
             status: 'active',
             phone: `+92-300-${Math.floor(1000000 + Math.random() * 9000000)}`,
             created_by: req.user._id
@@ -579,8 +581,9 @@ router.post('/mock-seed', [auth, requirePermission('ai.enable'), requireTenantAc
 });
 
 // GET /ai/model/training-status -> get model training information
-router.get('/model/training-status', [auth, requirePermission('ai.configure'), requireTenantAccess], async (req, res) => {
+router.get('/model/training-status', [auth, requirePermission('ai.configure')], async (req, res) => {
   try {
+    const adminId = req.user.admin_id || req.user._id;
     // Get training history (you could store this in a separate collection)
     const trainingHistory = {
       last_training_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
@@ -594,7 +597,7 @@ router.get('/model/training-status', [auth, requirePermission('ai.configure'), r
 
     // Get recent activity for training data
     const recentBatches = await GrainBatch.countDocuments({ 
-      tenant_id: req.user.tenant_id,
+      admin_id: adminId,
       created_at: { $gte: trainingHistory.last_training_date }
     });
     
@@ -603,7 +606,7 @@ router.get('/model/training-status', [auth, requirePermission('ai.configure'), r
     });
 
     const recentPredictions = await GrainBatch.countDocuments({
-      tenant_id: req.user.tenant_id,
+      admin_id: adminId,
       last_risk_assessment: { $gte: trainingHistory.last_training_date }
     });
 
@@ -626,12 +629,13 @@ router.get('/model/training-status', [auth, requirePermission('ai.configure'), r
 });
 
 // POST /ai/model/retrain -> trigger model retraining
-router.post('/model/retrain', [auth, requirePermission('ai.configure'), requireTenantAccess], async (req, res) => {
+router.post('/model/retrain', [auth, requirePermission('ai.configure')], async (req, res) => {
   try {
-    const { retrain_scope = 'tenant', include_global_data = false } = req.body;
+    const adminId = req.user.admin_id || req.user._id;
+    const { retrain_scope = 'admin', include_global_data = false } = req.body;
     
     // Get training data from database
-    const trainingData = await collectTrainingData(req.user.tenant_id, retrain_scope, include_global_data);
+    const trainingData = await collectTrainingData(adminId, retrain_scope, include_global_data);
     
     if (trainingData.length < 50) {
       return res.status(400).json({ 
@@ -647,7 +651,7 @@ router.post('/model/retrain', [auth, requirePermission('ai.configure'), requireT
       started_at: new Date(),
       status: 'training',
       data_points: trainingData.length,
-      tenant_id: req.user.tenant_id,
+      admin_id: adminId,
       initiated_by: req.user._id,
       retrain_scope,
       include_global_data
@@ -680,13 +684,13 @@ router.post('/model/retrain', [auth, requirePermission('ai.configure'), requireT
 });
 
 // Helper functions for model training
-async function collectTrainingData(tenantId, scope, includeGlobal) {
+async function collectTrainingData(adminId, scope, includeGlobal) {
   const trainingData = [];
   
   try {
     // Collect batch data with outcomes
     const batches = await GrainBatch.find({ 
-      tenant_id: scope === 'tenant' ? tenantId : undefined,
+      admin_id: scope === 'admin' ? adminId : undefined,
       last_risk_assessment: { $exists: true }
     }).populate('silo_id');
 

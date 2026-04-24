@@ -36,7 +36,7 @@ class IoTDeviceService {
       // Create sensor reading
       const reading = new SensorReading({
         device_id: device._id,
-        tenant_id: device.admin_id,
+        admin_id: device.admin_id,
         silo_id: device.silo_id,
         timestamp: validatedPayload.timestamp || new Date(),
         ...validatedPayload.readings,
@@ -278,7 +278,7 @@ class IoTDeviceService {
       for (const violation of violations) {
         const alert = new GrainAlert({
           alert_id: uuidv4(),
-          tenant_id: device.admin_id,
+          admin_id: device.admin_id,
           silo_id: device.silo_id,
           device_id: device._id,
           title: `${violation.sensor_type.toUpperCase()} ${violation.severity.toUpperCase()}`,
@@ -366,7 +366,7 @@ class IoTDeviceService {
       for (const anomaly of anomalies) {
         const alert = new GrainAlert({
           alert_id: uuidv4(),
-          tenant_id: device.admin_id,
+          admin_id: device.admin_id,
           silo_id: device.silo_id,
           device_id: device._id,
           title: `ANOMALY DETECTED: ${anomaly.sensor_type.toUpperCase()}`,

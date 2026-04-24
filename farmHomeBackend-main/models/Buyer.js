@@ -3,16 +3,15 @@ const { BUYER_STATUSES, BUYER_TYPES, GRAIN_TYPES } = require("../configs/enum");
 
 const buyerSchema = new mongoose.Schema(
   {
-    tenant_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
-      required: true,
-      index: true,
-    },
     admin_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true
+    },
+    tenant_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tenant"
     },
     name: {
       type: String,
@@ -91,6 +90,7 @@ const buyerSchema = new mongoose.Schema(
   }
 );
 
+buyerSchema.index({ admin_id: 1, status: 1 });
 buyerSchema.index({ tenant_id: 1, status: 1 });
 buyerSchema.index({ "contact_person.email": 1 });
 buyerSchema.index({ "location.city": 1 });

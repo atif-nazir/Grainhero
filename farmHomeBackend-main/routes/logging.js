@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission } = require('../middleware/permission');
 const { body, param, validationResult } = require('express-validator');
 const GrainBatch = require('../models/GrainBatch');
 const BuyerInvoice = require('../models/BuyerInvoice');
@@ -45,7 +45,7 @@ const upload = multer({
  * Add a spoilage event to a batch
  */
 router.post('/batches/:id/spoilage-events',
-    auth, requireTenantAccess,
+    auth,
     param('id').isMongoId(),
     [
         body('event_type').isIn(['mold', 'pests', 'moisture', 'heat', 'smell', 'contamination', 'other']),
@@ -91,8 +91,8 @@ router.post('/batches/:id/spoilage-events',
             await LoggingService.logSpoilageEvent(req.user, batch, spoilageEvent, req.ip);
 
             // Send notifications (email to admin/manager)
-            const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
-            await NotificationService.notifySpoilageEvent(tenantId, batch, spoilageEvent);
+            const adminId = req.user.admin_id || req.user._id;
+            await NotificationService.notifySpoilageEvent(adminId, batch, spoilageEvent);
 
             res.status(201).json({
                 message: 'Spoilage event logged successfully',
@@ -111,7 +111,7 @@ router.post('/batches/:id/spoilage-events',
  * Upload photos for a spoilage event (Cloudinary)
  */
 router.post('/batches/:id/spoilage-events/:eventId/photos',
-    auth, requireTenantAccess,
+    auth,
     upload.array('photos', 5),
     async (req, res) => {
         try {
@@ -196,7 +196,7 @@ router.post('/batches/:id/spoilage-events/:eventId/photos',
  * Generate an invoice for a dispatched batch
  */
 router.post('/invoices',
-    auth, requireTenantAccess,
+    auth,
     [
         body('batch_id').isMongoId().withMessage('Valid batch ID is required'),
         body('buyer_id').isMongoId().withMessage('Valid buyer ID is required'),
@@ -231,7 +231,6 @@ router.post('/invoices',
             const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
 
             const invoice = new BuyerInvoice({
-                tenant_id: req.user.tenant_id || req.user.owned_tenant_id,
                 admin_id: req.user.admin_id || req.user._id,
                 invoice_number: invoiceNumber,
                 buyer_id: buyer._id,
@@ -259,8 +258,8 @@ router.post('/invoices',
             await LoggingService.logInvoiceGenerated(req.user, invoice, req.ip);
 
             // Notify
-            const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
-            await NotificationService.notifyInvoiceGenerated(tenantId, invoiceNumber, buyer.name);
+            const adminId = req.user.admin_id || req.user._id;
+            await NotificationService.notifyInvoiceGenerated(adminId, invoiceNumber, buyer.name);
 
             res.status(201).json({
                 message: 'Invoice generated successfully',
@@ -277,7 +276,7 @@ router.post('/invoices',
  * GET /api/logging/invoices
  * List invoices
  */
-router.get('/invoices', auth, requireTenantAccess, async (req, res) => {
+router.get('/invoices', auth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
@@ -285,7 +284,7 @@ router.get('/invoices', auth, requireTenantAccess, async (req, res) => {
 
         let filter = {};
         if (req.user.role !== 'super_admin') {
-            filter.tenant_id = req.user.tenant_id || req.user.owned_tenant_id;
+            filter.admin_id = req.user.admin_id || req.user._id;
         }
         if (req.query.buyer_id) filter.buyer_id = req.query.buyer_id;
         if (req.query.payment_status) filter.payment_status = req.query.payment_status;
@@ -320,7 +319,7 @@ router.get('/invoices', auth, requireTenantAccess, async (req, res) => {
  * GET /api/logging/invoices/:id/pdf
  * Download invoice PDF
  */
-router.get('/invoices/:id/pdf', auth, requireTenantAccess, async (req, res) => {
+router.get('/invoices/:id/pdf', auth, async (req, res) => {
     try {
         const invoice = await BuyerInvoice.findById(req.params.id)
             .populate('buyer_id')
@@ -343,7 +342,7 @@ router.get('/invoices/:id/pdf', auth, requireTenantAccess, async (req, res) => {
  * POST /api/logging/invoices/:id/email
  * Email invoice to buyer
  */
-router.post('/invoices/:id/email', auth, requireTenantAccess, async (req, res) => {
+router.post('/invoices/:id/email', auth, async (req, res) => {
     try {
         const invoice = await BuyerInvoice.findById(req.params.id)
             .populate('buyer_id');
@@ -403,7 +402,7 @@ router.post('/invoices/:id/email', auth, requireTenantAccess, async (req, res) =
  * GET /api/logging/batches/:id/invoice
  * Generate and download invoice PDF for a dispatched batch (auto-creates invoice if needed)
  */
-router.get('/batches/:id/invoice', auth, requireTenantAccess, async (req, res) => {
+router.get('/batches/:id/invoice', auth, async (req, res) => {
     try {
         const batch = await GrainBatch.findOne({
             _id: req.params.id,
@@ -428,7 +427,6 @@ router.get('/batches/:id/invoice', auth, requireTenantAccess, async (req, res) =
             const amount = qty * pricePerKg;
 
             invoice = new BuyerInvoice({
-                tenant_id: req.user.tenant_id || req.user.owned_tenant_id,
                 admin_id: req.user.admin_id || req.user._id,
                 invoice_number: invoiceNumber,
                 buyer_id: buyer?._id || null,
@@ -483,7 +481,7 @@ router.get('/batches/:id/invoice', auth, requireTenantAccess, async (req, res) =
  * Record a buyer payment
  */
 router.post('/payments',
-    auth, requireTenantAccess,
+    auth,
     [
         body('buyer_id').isMongoId(),
         body('amount').isFloat({ min: 0.01 }),
@@ -500,7 +498,6 @@ router.post('/payments',
             if (!buyer) return res.status(404).json({ error: 'Buyer not found' });
 
             const payment = new BuyerPayment({
-                tenant_id: req.user.tenant_id || req.user.owned_tenant_id,
                 admin_id: req.user.admin_id || req.user._id,
                 buyer_id: req.body.buyer_id,
                 invoice_id: req.body.invoice_id || null,
@@ -536,8 +533,8 @@ router.post('/payments',
             await LoggingService.logBuyerPayment(req.user, payment, buyer.name, req.ip);
 
             // Notify
-            const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
-            await NotificationService.notifyPaymentReceived(tenantId, buyer.name, req.body.amount, req.body.currency || 'PKR');
+            const adminId = req.user.admin_id || req.user._id;
+            await NotificationService.notifyPaymentReceived(adminId, buyer.name, req.body.amount, req.body.currency || 'PKR');
 
             res.status(201).json({
                 message: 'Payment recorded successfully',
@@ -554,7 +551,7 @@ router.post('/payments',
  * GET /api/logging/payments
  * List buyer payments
  */
-router.get('/payments', auth, requireTenantAccess, async (req, res) => {
+router.get('/payments', auth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
@@ -562,7 +559,7 @@ router.get('/payments', auth, requireTenantAccess, async (req, res) => {
 
         let filter = {};
         if (req.user.role !== 'super_admin') {
-            filter.tenant_id = req.user.tenant_id || req.user.owned_tenant_id;
+            filter.admin_id = req.user.admin_id || req.user._id;
         }
         if (req.query.buyer_id) filter.buyer_id = req.query.buyer_id;
 
@@ -601,7 +598,7 @@ router.get('/payments', auth, requireTenantAccess, async (req, res) => {
  * GET /api/logging/batches/:id/report
  * Generate and download batch PDF report
  */
-router.get('/batches/:id/report', auth, requireTenantAccess, async (req, res) => {
+router.get('/batches/:id/report', auth, async (req, res) => {
     try {
         const batch = await GrainBatch.findById(req.params.id)
             .populate('silo_id', 'name silo_id')
@@ -638,7 +635,7 @@ router.get('/batches/:id/report', auth, requireTenantAccess, async (req, res) =>
  * GET /api/logging/dispatches
  * List dispatch transactions
  */
-router.get('/dispatches', auth, requireTenantAccess, async (req, res) => {
+router.get('/dispatches', auth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
@@ -646,7 +643,7 @@ router.get('/dispatches', auth, requireTenantAccess, async (req, res) => {
 
         let filter = {};
         if (req.user.role !== 'super_admin') {
-            filter.tenant_id = req.user.tenant_id || req.user.owned_tenant_id;
+            filter.admin_id = req.user.admin_id || req.user._id;
         }
         if (req.query.buyer_id) filter.buyer_id = req.query.buyer_id;
         if (req.query.batch_id) filter.batch_id = req.query.batch_id;

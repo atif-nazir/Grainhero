@@ -7,11 +7,16 @@ const {
 
 const subscriptionSchema = new mongoose.Schema(
   {
-    // Tenant reference
+    // Admin and Tenant reference
+    admin_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true
+    },
     tenant_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Tenant",
-      required: true,
     },
 
     // Plan details
@@ -190,7 +195,7 @@ const subscriptionSchema = new mongoose.Schema(
 );
 
 // Indexes
-subscriptionSchema.index({ tenant_id: 1 });
+subscriptionSchema.index({ admin_id: 1 });
 subscriptionSchema.index({ status: 1 });
 subscriptionSchema.index({ end_date: 1 });
 subscriptionSchema.index({ stripe_subscription_id: 1 });

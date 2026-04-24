@@ -116,7 +116,7 @@ class RiceDataService {
                 created_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000),
                 updated_at: new Date(),
                 model_used: 'SmartBin-RiceSpoilage',
-                tenant_id: 'tenant-1'
+                admin_id: 'admin-1'
             };
         });
     }

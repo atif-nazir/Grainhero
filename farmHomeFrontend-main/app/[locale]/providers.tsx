@@ -1,11 +1,12 @@
 "use client"
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type React from "react"
 
 import { createContext, useContext, useState, useEffect } from "react"
 import { languages, type LanguageCode, type TranslationKey } from "@/lib/languages"
 //import { usePathname } from "next/navigation"
-import { config } from "@/config"
+//import { usePathname } from "next/navigation"
 
 export interface User {
   id: string
@@ -20,7 +21,7 @@ export interface User {
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, userData?: any) => Promise<void>
   logout: () => void
   updateLanguage: (language: LanguageCode) => void
   isLoading: boolean
@@ -166,6 +167,8 @@ function PlanProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+import { api } from "@/lib/api"
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -194,22 +197,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   const refreshUser = async () => {
-    setIsLoading(true);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const res = await fetch(`${config.backendUrl}/auth/me`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          'Content-Type': 'application/json',
-        },
-      });
-      console.log(1)
-      if (!res.ok) throw new Error('Failed to fetch user info');
-      const data = await res.json();
+      const res = await api.get<any>("/auth/me")
+      if (!res.ok || !res.data) throw new Error('Failed to fetch user info');
+      const data = res.data
       if (data.hasAccess) {
         localStorage.setItem('farm-home-access', encryptAccess(data.hasAccess));
       }
-      console.log(2)
       const userObj = {
         id: data.id,
         name: data.name,
@@ -221,25 +215,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
         hasAccess: data.hasAccess || 'none',
       };
       setUser(userObj);
-      console.log(3)
       localStorage.setItem('farm-home-user', JSON.stringify(userObj));
     } catch {
       // Optionally handle error
     }
-    console.log(4)
-    setIsLoading(false);
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, userData?: any) => {
     setIsLoading(true)
     try {
-      const res = await fetch(`${config.backendUrl}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      })
-      if (!res.ok) throw new Error("Login failed")
-      const data = await res.json()
+      let data = userData
+      if (!data) {
+        const res = await api.post<any>("/auth/login", { email, password })
+        if (!res.ok || !res.data) throw new Error("Login failed")
+        data = res.data
+      }
+      
       // Persist JWT for authenticated API calls
       if (data.token) {
         localStorage.setItem("token", data.token)

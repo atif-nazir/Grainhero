@@ -32,8 +32,9 @@ router.get('/overview', [
 ], async (req, res) => {
     try {
         const { silo_id } = req.query;
+        const adminId = req.user.admin_id || req.user._id;
         
-        const filter = { tenant_id: req.user.tenant_id };
+        const filter = { admin_id: adminId };
         if (silo_id) filter.silo_id = silo_id;
 
         // Get all devices
@@ -47,7 +48,7 @@ router.get('/overview', [
         
         // Get recent alerts
         const recentAlerts = await GrainAlert.find({
-            tenant_id: req.user.tenant_id,
+            admin_id: adminId,
             source: { $in: ['sensor', 'actuator'] },
             created_at: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
         }).sort({ created_at: -1 }).limit(10);
@@ -87,8 +88,9 @@ router.get('/devices', [
 ], async (req, res) => {
     try {
         const { device_type, health_status, silo_id } = req.query;
+        const adminId = req.user.admin_id || req.user._id;
         
-        const filter = { tenant_id: req.user.tenant_id };
+        const filter = { admin_id: adminId };
         if (silo_id) filter.silo_id = silo_id;
 
         let devices = [];
@@ -187,6 +189,7 @@ router.post('/:deviceId/calibrate', [
 
         const { deviceId } = req.params;
         const { calibration_type, calibration_data, reference_values, notes } = req.body;
+        const adminId = req.user.admin_id || req.user._id;
 
         // Find device (sensor or actuator)
         let device = await SensorDevice.findById(deviceId);
@@ -201,7 +204,7 @@ router.post('/:deviceId/calibrate', [
             return res.status(404).json({ error: 'Device not found' });
         }
 
-        if (device.tenant_id.toString() !== req.user.tenant_id.toString()) {
+        if (device.admin_id.toString() !== adminId.toString()) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -241,7 +244,7 @@ router.post('/:deviceId/calibrate', [
         if (calibrationResult.success) {
             const alert = new GrainAlert({
                 alert_id: uuidv4(),
-                tenant_id: device.tenant_id,
+                admin_id: device.admin_id,
                 silo_id: device.silo_id,
                 device_id: device._id,
                 title: 'Device Calibration Completed',
@@ -302,6 +305,7 @@ router.post('/:deviceId/maintenance', [
 
         const { deviceId } = req.params;
         const { maintenance_type, maintenance_actions, parts_replaced, cost, notes } = req.body;
+        const adminId = req.user.admin_id || req.user._id;
 
         // Find device
         let device = await SensorDevice.findById(deviceId);
@@ -316,7 +320,7 @@ router.post('/:deviceId/maintenance', [
             return res.status(404).json({ error: 'Device not found' });
         }
 
-        if (device.tenant_id.toString() !== req.user.tenant_id.toString()) {
+        if (device.admin_id.toString() !== adminId.toString()) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -353,7 +357,7 @@ router.post('/:deviceId/maintenance', [
         // Create maintenance alert
         const alert = new GrainAlert({
             alert_id: uuidv4(),
-            tenant_id: device.tenant_id,
+            admin_id: device.admin_id,
             silo_id: device.silo_id,
             device_id: device._id,
             title: 'Device Maintenance Completed',
@@ -400,6 +404,7 @@ router.get('/:deviceId/diagnostics', [
 ], async (req, res) => {
     try {
         const { deviceId } = req.params;
+        const adminId = req.user.admin_id || req.user._id;
 
         // Find device
         let device = await SensorDevice.findById(deviceId);
@@ -414,7 +419,7 @@ router.get('/:deviceId/diagnostics', [
             return res.status(404).json({ error: 'Device not found' });
         }
 
-        if (device.tenant_id.toString() !== req.user.tenant_id.toString()) {
+        if (device.admin_id.toString() !== adminId.toString()) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -460,6 +465,7 @@ router.post('/bulk-calibration', [
         }
 
         const { device_ids, calibration_type, calibration_data } = req.body;
+        const adminId = req.user.admin_id || req.user._id;
         const results = [];
 
         for (const deviceId of device_ids) {
@@ -473,7 +479,7 @@ router.post('/bulk-calibration', [
                     deviceType = 'actuator';
                 }
 
-                if (!device || device.tenant_id.toString() !== req.user.tenant_id.toString()) {
+                if (!device || device.admin_id.toString() !== adminId.toString()) {
                     results.push({ device_id: deviceId, success: false, error: 'Device not found or access denied' });
                     continue;
                 }
@@ -545,7 +551,7 @@ async function calculateHealthMetrics(sensors, actuators) {
         const healthStatus = await getDeviceHealthStatus(sensor, 'sensor');
         if (healthStatus.status === 'healthy') healthyDevices++;
         else if (healthStatus.status === 'warning') warningDevices++;
-        else errorDevices++;
+        else if (healthStatus.status !== 'offline') errorDevices++;
     }
 
     // Check actuator health
@@ -553,7 +559,7 @@ async function calculateHealthMetrics(sensors, actuators) {
         const healthStatus = await getDeviceHealthStatus(actuator, 'actuator');
         if (healthStatus.status === 'healthy') healthyDevices++;
         else if (healthStatus.status === 'warning') warningDevices++;
-        else errorDevices++;
+        else if (healthStatus.status !== 'offline') errorDevices++;
     }
 
     return {

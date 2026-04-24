@@ -2,16 +2,15 @@ const mongoose = require('mongoose');
 
 const dispatchTransactionSchema = new mongoose.Schema({
     // Scoping
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant',
-        required: true,
-        index: true
-    },
     admin_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
+        index: true
+    },
+    tenant_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Tenant'
     },
 
     // References
@@ -84,6 +83,7 @@ const dispatchTransactionSchema = new mongoose.Schema({
     versionKey: false
 });
 
+dispatchTransactionSchema.index({ admin_id: 1, dispatch_date: -1 });
 dispatchTransactionSchema.index({ tenant_id: 1, dispatch_date: -1 });
 dispatchTransactionSchema.index({ batch_id: 1 });
 dispatchTransactionSchema.index({ buyer_id: 1 });

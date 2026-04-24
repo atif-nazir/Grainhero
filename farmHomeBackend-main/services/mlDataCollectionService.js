@@ -320,7 +320,8 @@ class MLDataCollectionService {
     try {
       // Create a sensor reading entry
       const sensorReading = new SensorReading({
-        device_id: this.environmentalDeviceId || null, // No physical device, use service device ID if available
+        device_id: this.environmentalDeviceId || null, 
+        admin_id: location.admin_id || null,
         tenant_id: location.tenant_id || null,
         silo_id: null, // Location-based, not silo-specific
         timestamp: new Date(timestamp),

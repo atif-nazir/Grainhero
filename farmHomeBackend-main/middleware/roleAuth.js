@@ -68,23 +68,32 @@ const requireTenantAccess = (req, res, next) => {
   }
 
   const userRole = req.user.role;
-  const userTenantId = req.user.tenant_id || req.user.owned_tenant_id;
-  const targetTenantId = req.params.tenantId || req.body.tenantId;
 
-  // Super admin can access all tenants
+  // Super admin can access all admins and their teams
   if (userRole === USER_ROLES.SUPER_ADMIN) {
     return next();
   }
 
-  // For other roles, check tenant access
-  if (targetTenantId && !canAccessTenant(userRole, userTenantId, targetTenantId)) {
-    return res.status(403).json({ 
-      error: 'Access denied. Cannot access this tenant',
-      code: 'TENANT_ACCESS_DENIED',
-      user_tenant: userTenantId,
-      target_tenant: targetTenantId
+  // Determine admin_id based on user role
+  let userAdminId;
+  
+  if (userRole === USER_ROLES.ADMIN) {
+    // Admin users are their own admin
+    userAdminId = req.user._id;
+  } else if (userRole === USER_ROLES.MANAGER || userRole === USER_ROLES.TECHNICIAN) {
+    // Managers and technicians belong to their admin
+    userAdminId = req.user.admin_id;
+  }
+
+  if (!userAdminId) {
+    return res.status(400).json({ 
+      error: 'Admin ID required',
+      code: 'ADMIN_REQUIRED'
     });
   }
+
+  // Set the admin_id in the request for use by route handlers
+  req.user.admin_id = userAdminId;
 
   next();
 };

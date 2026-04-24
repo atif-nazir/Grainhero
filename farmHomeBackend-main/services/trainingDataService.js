@@ -39,7 +39,7 @@ class TrainingDataService {
   /**
    * Prepare training data from sensor readings
    * @param {Object} options - Query options
-   * @param {string} options.tenantId - Tenant ID
+   * @param {string} options.adminId - Admin ID
    * @param {string} options.siloId - Optional silo ID filter
    * @param {Date} options.startDate - Start date for readings
    * @param {Date} options.endDate - End date for readings
@@ -49,7 +49,7 @@ class TrainingDataService {
   async prepareTrainingData(options = {}) {
     try {
       const {
-        tenantId,
+        adminId,
         siloId,
         startDate,
         endDate,
@@ -58,7 +58,7 @@ class TrainingDataService {
 
       // Build query
       const query = {
-        tenant_id: tenantId,
+        admin_id: adminId,
         deleted_at: null
       };
 

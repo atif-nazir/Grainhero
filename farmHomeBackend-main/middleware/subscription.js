@@ -18,12 +18,12 @@ async function getActiveSubscription(user) {
       return null;
     }
 
-    const tenantId = user.tenant_id || user.owned_tenant_id;
+    const adminId = user.admin_id || user._id;
 
-    if (tenantId) {
+    if (adminId) {
       // Find active subscription for the tenant
       const subscription = await Subscription.findOne({
-        tenant_id: tenantId,
+        admin_id: adminId,
         status: SUBSCRIPTION_STATUSES.ACTIVE,
         deleted_at: null,
       }).sort({ created_at: -1 });
@@ -31,7 +31,7 @@ async function getActiveSubscription(user) {
       if (subscription) return subscription;
     }
 
-    // Fallback: find by Stripe customer ID when tenant_id is missing
+    // Fallback: find by Stripe customer ID when admin_id is missing
     if (user.customerId) {
       const subscription = await Subscription.findOne({
         stripe_customer_id: user.customerId,
@@ -46,7 +46,7 @@ async function getActiveSubscription(user) {
     const subscription = await Subscription.findOne({
       $or: [
         { created_by: user._id },
-        { tenant_id: user._id }
+        { admin_id: user._id }
       ],
       status: SUBSCRIPTION_STATUSES.ACTIVE,
       deleted_at: null,

@@ -5,19 +5,21 @@ const { requirePermission } = require("../middleware/permission");
 const Subscription = require("../models/Subscription");
 const { USER_ROLES } = require("../configs/enum");
 
-// Helper to resolve tenant scope
-function resolveTenantScope(user, queryTenantId) {
+/**
+ * Helper to resolve administrative isolation scope
+ */
+function resolveIsolationScope(user, queryAdminId) {
   if (user.role === USER_ROLES.SUPER_ADMIN) {
-    // Super admin can view all; optionally scoped by tenant_id query
-    return queryTenantId ? { tenant_id: queryTenantId } : {};
+    // Super admin can view all; optionally scoped by admin_id query
+    return queryAdminId ? { admin_id: queryAdminId } : {};
   }
-  // Admin (and others) must be scoped to their tenant
-  return { tenant_id: user.tenant_id || user.owned_tenant_id };
+  // Admin (and others) must be scoped to their admin identity
+  return { admin_id: user.admin_id || user._id };
 }
 
 /**
  * GET /api/payments
- * List subscriptions/payments scoped to tenant (admin) or globally (super admin)
+ * List subscriptions/payments scoped to admin or globally (super admin)
  */
 router.get(
   "/",
@@ -25,28 +27,17 @@ router.get(
   requirePermission("payment.view"),
   async (req, res) => {
     try {
-      const { tenant_id, status, page = 1, limit = 20 } = req.query;
+      const { admin_id, status, page = 1, limit = 20 } = req.query;
+      const adminId = req.user.admin_id || req.user._id;
 
       let filter = {};
 
       if (req.user.role === USER_ROLES.SUPER_ADMIN) {
-        // Super admin can view all; optionally scoped by tenant_id query
-        if (tenant_id) filter.tenant_id = tenant_id;
+        // Super admin can view all; optionally scoped by admin_id query
+        if (admin_id) filter.admin_id = admin_id;
       } else {
-        // Admin (and others) - try to find their subscription
-        const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
-        if (tenantId) {
-          filter.tenant_id = tenantId;
-        } else if (req.user.customerId) {
-          // Fallback: find by Stripe customer ID when tenant_id is missing
-          filter.stripe_customer_id = req.user.customerId;
-        } else {
-          // Last resort: find by created_by (user ID)
-          filter.$or = [
-            { created_by: req.user._id },
-            { tenant_id: req.user._id }
-          ];
-        }
+        // Admin (and others) - filter by their administrative ID
+        filter.admin_id = adminId;
       }
 
       if (status) filter.status = status;
@@ -87,23 +78,14 @@ router.get(
   requirePermission("payment.view"),
   async (req, res) => {
     try {
-      const { tenant_id } = req.query;
+      const { admin_id } = req.query;
+      const adminId = req.user.admin_id || req.user._id;
 
       let filter = {};
       if (req.user.role === USER_ROLES.SUPER_ADMIN) {
-        if (tenant_id) filter.tenant_id = tenant_id;
+        if (admin_id) filter.admin_id = admin_id;
       } else {
-        const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
-        if (tenantId) {
-          filter.tenant_id = tenantId;
-        } else if (req.user.customerId) {
-          filter.stripe_customer_id = req.user.customerId;
-        } else {
-          filter.$or = [
-            { created_by: req.user._id },
-            { tenant_id: req.user._id }
-          ];
-        }
+        filter.admin_id = adminId;
       }
 
       const subs = await Subscription.find(filter);
@@ -135,5 +117,3 @@ router.get(
 );
 
 module.exports = router;
-
-

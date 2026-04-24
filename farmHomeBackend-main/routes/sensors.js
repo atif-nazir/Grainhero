@@ -1319,10 +1319,10 @@ router.get('/export/iot-csv', [
 ], async (req, res) => {
   try {
     const { silo_id, batch_id, start_date, end_date } = req.query;
-    const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
+    const adminId = req.user.admin_id || req.user._id;
     
     // Build query
-    const query = { tenant_id: tenantId };
+    const query = { admin_id: adminId };
     if (silo_id) query.silo_id = silo_id;
     if (batch_id) query.batch_id = batch_id;
     if (start_date && end_date) {

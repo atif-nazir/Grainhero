@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const notificationSchema = new mongoose.Schema({
     // Who receives this
+    admin_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        index: true
+    },
     tenant_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Tenant',
@@ -63,6 +68,7 @@ const notificationSchema = new mongoose.Schema({
 
 // Indexes
 notificationSchema.index({ recipient_id: 1, read: 1, created_at: -1 });
+notificationSchema.index({ admin_id: 1, category: 1 });
 notificationSchema.index({ tenant_id: 1, category: 1 });
 
 // TTL: auto-delete after 90 days

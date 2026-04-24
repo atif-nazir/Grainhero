@@ -11,10 +11,10 @@ const advisorySchema = new mongoose.Schema({
   },
   
   // References
-  tenant_id: {
+  admin_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"]
+    ref: 'User',
+    required: [true, "Admin ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -199,7 +199,7 @@ const advisorySchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-advisorySchema.index({ tenant_id: 1, status: 1 });
+advisorySchema.index({ admin_id: 1, status: 1 });
 advisorySchema.index({ silo_id: 1, priority: 1 });
 advisorySchema.index({ advisory_type: 1, urgency_level: 1 });
 advisorySchema.index({ created_at: -1, priority: 1 });
@@ -278,7 +278,7 @@ advisorySchema.methods.calculateEffectiveness = function() {
 // Static method to get advisories by priority
 advisorySchema.statics.getByPriority = function(tenantId, priority) {
   return this.find({
-    tenant_id: tenantId,
+    admin_id: tenantId,
     priority: priority,
     status: { $in: ['generated', 'assigned', 'in_progress'] }
   })
@@ -291,7 +291,7 @@ advisorySchema.statics.getByPriority = function(tenantId, priority) {
 advisorySchema.statics.getOverdue = function(tenantId) {
   const now = new Date();
   return this.find({
-    tenant_id: tenantId,
+    admin_id: tenantId,
     status: { $in: ['generated', 'assigned', 'in_progress'] },
     'recommended_timing.completion_deadline': { $lt: now }
   })
@@ -304,7 +304,7 @@ advisorySchema.statics.getStatistics = function(tenantId, timeRange = 30) {
   const startDate = new Date(Date.now() - timeRange * 24 * 60 * 60 * 1000);
   
   return this.aggregate([
-    { $match: { tenant_id: tenantId, created_at: { $gte: startDate } } },
+    { $match: { admin_id: tenantId, created_at: { $gte: startDate } } },
     {
       $group: {
         _id: null,

@@ -110,35 +110,26 @@ router.get(
     try {
       const { language = "en" } = req.query;
 
-      // Scope conditions for multi-tenancy
-      // Super admins should have access to all data
+      // Scope conditions for administrative isolation
       const isSuperAdmin = req.user?.role === 'super_admin';
-
-      const scopeConditions = [];
-      if (req.user?.tenant_id) {
-        scopeConditions.push({ tenant_id: req.user.tenant_id });
-      }
-      if (req.user?.owned_tenant_id) {
-        scopeConditions.push({ tenant_id: req.user.owned_tenant_id });
-      }
-      if (req.user?._id) {
-        scopeConditions.push({ admin_id: req.user._id });
-        scopeConditions.push({ created_by: req.user._id });
-      }
-
-      // Add warehouse filter for managers and technicians
-      if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
-        scopeConditions.push(req.warehouseFilter);
-      }
+      const adminId = req.user.admin_id || req.user._id;
 
       const applyScope = (extra = {}) => {
-        if (isSuperAdmin || !scopeConditions.length) {
+        if (isSuperAdmin) {
           return extra;
         }
-        if (!Object.keys(extra).length) {
-          return { $or: scopeConditions };
+        
+        const scope = { admin_id: adminId };
+        
+        // Add warehouse filter for managers and technicians
+        if (req.warehouseFilter && Object.keys(req.warehouseFilter).length > 0) {
+          Object.assign(scope, req.warehouseFilter);
         }
-        return { $and: [{ $or: scopeConditions }, extra] };
+
+        if (!Object.keys(extra).length) {
+          return scope;
+        }
+        return { $and: [scope, extra] };
       };
 
       let totalBatches = 0;
@@ -769,12 +760,10 @@ router.get(
             } else if (currentUser.subscription_id.name) {
               currentPlan = currentUser.subscription_id.name;
             }
-          } else {
-            if (req.user.tenant_id) {
-              const tenant = await Tenant.findById(req.user.tenant_id).lean();
-              if (tenant && tenant.plan) {
-                currentPlan = tenant.plan || 'Basic';
-              }
+          } else if (req.user.admin_id) {
+            const adminUser = await User.findById(req.user.admin_id).lean();
+            if (adminUser && adminUser.subscription_plan) {
+              currentPlan = adminUser.subscription_plan.charAt(0).toUpperCase() + adminUser.subscription_plan.slice(1);
             }
           }
         } catch (error) {
@@ -871,7 +860,7 @@ router.get(
       // Get all silos with their latest sensor readings
       const siloQuery = req.user?.role === 'super_admin'
         ? {}
-        : req.warehouseFilter || { tenant_id: req.user.tenant_id };
+        : req.warehouseFilter || { admin_id: req.user.admin_id || req.user._id };
       const silos = await Silo.find(siloQuery).populate(
         {
           path: "sensor_devices",
@@ -1015,7 +1004,7 @@ router.get(
         const silo = await Silo.findOne({
           _id: siloId,
           ...req.warehouseFilter,
-          ...(isSuperAdmin ? {} : { tenant_id: req.user.tenant_id }),
+          ...(isSuperAdmin ? {} : { admin_id: req.user.admin_id || req.user._id }),
         });
         if (!silo) continue;
 
@@ -1024,7 +1013,7 @@ router.get(
           silo_id: siloId,
           timestamp: { $gte: startDate },
           ...req.warehouseFilter,
-          ...(isSuperAdmin ? {} : { tenant_id: req.user.tenant_id }),
+          ...(isSuperAdmin ? {} : { admin_id: req.user.admin_id || req.user._id }),
         }).sort({ timestamp: 1 });
 
         // Get batches in this silo
@@ -1145,7 +1134,7 @@ router.get(
 
       const reportData = {
         generated_at: new Date(),
-        tenant_id: req.user.tenant_id || (isSuperAdmin ? 'all' : req.user.tenant_id),
+        admin_id: req.user.admin_id || (isSuperAdmin ? 'all' : req.user._id),
         report_type: type,
         summary: {
           total_batches: batches.length,
@@ -1291,7 +1280,7 @@ router.get(
     try {
       // Get all sensor devices with their thresholds
       const devices = await SensorDevice.find(
-        req.warehouseFilter || { tenant_id: req.user.tenant_id }
+        req.warehouseFilter || { admin_id: req.user.admin_id || req.user._id }
       ).populate("silo_id", "name");
 
       // Get global threshold settings (could be stored in a separate collection)
@@ -1357,7 +1346,7 @@ router.post(
       if (apply_globally) {
         // Apply to all devices in tenant
         const updateResult = await SensorDevice.updateMany(
-          { tenant_id: req.user.tenant_id },
+          { admin_id: req.user.admin_id || req.user._id },
           {
             $set: {
               thresholds: thresholds,
@@ -1374,7 +1363,7 @@ router.post(
       } else if (device_id) {
         // Apply to specific device
         const device = await SensorDevice.findOneAndUpdate(
-          { _id: device_id, tenant_id: req.user.tenant_id },
+          { _id: device_id, admin_id: req.user.admin_id || req.user._id },
           {
             thresholds: thresholds,
             updated_by: req.user._id,
@@ -1428,8 +1417,8 @@ router.get(
       // Build filter for tenant users
       const filter = isSuperAdmin ? {} : {
         $or: [
-          { tenant_id: req.user.tenant_id },
-          { owned_tenant_id: req.user.tenant_id },
+          { admin_id: req.user.admin_id || req.user._id },
+          { admin_id: req.user.admin_id || req.user._id },
         ],
       };
 
@@ -1502,7 +1491,7 @@ router.get(
   async (req, res) => {
     try {
       const isSuperAdmin = req.user?.role === 'super_admin';
-      const deviceQuery = isSuperAdmin ? {} : req.warehouseFilter || { tenant_id: req.user.tenant_id };
+      const deviceQuery = isSuperAdmin ? {} : req.warehouseFilter || { admin_id: req.user.admin_id || req.user._id };
       const devices = await SensorDevice.find(deviceQuery)
         .populate("silo_id", "name location")
         .sort({ created_at: -1 });
@@ -1625,7 +1614,7 @@ router.post(
           const batch = await GrainBatch.findOne({
             _id: target_id,
             ...req.warehouseFilter,
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id || req.user._id,
           });
           if (!batch) return res.status(404).json({ error: "Batch not found" });
 
@@ -1642,7 +1631,7 @@ router.post(
           const device = await SensorDevice.findOne({
             _id: target_id,
             ...req.warehouseFilter,
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id || req.user._id,
           });
           if (!device)
             return res.status(404).json({ error: "Device not found" });
@@ -1663,7 +1652,7 @@ router.post(
             {
               _id: { $in: target_id.split(",") },
               ...req.warehouseFilter,
-              tenant_id: req.user.tenant_id,
+              admin_id: req.user.admin_id || req.user._id,
             },
             {
               status: "silenced",
@@ -1681,7 +1670,7 @@ router.post(
           const targetBatch = await GrainBatch.findOne({
             _id: target_id,
             ...req.warehouseFilter,
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id || req.user._id,
           });
           if (!targetBatch)
             return res.status(404).json({ error: "Batch not found" });
@@ -1734,7 +1723,7 @@ router.get(
       startDate.setDate(startDate.getDate() - parseInt(days));
 
       const isSuperAdmin = req.user?.role === 'super_admin';
-      const baseFilter = isSuperAdmin ? {} : req.warehouseFilter || { tenant_id: req.user.tenant_id };
+      const baseFilter = isSuperAdmin ? {} : req.warehouseFilter || { admin_id: req.user.admin_id || req.user._id };
 
       // Build aggregation pipeline
       const matchStage = {

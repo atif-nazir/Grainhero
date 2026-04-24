@@ -9,11 +9,14 @@ const GrainBatch = require("../models/GrainBatch");
 const Silo = require("../models/Silo");
 const { USER_ROLES } = require("../configs/enum");
 
-function tenantScope(user, queryTenantId) {
+/**
+ * Helper to build isolation scope based on admin_id
+ */
+function getIsolationScope(user) {
   if (user.role === USER_ROLES.SUPER_ADMIN) {
-    return queryTenantId ? { tenant_id: queryTenantId } : {};
+    return {}; // Super admin sees all (legacy compatibility)
   }
-  return { tenant_id: user.tenant_id || user.owned_tenant_id };
+  return { admin_id: user.admin_id || user._id };
 }
 
 /**
@@ -26,7 +29,7 @@ router.get(
   requirePermission("reports.view"),
   async (req, res) => {
     try {
-      const scope = tenantScope(req.user, req.query.tenant_id);
+      const scope = getIsolationScope(req.user);
 
       // Insurance stats
       const policies = await InsurancePolicy.find(scope);
@@ -61,13 +64,9 @@ router.get(
         }
       );
 
-      // Ops metrics (batches, silos) - always scoped to admin for non-super-admins
-      const isSuperAdmin = req.user.role === USER_ROLES.SUPER_ADMIN;
-      const adminId = req.user.admin_id || req.user._id;
-      const batchFilter = isSuperAdmin ? {} : { admin_id: adminId };
-      const siloFilter = isSuperAdmin ? {} : { admin_id: adminId };
-      const batches = await GrainBatch.find(batchFilter);
-      const silos = await Silo.find(siloFilter);
+      // Ops metrics (batches, silos)
+      const batches = await GrainBatch.find(scope);
+      const silos = await Silo.find(scope);
       const ops = {
         total_batches: batches.length,
         total_silos: silos.length,
@@ -87,5 +86,3 @@ router.get(
 );
 
 module.exports = router;
-
-

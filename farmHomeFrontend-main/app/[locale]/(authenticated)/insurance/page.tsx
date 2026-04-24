@@ -1,4 +1,5 @@
 "use client"
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,9 +43,17 @@ import {
   Calendar,
   Mail,
   Send,
+  MessageSquare,
+  History,
+  UserCheck,
+  FileSearch,
+  Check,
+  Search,
+  BarChart3,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { config } from '@/config'
+import { cn } from '@/lib/utils'
 
 // ── Interfaces ──────────────────────────────────────────
 interface InsurancePolicy {
@@ -186,7 +195,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
 
   // Claim modal
   const [showClaimModal, setShowClaimModal] = useState(false)
-  const [claimSaving, _setClaimSaving] = useState(false)
+  const [claimSaving, setClaimSaving] = useState(false)
   const [claimPhotos, setClaimPhotos] = useState<File[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [claimForm, setClaimForm] = useState({
@@ -206,6 +215,12 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
   // Timeline data
   const [selectedBatchForTimeline, setSelectedBatchForTimeline] = useState<string>('')
   const [timelineEvents, setTimelineEvents] = useState<SpoilageEvent[]>([])
+
+  // Claim detail view
+  const [selectedClaim, setSelectedClaim] = useState<InsuranceClaim | null>(null)
+  const [showClaimDetail, setShowClaimDetail] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [claimNote, setClaimNote] = useState('')
 
   // Insurance request form
   const [requestSending, setRequestSending] = useState(false)
@@ -252,21 +267,24 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
 
   const submitClaimWithPhotos = async () => {
     if (claimPhotos.length === 0) { toast.error('Please upload at least one damage photo'); return }
+    setClaimSaving(true)
     setUploadingPhotos(true)
     try {
       const photoUrls: string[] = []
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       for (const photo of claimPhotos) {
         const fd = new FormData(); fd.append('photo', photo); fd.append('claim_type', claimForm.claim_type)
-        const uploadRes = await fetch(`${config.backendUrl}/api/insurance/upload-photo`, { method: 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: fd })
-        if (uploadRes.ok) { const data = await uploadRes.json(); photoUrls.push(data.url) }
+        const uploadRes = await api.postFormData<{ url: string }>('/api/insurance/upload-photo', fd)
+        if (uploadRes.ok && uploadRes.data) photoUrls.push(uploadRes.data.url)
       }
       const body = { ...claimForm, amount_claimed: Number(claimForm.amount_claimed), batch_affected: { batch_id: claimForm.batch_id, quantity_affected: Number(claimForm.quantity_affected) }, photos: photoUrls }
       const res = await api.post('/api/insurance/claims', body)
       if (res.ok) { toast.success('Claim filed with photos'); setShowClaimModal(false); setClaimPhotos([]); loadData() }
       else toast.error(res.error || 'Failed to file claim')
     } catch (e: unknown) { toast.error((e as Error).message) }
-    finally { setUploadingPhotos(false) }
+    finally { 
+      setClaimSaving(false)
+      setUploadingPhotos(false) 
+    }
   }
 
   // ── Spoilage Event Handlers ───────────────────────────
@@ -287,10 +305,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
           const eventId = resData.event.event_id
           const fd = new FormData()
           spoilagePhotos.forEach(p => fd.append('photos', p))
-          const token = localStorage.getItem('token')
-          await fetch(`${config.backendUrl}/api/logging/batches/${spoilageForm.batch_id}/spoilage-events/${eventId}/photos`, {
-            method: 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: fd,
-          })
+          await api.postFormData(`/api/logging/batches/${spoilageForm.batch_id}/spoilage-events/${eventId}/photos`, fd)
         }
         setShowSpoilageModal(false); setSpoilagePhotos([]); loadData()
       } else toast.error((res as { error?: string }).error || 'Failed to log spoilage event')
@@ -301,12 +316,9 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
   // ── Insurance Export ──────────────────────────────────
   const downloadInsuranceExport = async (batchId: string, format: string, claimNumber: string) => {
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${config.backendUrl}/api/grain-batches/${batchId}/export-insurance?format=${format}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      })
-      if (res.ok) {
-        const blob = await res.blob(); const url = window.URL.createObjectURL(blob)
+      const blob = await api.download(`/api/grain-batches/${batchId}/export-insurance?format=${format}`)
+      if (blob) {
+        const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a'); a.href = url; a.download = `claim-${claimNumber}-${format}.json`; a.click()
         toast.success(`${format.toUpperCase()} export downloaded`)
       } else toast.error('Failed to export')
@@ -325,6 +337,92 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
       const a = document.createElement('a'); a.href = url; a.download = `batch-report-${batchRef}.pdf`; a.click()
       URL.revokeObjectURL(url); toast.success('Report downloaded!')
     } catch { toast.error('Failed to download report') }
+  }
+
+  // ── Claim Lifecycle Handlers ──────────────────────────
+  const updateClaimStatus = async (claimId: string, status: string, notes: string = '') => {
+    setActionLoading(true)
+    try {
+      const res = await api.put(`/api/insurance/claims/${claimId}/status`, { status, notes })
+      if (res.ok) {
+        toast.success(`Claim status updated to ${status}`)
+        loadData()
+        // Refresh selected claim
+        const updatedClaimRes = await api.get<{ claim: InsuranceClaim }>(`/api/insurance/claims/${claimId}`)
+        if (updatedClaimRes.ok && updatedClaimRes.data) setSelectedClaim(updatedClaimRes.data.claim)
+      } else {
+        toast.error(res.error || 'Failed to update status')
+      }
+    } catch { toast.error('Error updating status') }
+    finally { setActionLoading(false) }
+  }
+
+  const submitClaimReview = async (claimId: string, approved: boolean, notes: string) => {
+    setActionLoading(true)
+    try {
+      const res = await api.post(`/api/insurance/claims/${claimId}/review`, { approved, notes })
+      if (res.ok) {
+        toast.success(approved ? 'Claim approved' : 'Claim rejected')
+        loadData()
+        const updatedClaimRes = await api.get<{ claim: InsuranceClaim }>(`/api/insurance/claims/${claimId}`)
+        if (updatedClaimRes.ok && updatedClaimRes.data) setSelectedClaim(updatedClaimRes.data.claim)
+      } else { toast.error(res.error || 'Failed to submit review') }
+    } catch { toast.error('Error submitting review') }
+    finally { setActionLoading(false) }
+  }
+
+  const submitInvestigation = async (claimId: string, findings: string, cause: string) => {
+    setActionLoading(true)
+    try {
+      const res = await api.put(`/api/insurance/claims/${claimId}/investigation`, { findings, cause_of_loss: cause, preventable: false })
+      if (res.ok) {
+        toast.success('Investigation submitted')
+        loadData()
+        const updatedClaimRes = await api.get<{ claim: InsuranceClaim }>(`/api/insurance/claims/${claimId}`)
+        if (updatedClaimRes.ok && updatedClaimRes.data) setSelectedClaim(updatedClaimRes.data.claim)
+      } else { toast.error(res.error || 'Failed to submit investigation') }
+    } catch { toast.error('Error submitting investigation') }
+    finally { setActionLoading(false) }
+  }
+
+  const submitAssessment = async (claimId: string, amount: number, notes: string) => {
+    setActionLoading(true)
+    try {
+      const res = await api.put(`/api/insurance/claims/${claimId}/assessment`, { settlement_recommendation: amount, internal_notes: notes })
+      if (res.ok) {
+        toast.success('Assessment completed')
+        loadData()
+        const updatedClaimRes = await api.get<{ claim: InsuranceClaim }>(`/api/insurance/claims/${claimId}`)
+        if (updatedClaimRes.ok && updatedClaimRes.data) setSelectedClaim(updatedClaimRes.data.claim)
+      } else { toast.error(res.error || 'Failed to submit assessment') }
+    } catch { toast.error('Error submitting assessment') }
+    finally { setActionLoading(false) }
+  }
+
+  const processPayment = async (claimId: string, amount: number, method: string, ref: string) => {
+    setActionLoading(true)
+    try {
+      const res = await api.post(`/api/insurance/claims/${claimId}/payment`, { amount, payment_method: method, payment_reference: ref })
+      if (res.ok) {
+        toast.success('Payment processed successfully')
+        loadData()
+        const updatedClaimRes = await api.get<{ claim: InsuranceClaim }>(`/api/insurance/claims/${claimId}`)
+        if (updatedClaimRes.ok && updatedClaimRes.data) setSelectedClaim(updatedClaimRes.data.claim)
+      } else { toast.error(res.error || 'Failed to process payment') }
+    } catch { toast.error('Error processing payment') }
+    finally { setActionLoading(false) }
+  }
+
+  const addClaimNote = async (claimId: string) => {
+    if (!claimNote.trim()) return
+    try {
+      const res = await api.post(`/api/insurance/claims/${claimId}/notes`, { message: claimNote })
+      if (res.ok) {
+        setClaimNote('')
+        const updatedClaimRes = await api.get<{ claim: InsuranceClaim }>(`/api/insurance/claims/${claimId}`)
+        if (updatedClaimRes.ok && updatedClaimRes.data) setSelectedClaim(updatedClaimRes.data.claim)
+      }
+    } catch { toast.error('Failed to add note') }
   }
 
   // ── Request Insurance from Super Admin ────────────────
@@ -514,9 +612,12 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                         <TableCell className="text-xs">{new Date(claim.incident_date).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            <Button variant="outline" size="sm" onClick={() => { setSelectedClaim(claim); setShowClaimDetail(true) }}>
+                              <Eye className="h-3 w-3 mr-1" />Details
+                            </Button>
                             {['efu', 'adamjee', 'ztbl'].map(fmt => (
                               <Button key={fmt} variant="outline" size="sm" onClick={() => downloadInsuranceExport(claim.batch_affected?.batch_id, fmt, claim.claim_number)} disabled={!claim.batch_affected?.batch_id}>
-                                <Download className="h-3 w-3 mr-1" />{fmt.toUpperCase()}
+                                <Download className="h-3 w-3" />
                               </Button>
                             ))}
                           </div>
@@ -764,33 +865,275 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
         </DialogContent>
       </Dialog>
 
-      {/* ── Claim Modal ──────────────────────────────────── */}
+      {/* ── Claim Detail Dialog ─────────────────────────── */}
+      <Dialog open={showClaimDetail} onOpenChange={setShowClaimDetail}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between pr-6">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                  Claim {selectedClaim?.claim_number}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedClaim?.claim_type} claim filed on {selectedClaim && new Date(selectedClaim.filed_date).toLocaleDateString()}
+                </DialogDescription>
+              </div>
+              <Badge className={selectedClaim ? claimStatusCfg(selectedClaim.status).color : ''}>
+                {selectedClaim?.status.toUpperCase().replace('_', ' ')}
+              </Badge>
+            </div>
+          </DialogHeader>
+
+          {selectedClaim && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+              {/* Left Column: Details & Stepper */}
+              <div className="md:col-span-2 space-y-6">
+                {/* Stepper */}
+                <div className="relative pt-2 pb-8">
+                  <div className="flex items-center justify-between w-full">
+                    {[
+                      { s: 'pending', l: 'Filed', i: FileText },
+                      { s: 'under_review', l: 'Review', i: FileSearch },
+                      { s: 'investigation', l: 'Investigation', i: Search },
+                      { s: 'assessment', l: 'Assessment', i: BarChart3 },
+                      { s: 'approved', l: 'Approved', i: CheckCircle },
+                      { s: 'settled', l: 'Settled', i: DollarSign }
+                    ].map((step, idx, arr) => {
+                      const statuses = arr.map(a => a.s)
+                      const currentIndex = statuses.indexOf(selectedClaim.status === 'rejected' ? 'pending' : selectedClaim.status)
+                      const isCompleted = idx < currentIndex || selectedClaim.status === 'settled' || (selectedClaim.status === 'approved' && idx <= 4)
+                      const isActive = idx === currentIndex
+                      const Icon = step.i
+
+                      return (
+                        <div key={step.s} className="flex flex-col items-center relative z-10">
+                          <div className={cn(
+                            "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300",
+                            isCompleted ? "bg-green-500 text-white" : isActive ? "bg-amber-500 text-white ring-4 ring-amber-100" : "bg-gray-100 text-gray-400"
+                          )}>
+                            {isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+                          </div>
+                          <span className={cn("text-[10px] font-bold mt-2 uppercase tracking-tight", isActive ? "text-amber-600" : "text-gray-400")}>
+                            {step.l}
+                          </span>
+                          {idx < arr.length - 1 && (
+                            <div className={cn(
+                              "absolute top-5 left-1/2 w-full h-[2px] -z-10",
+                              isCompleted ? "bg-green-500" : "bg-gray-100"
+                            )} style={{ width: 'calc(100% * 2.5)' }} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-1">Incident Description</p>
+                    <p className="text-sm">{selectedClaim.description}</p>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-1">Affected Batch</p>
+                    <p className="text-sm font-semibold">{selectedClaim.batch_affected?.batch_id} ({selectedClaim.batch_affected?.grain_type})</p>
+                    <p className="text-xs text-gray-500">{selectedClaim.batch_affected?.quantity_affected} kg affected</p>
+                  </div>
+                </div>
+
+                {/* Status Specific Content */}
+                {selectedClaim.status === 'investigation' && (
+                   <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                     <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-2"><Search className="h-4 w-4" />Investigation in Progress</h4>
+                     <p className="text-xs text-blue-600">The claim is currently under investigation by an insurance adjuster. Findings will be posted here once complete.</p>
+                   </div>
+                )}
+
+                {selectedClaim.investigation?.findings && (
+                  <div className="p-4 bg-green-50 rounded-xl border border-green-100">
+                    <h4 className="text-sm font-bold text-green-800 flex items-center gap-2 mb-1"><CheckCircle className="h-4 w-4" />Investigation Findings</h4>
+                    <p className="text-sm text-green-700">{selectedClaim.investigation.findings}</p>
+                    <div className="flex gap-4 mt-2 text-[10px] text-green-600 font-bold uppercase">
+                      <span>Cause: {selectedClaim.investigation.cause_of_loss}</span>
+                      <span>Preventable: {selectedClaim.investigation.preventable ? 'Yes' : 'No'}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Communication Thread */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />Communication History
+                  </h4>
+                  <div className="max-h-[200px] overflow-y-auto space-y-2 pr-2">
+                    {(selectedClaim.communications || []).map((msg, i) => (
+                      <div key={i} className="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="font-bold text-xs text-blue-600">User</span>
+                          <span className="text-[10px] text-gray-400">{new Date(msg.sent_at).toLocaleString()}</span>
+                        </div>
+                        <p className="text-gray-700">{msg.message}</p>
+                      </div>
+                    ))}
+                    {(!selectedClaim.communications || selectedClaim.communications.length === 0) && (
+                      <p className="text-xs text-gray-400 text-center py-4">No internal communications yet</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input value={claimNote} onChange={e => setClaimNote(e.target.value)} placeholder="Add a note or message..." className="text-sm" />
+                    <Button size="sm" onClick={() => addClaimNote(selectedClaim._id)}><Send className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+
+                {/* Document Gallery */}
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <Camera className="h-4 w-4" />Damage Evidence & Documents
+                  </h4>
+                  <div className="grid grid-cols-4 gap-2">
+                    {selectedClaim.photos?.map((p, i) => (
+                      <a key={i} href={p} target="_blank" rel="noreferrer" className="relative h-20 rounded-lg overflow-hidden border group">
+                        <Image src={p} alt="Evidence" fill className="object-cover group-hover:scale-110 transition-transform" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Actions & Summary */}
+              <div className="space-y-6">
+                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 shadow-sm">
+                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-widest mb-3">Claim Summary</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-amber-700">Claimed Amount</span>
+                      <span className="font-bold text-sm">PKR {selectedClaim.amount_claimed.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-amber-700">Approved Amount</span>
+                      <span className="font-bold text-sm text-green-600">PKR {selectedClaim.amount_approved.toLocaleString()}</span>
+                    </div>
+                    <div className="pt-2 border-t border-amber-200">
+                      <p className="text-[10px] text-amber-600 uppercase font-bold mb-1">Policy Holder</p>
+                      <p className="text-xs font-medium">GrainHero Tenant</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Admin Actions Section */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Administrative Actions</h4>
+                  
+                  {selectedClaim.status === 'pending' && (
+                    <div className="space-y-2">
+                      <Button className="w-full bg-blue-600 hover:bg-blue-700 gap-2" onClick={() => updateClaimStatus(selectedClaim._id, 'under_review')} disabled={actionLoading}>
+                        <FileSearch className="h-4 w-4" />Start Review
+                      </Button>
+                      <Button variant="outline" className="w-full text-red-600 hover:bg-red-50 border-red-200" onClick={() => submitClaimReview(selectedClaim._id, false, 'Initial rejection')} disabled={actionLoading}>
+                        <XCircle className="h-4 w-4 mr-2" />Reject Claim
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedClaim.status === 'under_review' && (
+                    <div className="space-y-2">
+                      <Button className="w-full bg-purple-600 hover:bg-purple-700 gap-2" onClick={() => updateClaimStatus(selectedClaim._id, 'investigation')} disabled={actionLoading}>
+                        <Search className="h-4 w-4" />Assign Investigator
+                      </Button>
+                      <Button variant="outline" className="w-full text-green-600 hover:bg-green-50 border-green-200" onClick={() => submitClaimReview(selectedClaim._id, true, 'Approved after review')} disabled={actionLoading}>
+                        <CheckCircle className="h-4 w-4 mr-2" />Approve Directly
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedClaim.status === 'investigation' && (
+                    <Button className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2" 
+                      onClick={() => submitInvestigation(selectedClaim._id, 'Damaged verified by on-site inspection.', 'Moisture Spoilage')} disabled={actionLoading}>
+                      <UserCheck className="h-4 w-4" />Complete Investigation
+                    </Button>
+                  )}
+
+                  {selectedClaim.status === 'assessment' && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-gray-400 text-center italic">Awaiting settlement assessment...</p>
+                      <Button className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2" 
+                        onClick={() => submitAssessment(selectedClaim._id, selectedClaim.amount_claimed * 0.9, 'Standard spoilage coverage applies.')} disabled={actionLoading}>
+                        <BarChart3 className="h-4 w-4" />Finalize Assessment
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedClaim.status === 'approved' && (
+                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" 
+                      onClick={() => processPayment(selectedClaim._id, selectedClaim.amount_approved, 'bank_transfer', 'REF-' + Date.now())} disabled={actionLoading}>
+                      <DollarSign className="h-4 w-4" />Process Settlement
+                    </Button>
+                  )}
+
+                  {selectedClaim.status === 'settled' && (
+                    <div className="text-center p-4 bg-green-50 rounded-xl border border-green-100">
+                      <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-green-800">Claim Settled & Closed</p>
+                      <p className="text-[10px] text-green-600 mt-1">Payment: PKR {selectedClaim.payment?.amount.toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 space-y-4">
+                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                     <History className="h-4 w-4" />Audit Log Preview
+                   </h4>
+                   <div className="space-y-3 pl-2 border-l border-gray-100">
+                      <div className="relative pl-4 pb-4 border-l border-green-200 last:pb-0">
+                         <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-green-400" />
+                         <p className="text-[10px] font-bold text-gray-800">Claim Filed</p>
+                         <p className="text-[9px] text-gray-400">{new Date(selectedClaim.filed_date).toLocaleDateString()}</p>
+                      </div>
+                      {selectedClaim.review_date && (
+                        <div className="relative pl-4 pb-4 border-l border-blue-200 last:pb-0">
+                           <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-blue-400" />
+                           <p className="text-[10px] font-bold text-gray-800">Initial Review Complete</p>
+                           <p className="text-[9px] text-gray-400">{new Date(selectedClaim.review_date).toLocaleDateString()}</p>
+                        </div>
+                      )}
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* ── Claim Modal (File New) ────────────────────────── */}
       <Dialog open={showClaimModal} onOpenChange={setShowClaimModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>File Insurance Claim</DialogTitle><DialogDescription>Submit a claim with damage evidence</DialogDescription></DialogHeader>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <div className="space-y-2"><label className="text-sm text-muted-foreground">Policy</label><Select value={claimForm.policy_id} onValueChange={v => setClaimForm({ ...claimForm, policy_id: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{policies.map(p => <SelectItem key={p._id} value={p._id}>{p.policy_number} • {p.provider_name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><label className="text-sm text-muted-foreground">Claim Type</label><Select value={claimForm.claim_type} onValueChange={v => setClaimForm({ ...claimForm, claim_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Fire', 'Theft', 'Spoilage', 'Weather Damage', 'Equipment Failure', 'Other'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2 md:col-span-2"><label className="text-sm text-muted-foreground">Description</label><Input value={claimForm.description} onChange={e => setClaimForm({ ...claimForm, description: e.target.value })} placeholder="Describe the incident..." /></div>
-            <div className="space-y-2"><label className="text-sm text-muted-foreground">Amount Claimed</label><Input type="number" value={claimForm.amount_claimed} onChange={e => setClaimForm({ ...claimForm, amount_claimed: Number(e.target.value) })} /></div>
-            <div className="space-y-2"><label className="text-sm text-muted-foreground">Incident Date</label><Input type="date" value={claimForm.incident_date} onChange={e => setClaimForm({ ...claimForm, incident_date: e.target.value })} /></div>
-            <div className="space-y-2"><label className="text-sm text-muted-foreground">Affected Batch</label><Select value={claimForm.batch_id} onValueChange={v => setClaimForm({ ...claimForm, batch_id: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{batches.map(b => <SelectItem key={b._id} value={b._id}>{b.batch_id} • {b.grain_type}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><label className="text-sm text-muted-foreground">Quantity Affected (kg)</label><Input type="number" value={claimForm.quantity_affected} onChange={e => setClaimForm({ ...claimForm, quantity_affected: Number(e.target.value) })} /></div>
-            <div className="space-y-2 md:col-span-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><label className="text-sm text-muted-foreground">Claim Type</label><Select value={claimForm.claim_type} onValueChange={v => setClaimForm({ ...claimForm, claim_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Fire', 'Theft', 'Spoilage', 'Weather Damage', 'Equipment Failure', 'Other'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><label className="text-sm text-muted-foreground">Incident Date</label><Input type="date" value={claimForm.incident_date} onChange={e => setClaimForm({ ...claimForm, incident_date: e.target.value })} /></div>
+            </div>
+            <div className="space-y-2"><label className="text-sm text-muted-foreground">Description</label><Input value={claimForm.description} onChange={e => setClaimForm({ ...claimForm, description: e.target.value })} placeholder="Describe the incident..." /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><label className="text-sm text-muted-foreground">Amount Claimed</label><Input type="number" value={claimForm.amount_claimed} onChange={e => setClaimForm({ ...claimForm, amount_claimed: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><label className="text-sm text-muted-foreground">Affected Batch</label><Select value={claimForm.batch_id} onValueChange={v => setClaimForm({ ...claimForm, batch_id: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{batches.map(b => <SelectItem key={b._id} value={b._id}>{b.batch_id} • {b.grain_type}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Damage Photos *</label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                 <input type="file" id="claim-photos" multiple accept="image/*" className="hidden" onChange={e => setClaimPhotos(Array.from(e.target.files || []))} />
-                <label htmlFor="claim-photos" className="cursor-pointer flex flex-col items-center space-y-1"><Upload className="h-6 w-6 text-gray-400" /><span className="text-sm text-gray-500">Click to upload damage photos</span><span className="text-xs text-gray-400">PNG, JPG up to 10MB each</span></label>
+                <label htmlFor="claim-photos" className="cursor-pointer flex flex-col items-center space-y-1"><Upload className="h-6 w-6 text-gray-400" /><span className="text-sm text-gray-500">Click to upload damage photos</span></label>
                 {claimPhotos.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{claimPhotos.map((f, i) => <div key={i} className="relative"><Image src={URL.createObjectURL(f)} alt="" width={100} height={96} className="w-full h-24 object-cover rounded" /><button type="button" onClick={() => setClaimPhotos(claimPhotos.filter((_, j) => j !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>)}</div>}
               </div>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => { setShowClaimModal(false); setClaimPhotos([]) }}>Close</Button>
-            <Button onClick={submitClaimWithPhotos} disabled={claimSaving || uploadingPhotos}>{claimSaving || uploadingPhotos ? "Submitting..." : "Submit Claim with Photos"}</Button>
+            <Button onClick={submitClaimWithPhotos} disabled={claimSaving || uploadingPhotos}>{claimSaving || uploadingPhotos ? "Submitting..." : "Submit Claim"}</Button>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   )
 }
+

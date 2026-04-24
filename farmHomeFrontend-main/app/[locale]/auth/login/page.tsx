@@ -105,7 +105,7 @@ export default function LoginPage({ params: _params }: { params: Promise<{ local
           localStorage.setItem("role", data.role)
           localStorage.setItem("avatar", data.avatar)
           console.log(data)
-          await login(normalizedEmail, password)
+          await login(normalizedEmail, password, data)
           if (typeof window !== 'undefined') {
             localStorage.removeItem('pendingSignupEmail')
           }

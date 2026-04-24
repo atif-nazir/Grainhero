@@ -375,7 +375,7 @@ class RealTimeDataService extends EventEmitter {
         try {
             const alert = new GrainAlert({
                 alert_id: uuidv4(),
-                tenant_id: reading.tenant_id,
+                admin_id: reading.admin_id,
                 silo_id: reading.silo_id,
                 device_id: reading.device_id,
                 title: `${violation.sensor_type.toUpperCase()} ${violation.severity.toUpperCase()}`,
@@ -407,7 +407,7 @@ class RealTimeDataService extends EventEmitter {
             for (const anomaly of anomalies) {
                 const alert = new GrainAlert({
                     alert_id: uuidv4(),
-                    tenant_id: reading.tenant_id,
+                    admin_id: reading.admin_id,
                     silo_id: reading.silo_id,
                     device_id: reading.device_id,
                     title: `ANOMALY DETECTED: ${anomaly.sensor_type.toUpperCase()}`,

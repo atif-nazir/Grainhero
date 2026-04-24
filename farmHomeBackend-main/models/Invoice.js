@@ -2,10 +2,15 @@ const mongoose = require("mongoose");
 const { PAYMENT_STATUSES } = require("../configs/enum");
 
 const invoiceSchema = new mongoose.Schema({
+    admin_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+        index: true
+    },
     tenant_id: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Tenant",
-        required: true
+        ref: "Tenant"
     },
     subscription_id: {
         type: mongoose.Schema.Types.ObjectId,

@@ -121,6 +121,7 @@ class AISpoilageService extends EventEmitter {
             // Create spoilage prediction record
             const spoilagePrediction = new SpoilagePrediction({
                 prediction_id: predictionId,
+                admin_id: batch.admin_id,
                 tenant_id: batch.tenant_id,
                 silo_id: batch.silo_id,
                 batch_id: batchId,
@@ -397,6 +398,7 @@ class AISpoilageService extends EventEmitter {
             for (const advisoryData of advisories) {
                 const advisory = new Advisory({
                     advisory_id: advisoryData.advisory_id,
+                    admin_id: spoilagePrediction.admin_id,
                     tenant_id: spoilagePrediction.tenant_id,
                     silo_id: spoilagePrediction.silo_id,
                     prediction_id: spoilagePrediction._id,
@@ -446,6 +448,7 @@ class AISpoilageService extends EventEmitter {
         try {
             const alert = new GrainAlert({
                 alert_id: uuidv4(),
+                admin_id: spoilagePrediction.admin_id,
                 tenant_id: spoilagePrediction.tenant_id,
                 silo_id: spoilagePrediction.silo_id,
                 batch_id: spoilagePrediction.batch_id,

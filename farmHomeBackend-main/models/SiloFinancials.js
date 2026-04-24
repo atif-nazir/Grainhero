@@ -8,6 +8,12 @@ const siloFinancialsSchema = new mongoose.Schema({
     required: [true, "Silo ID is required"],
     unique: true
   },
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, "Admin ID is required"],
+    index: true
+  },
 
   // Revenue contribution
   revenue: {

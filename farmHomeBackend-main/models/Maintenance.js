@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const maintenanceSchema = new mongoose.Schema({
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
   maintenanceType: { type: String, required: true },
   equipmentId: { type: String },
   maintenanceDate: { type: Date, required: true },

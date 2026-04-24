@@ -8,6 +8,12 @@ const warehouseFinancialsSchema = new mongoose.Schema({
     required: [true, "Warehouse ID is required"],
     unique: true
   },
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, "Admin ID is required"],
+    index: true
+  },
 
   // Revenue and income
   revenue: {

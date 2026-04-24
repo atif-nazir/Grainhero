@@ -171,12 +171,9 @@ router.get('/tenants', auth, superAdminOnly, async (req, res) => {
 
     // Enhance tenant data with subscription info
     const enhancedTenants = await Promise.all(tenants.map(async (tenant) => {
-      const subscription = await Subscription.findOne({ tenant_id: tenant._id });
+      const subscription = await Subscription.findOne({ admin_id: tenant.created_by });
       const userCount = await User.countDocuments({
-        $or: [
-          { tenant_id: tenant._id },
-          { owned_tenant_id: tenant._id }
-        ]
+        admin_id: tenant.created_by
       });
 
       return {
@@ -251,18 +248,12 @@ router.get('/tenants/:id', auth, superAdminOnly, async (req, res) => {
 
     // Get additional tenant statistics
     const userCount = await User.countDocuments({
-      $or: [
-        { tenant_id: tenant._id },
-        { owned_tenant_id: tenant._id }
-      ]
+      admin_id: tenant.created_by
     });
 
-    const subscription = await Subscription.findOne({ tenant_id: tenant._id });
+    const subscription = await Subscription.findOne({ admin_id: tenant.created_by });
     const recentActivity = await User.find({
-      $or: [
-        { tenant_id: tenant._id },
-        { owned_tenant_id: tenant._id }
-      ]
+      admin_id: tenant.created_by
     })
       .sort({ lastLogin: -1 })
       .limit(5)
@@ -397,9 +388,7 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
       phone,
       password,
       role: 'admin',
-      owned_tenant_id: tenant._id,
-      // hasAccess is for subscription permissions, usually mapped from plan
-      hasAccess: plan_name ? (plan_name === 'Basic' ? 'basic' : plan_name === 'Pro' ? 'pro' : 'enterprise') : 'basic',
+      admin_id: null, // Will be updated to own ID if needed, but admin_id is mostly for sub-users
       emailVerified: true
     });
 
@@ -423,7 +412,7 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
         // Manual creation by Super Admin defaults to "Comp" or "Manual" payment with 0 amount charged
         // But we want to reflect valid plan features
         const subscription = new Subscription({
-          tenant_id: tenant._id,
+          admin_id: user._id,
           plan_name,
           price_per_month: 0, // Recorded as 0 for manual creation as per user request
           price_per_year: 0,
@@ -455,7 +444,7 @@ router.post('/tenants', auth, superAdminOnly, async (req, res) => {
 
         // Create a 0-amount Invoice to record this "transaction"
         const invoice = new Invoice({
-          tenant_id: tenant._id,
+          admin_id: user._id,
           subscription_id: subscription._id,
           amount: 0,
           currency: 'USD', // Or default
@@ -599,7 +588,7 @@ router.delete('/tenants/:id', auth, superAdminOnly, async (req, res) => {
     await tenant.softDelete();
 
     // Cancel associated subscription
-    const subscription = await Subscription.findOne({ tenant_id: tenant._id });
+    const subscription = await Subscription.findOne({ admin_id: tenant.created_by });
     if (subscription) {
       await subscription.cancel('Tenant deleted by Super Admin');
     }

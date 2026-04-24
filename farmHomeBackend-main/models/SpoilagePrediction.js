@@ -11,10 +11,10 @@ const spoilagePredictionSchema = new mongoose.Schema({
   },
   
   // References
-  tenant_id: {
+  admin_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"]
+    ref: 'User',
+    required: [true, "Admin ID is required"]
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -183,7 +183,7 @@ const spoilagePredictionSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-spoilagePredictionSchema.index({ tenant_id: 1, prediction_type: 1 });
+spoilagePredictionSchema.index({ admin_id: 1, prediction_type: 1 });
 spoilagePredictionSchema.index({ silo_id: 1, risk_level: 1 });
 spoilagePredictionSchema.index({ predicted_date: 1, risk_score: -1 });
 spoilagePredictionSchema.index({ validation_status: 1, created_at: -1 });
@@ -318,7 +318,7 @@ spoilagePredictionSchema.statics.getPredictionStats = function(tenantId, timeRan
   const startDate = new Date(Date.now() - timeRange * 24 * 60 * 60 * 1000);
   
   return this.aggregate([
-    { $match: { tenant_id: tenantId, created_at: { $gte: startDate } } },
+    { $match: { admin_id: tenantId, created_at: { $gte: startDate } } },
     {
       $group: {
         _id: null,
@@ -348,7 +348,7 @@ spoilagePredictionSchema.statics.getPredictionStats = function(tenantId, timeRan
 // Static method to get predictions by risk level
 spoilagePredictionSchema.statics.getPredictionsByRisk = function(tenantId, riskLevel) {
   return this.find({
-    tenant_id: tenantId,
+    admin_id: tenantId,
     risk_level: riskLevel,
     predicted_date: { $gte: new Date() }
   })

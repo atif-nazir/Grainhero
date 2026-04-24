@@ -2,16 +2,15 @@ const mongoose = require('mongoose');
 
 const buyerInvoiceSchema = new mongoose.Schema({
     // Tenant and admin scoping
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant',
-        required: true,
-        index: true
-    },
     admin_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
+        index: true
+    },
+    tenant_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Tenant'
     },
 
     // Invoice identification

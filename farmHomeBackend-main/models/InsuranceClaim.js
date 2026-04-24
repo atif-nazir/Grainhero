@@ -9,16 +9,21 @@ const insuranceClaimSchema = new mongoose.Schema({
     trim: true
   },
 
-  // Policy and tenant association
+  // Policy and administrative association
   policy_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'InsurancePolicy',
     required: [true, "Policy ID is required"]
   },
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, "Admin ID is required"],
+    index: true
+  },
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
+    ref: 'Tenant'
   },
 
   // Claim details
@@ -215,6 +220,7 @@ const insuranceClaimSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
+insuranceClaimSchema.index({ admin_id: 1, status: 1 });
 insuranceClaimSchema.index({ tenant_id: 1, status: 1 });
 insuranceClaimSchema.index({ policy_id: 1 });
 insuranceClaimSchema.index({ incident_date: 1 });

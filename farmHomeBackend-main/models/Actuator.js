@@ -16,10 +16,14 @@ const actuatorSchema = new mongoose.Schema({
   },
 
   // Tenant and location
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, "Admin ID is required"]
+  },
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: [true, "Tenant ID is required"]
+    ref: 'Tenant'
   },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -257,7 +261,7 @@ const actuatorSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-actuatorSchema.index({ tenant_id: 1, status: 1 });
+actuatorSchema.index({ admin_id: 1, status: 1 });
 actuatorSchema.index({ silo_id: 1, actuator_type: 1 });
 actuatorSchema.index({ control_mode: 1, is_enabled: 1 });
 actuatorSchema.index({ 'health_metrics.last_heartbeat': -1 });

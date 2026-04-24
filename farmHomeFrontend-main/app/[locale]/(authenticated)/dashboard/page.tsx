@@ -144,8 +144,10 @@ interface DashboardApi {
 
 type IconType = typeof Package
 
+import { api } from "@/lib/api"
+
 export default function DashboardPage({ params: _params }: { params: Promise<{ locale: string }> }) {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [dashboard, setDashboard] = useState<DashboardApi | null>(null)
   const [error, setError] = useState<string>("")
@@ -156,13 +158,12 @@ export default function DashboardPage({ params: _params }: { params: Promise<{ l
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-        // Dashboard Overview
-        const res = await fetch(`${backendUrl}/dashboard`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-        if (res.ok) {
-          const data = await res.json()
-          setDashboard(data)
+        // Force refresh user to get latest role from DB
+        await refreshUser();
+
+        const res = await api.get<DashboardApi>("/dashboard")
+        if (res.ok && res.data) {
+          setDashboard(res.data)
         } else {
           setError('Failed to load dashboard stats')
         }
@@ -176,6 +177,7 @@ export default function DashboardPage({ params: _params }: { params: Promise<{ l
   }, [])
 
   const userRole = user?.role || "technician"
+  console.log("Current User Role:", userRole);
 
   const metricIconMap: Record<string, { icon: IconType; color: string }> = {
     "Grain Batches": { icon: Package, color: "blue" },
@@ -195,12 +197,10 @@ export default function DashboardPage({ params: _params }: { params: Promise<{ l
     setLoadingSensors(true)
     setErrorSensors('')
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-      const res = await fetch(`${backendUrl}/dashboard/live-sensors`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-      if (res.ok) {
-        const data = await res.json()
-        setSensors(Array.isArray(data) ? data : data.sensors || [])
+      const res = await api.get<DashboardSensor[]>("/dashboard/live-sensors")
+      if (res.ok && res.data) {
+        const data = res.data
+        setSensors(Array.isArray(data) ? data : (data as any).sensors || [])
       } else {
         setErrorSensors('Failed to load live sensor data.')
       }

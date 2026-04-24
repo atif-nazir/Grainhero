@@ -9,6 +9,7 @@ const LoggingService = require('../services/loggingService');
 const AlertEngine = require('../services/alertEngine');
 const NotificationService = require('../services/notificationService');
 const { body, validationResult, param, query } = require('express-validator');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * @swagger
@@ -21,7 +22,7 @@ const { body, validationResult, param, query } = require('express-validator');
  * @swagger
  * /insurance/policies:
  *   get:
- *     summary: Get all insurance policies for tenant
+ *     summary: Get all insurance policies for admin
  *     tags: [Insurance]
  *     security:
  *       - bearerAuth: []
@@ -51,17 +52,17 @@ const { body, validationResult, param, query } = require('express-validator');
 router.get('/policies', [
   auth,
   requirePermission('insurance.view'),
-  // super admin can view all; others are tenant-scoped
 ], async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const adminId = req.user.admin_id || req.user._id;
 
-    // Super admin can optionally scope via ?tenant_id
+    // Super admin can optionally scope via ?admin_id
     const filter = req.user.role === 'super_admin'
-      ? (req.query.tenant_id ? { tenant_id: req.query.tenant_id } : {})
-      : { tenant_id: req.user.tenant_id };
+      ? (req.query.admin_id ? { admin_id: req.query.admin_id } : {})
+      : { admin_id: adminId };
 
     if (req.query.status) filter.status = req.query.status;
     if (req.query.provider) filter.provider_name = { $regex: req.query.provider, $options: 'i' };
@@ -121,9 +122,11 @@ router.post('/policies', [
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const adminId = req.user.admin_id || req.user._id;
+
     const policy = new InsurancePolicy({
       ...req.body,
-      tenant_id: req.user.tenant_id,
+      admin_id: adminId,
       created_by: req.user._id
     });
 
@@ -133,7 +136,7 @@ router.post('/policies', [
     try {
       await LoggingService.logInsurancePolicyCreated(req.user, policy, req.ip);
       await NotificationService.notifyAdminsAndManagers({
-        tenant_id: req.user.tenant_id,
+        admin_id: adminId,
         title: `🛡️ New Insurance Policy Created`,
         message: `Policy ${policy.policy_number} (${policy.provider_name}) created with PKR ${policy.coverage_amount?.toLocaleString()} coverage.`,
         type: 'info',
@@ -173,9 +176,11 @@ router.get('/policies/:id', [
   param('id').isMongoId().withMessage('Valid policy ID is required')
 ], async (req, res) => {
   try {
-    const filter = req.user.role === 'superadmin'
+    const adminId = req.user.admin_id || req.user._id;
+
+    const filter = req.user.role === 'super_admin'
       ? { _id: req.params.id }
-      : { _id: req.params.id, tenant_id: req.user.tenant_id };
+      : { _id: req.params.id, admin_id: adminId };
 
     const policy = await InsurancePolicy.findOne(filter)
       .populate('covered_batches.batch_id')
@@ -209,9 +214,11 @@ router.put('/policies/:id', [
   param('id').isMongoId().withMessage('Valid policy ID is required')
 ], async (req, res) => {
   try {
+    const adminId = req.user.admin_id || req.user._id;
+
     const policy = await InsurancePolicy.findOne({
       _id: req.params.id,
-      tenant_id: req.user.tenant_id
+      admin_id: adminId
     });
 
     if (!policy) {
@@ -271,19 +278,21 @@ router.post('/policies/:id/batches', [
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const adminId = req.user.admin_id || req.user._id;
+
     const policy = await InsurancePolicy.findOne({
       _id: req.params.id,
-      tenant_id: req.user.tenant_id
+      admin_id: adminId
     });
 
     if (!policy) {
       return res.status(404).json({ error: 'Policy not found' });
     }
 
-    // Verify batch exists and belongs to tenant
+    // Verify batch exists and belongs to admin
     const batch = await GrainBatch.findOne({
       _id: req.body.batch_id,
-      tenant_id: req.user.tenant_id
+      admin_id: adminId
     });
 
     if (!batch) {
@@ -312,7 +321,7 @@ router.post('/policies/:id/batches', [
  * @swagger
  * /insurance/claims:
  *   get:
- *     summary: Get all claims for tenant
+ *     summary: Get all claims for admin
  *     tags: [Insurance]
  *     security:
  *       - bearerAuth: []
@@ -326,8 +335,9 @@ router.get('/claims', [
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const adminId = req.user.admin_id || req.user._id;
 
-    const filter = { tenant_id: req.user.tenant_id };
+    const filter = { admin_id: adminId };
 
     if (req.query.status) filter.status = req.query.status;
     if (req.query.claim_type) filter.claim_type = req.query.claim_type;
@@ -371,6 +381,7 @@ router.get('/claims', [
 router.post('/claims', [
   auth,
   requirePermission('insurance.manage'),
+  requireTenantAccess,
   [
     body('policy_id').isMongoId().withMessage('Valid policy ID is required'),
     body('claim_type').isIn(['Fire', 'Theft', 'Spoilage', 'Weather Damage', 'Equipment Failure', 'Other']).withMessage('Invalid claim type'),
@@ -387,10 +398,12 @@ router.post('/claims', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    // Verify policy exists and belongs to tenant
+    const adminId = req.user.admin_id || req.user._id;
+
+    // Verify policy exists and belongs to admin
     const policy = await InsurancePolicy.findOne({
       _id: req.body.policy_id,
-      tenant_id: req.user.tenant_id
+      admin_id: adminId
     });
 
     if (!policy) {
@@ -398,13 +411,13 @@ router.post('/claims', [
     }
 
     // Generate claim number
-    const claimCount = await InsuranceClaim.countDocuments({ tenant_id: req.user.tenant_id });
+    const claimCount = await InsuranceClaim.countDocuments({ admin_id: adminId });
     const claimNumber = `CLM-${new Date().getFullYear()}-${String(claimCount + 1).padStart(3, '0')}`;
 
     const claim = new InsuranceClaim({
       ...req.body,
       claim_number: claimNumber,
-      tenant_id: req.user.tenant_id,
+      admin_id: adminId,
       created_by: req.user._id
     });
 
@@ -419,7 +432,7 @@ router.post('/claims', [
       await LoggingService.logInsuranceClaimFiled(req.user, claim, req.ip);
       await AlertEngine.processLogEntry({
         action: 'insurance_claim_filed',
-        tenant_id: req.user.tenant_id,
+        admin_id: adminId,
         user_id: req.user._id,
         user_name: req.user.name,
         entity_ref: claimNumber,
@@ -443,19 +456,22 @@ router.post('/claims', [
  * @swagger
  * /insurance/statistics:
  *   get:
- *     summary: Get insurance statistics for tenant
+ *     summary: Get insurance statistics for admin
  *     tags: [Insurance]
  *     security:
  *       - bearerAuth: []
  */
 router.get('/statistics', [
   auth,
-  requirePermission('insurance.view')
+  requirePermission('insurance.view'),
+  requireTenantAccess
 ], async (req, res) => {
   try {
+    const adminId = req.user.admin_id || req.user._id;
+
     const filter = req.user.role === 'super_admin'
-      ? (req.query.tenant_id ? { tenant_id: req.query.tenant_id } : {})
-      : { tenant_id: req.user.tenant_id };
+      ? (req.query.admin_id ? { admin_id: req.query.admin_id } : {})
+      : { admin_id: adminId };
 
     const policies = await InsurancePolicy.find(filter);
     const claims = await InsuranceClaim.find(filter);
@@ -530,7 +546,7 @@ router.post('/request-coverage',
               <p style="margin: 0 0 4px; font-weight: 600; color: #374151;">Message:</p>
               <p style="margin: 0; color: #6b7280;">${message}</p>
             </div>
-            <p style="margin-top: 20px; color: #9ca3af; font-size: 12px;">This request was sent from GrainHero Insurance module.</p>
+            <p style="mragin-top: 20px; color: #9ca3af; font-size: 12px;">This request was sent from GrainHero Insurance module.</p>
           </div>
         </div>
       `;
@@ -568,12 +584,15 @@ router.post('/request-coverage',
 router.get('/claims/:id', [
   auth,
   requirePermission('insurance.view'),
+  requireTenantAccess,
   param('id').isMongoId().withMessage('Valid claim ID is required')
 ], async (req, res) => {
   try {
+    const adminId = req.user.admin_id || req.user._id;
+
     const filter = req.user.role === 'super_admin'
       ? { _id: req.params.id }
-      : { _id: req.params.id, tenant_id: req.user.tenant_id };
+      : { _id: req.params.id, admin_id: adminId };
 
     const claim = await InsuranceClaim.findOne(filter)
       .populate('policy_id', 'policy_number provider_name coverage_type')
@@ -626,7 +645,7 @@ router.post('/claims/:id/review', [
     try {
       await LoggingService.logInsuranceClaimReviewed(req.user, claim, req.ip);
       await NotificationService.notify({
-        tenant_id: claim.tenant_id,
+        admin_id: claim.admin_id,
         recipient_ids: [claim.created_by],
         title: `🔍 Claim Under Review: ${claim.claim_number}`,
         message: `Your claim ${claim.claim_number} is now under review.`,
@@ -674,7 +693,7 @@ router.put('/claims/:id/status', [
         await LoggingService.logInsuranceClaimApproved(req.user, claim, claim.amount_approved, req.ip);
         await AlertEngine.processLogEntry({
           action: 'insurance_claim_approved',
-          tenant_id: claim.tenant_id,
+          admin_id: claim.admin_id,
           user_id: req.user._id,
           user_name: req.user.name,
           entity_ref: claim.claim_number,
@@ -692,7 +711,7 @@ router.put('/claims/:id/status', [
         await LoggingService.logInsuranceClaimRejected(req.user, claim, claim.rejection_reason, req.ip);
         await AlertEngine.processLogEntry({
           action: 'insurance_claim_rejected',
-          tenant_id: claim.tenant_id,
+          admin_id: claim.admin_id,
           user_id: req.user._id,
           user_name: req.user.name,
           entity_ref: claim.claim_number,
@@ -717,7 +736,7 @@ router.put('/claims/:id/status', [
     // Notify claim creator
     try {
       await NotificationService.notify({
-        tenant_id: claim.tenant_id,
+        admin_id: claim.admin_id,
         recipient_ids: [claim.created_by],
         title: `🛡️ Claim ${req.body.status === 'approved' ? 'Approved ✅' : req.body.status === 'rejected' ? 'Rejected ❌' : 'Updated'}`,
         message: `Your claim ${claim.claim_number} has been ${req.body.status}. ${req.body.notes || ''}`,
@@ -803,12 +822,12 @@ router.put('/claims/:id/assessment', [
       await LoggingService.log({
         action: 'insurance_claim_updated',
         category: 'insurance',
-        description: `Assessment updated for claim ${claim.claim_number} - Estimated: PKR ${req.body.estimated_damage_value?.toLocaleString() || 'N/A'}`,
+        description: `Assessment updated for claim ${claim.claim_number}`,
         user: req.user,
         entity_type: 'InsuranceClaim',
         entity_id: claim._id,
         entity_ref: claim.claim_number,
-        metadata: { update_type: 'assessment', ...req.body },
+        metadata: { update_type: 'assessment' },
         ip_address: req.ip
       });
     } catch (logErr) { console.error('Logging error:', logErr.message); }
@@ -821,14 +840,16 @@ router.put('/claims/:id/assessment', [
 });
 
 /**
- * POST /insurance/claims/:id/payment — Record payment for an approved claim
+ * POST /insurance/claims/:id/payment — Record claim settlement payment
  */
 router.post('/claims/:id/payment', [
   auth,
   requirePermission('insurance.manage'),
   param('id').isMongoId().withMessage('Valid claim ID is required'),
-  body('amount').isFloat({ min: 0 }).withMessage('Payment amount must be positive'),
-  body('payment_method').isString().withMessage('Payment method is required')
+  [
+    body('amount').isFloat({ min: 0 }).withMessage('Payment amount must be positive'),
+    body('payment_method').notEmpty().withMessage('Payment method is required')
+  ]
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -837,231 +858,26 @@ router.post('/claims/:id/payment', [
     const claim = await InsuranceClaim.findById(req.params.id);
     if (!claim) return res.status(404).json({ error: 'Claim not found' });
 
-    if (claim.status !== 'approved' && claim.status !== 'processing') {
-      return res.status(400).json({ error: 'Claim must be approved before payment' });
-    }
-
-    claim.payment = {
-      amount: req.body.amount,
-      payment_method: req.body.payment_method,
-      payment_reference: req.body.payment_reference || '',
+    claim.settlement = {
+      ...claim.settlement,
+      ...req.body,
       payment_date: new Date(),
-      processed_by: req.user._id
+      status: 'paid'
     };
-    claim.status = 'processing';
-    claim.amount_approved = req.body.amount;
+
+    claim.status = 'processing'; // Mark as processing for final closure
 
     await claim.save();
 
-    // Log & alert
     try {
       await LoggingService.logInsuranceClaimPaymentProcessed(req.user, claim, req.body, req.ip);
-      await AlertEngine.processLogEntry({
-        action: 'insurance_claim_payment_processed',
-        tenant_id: claim.tenant_id,
-        user_id: req.user._id,
-        user_name: req.user.name,
-        entity_ref: claim.claim_number,
-        description: `Payment of PKR ${req.body.amount?.toLocaleString()} processed for claim ${claim.claim_number}`,
-        category: 'insurance'
-      });
     } catch (logErr) { console.error('Logging error:', logErr.message); }
 
-    // Notify claim creator
-    try {
-      await NotificationService.notify({
-        tenant_id: claim.tenant_id,
-        recipient_ids: [claim.created_by],
-        title: `💰 Claim Payment Processed: ${claim.claim_number}`,
-        message: `Payment of PKR ${req.body.amount?.toLocaleString()} has been processed for your claim.`,
-        type: 'success',
-        category: 'insurance',
-        entity_type: 'InsuranceClaim',
-        entity_id: claim._id,
-        action_url: '/insurance',
-        channels: { in_app: true, email: true, sms: false }
-      });
-    } catch (notifErr) { console.error('Notification error:', notifErr.message); }
-
-    res.json({ message: 'Payment processed', claim });
+    res.json({ message: 'Payment recorded', claim });
   } catch (error) {
-    console.error('Process payment error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * POST /insurance/claims/:id/notes — Add internal notes / communication
- */
-router.post('/claims/:id/notes', [
-  auth,
-  requirePermission('insurance.view'),
-  param('id').isMongoId().withMessage('Valid claim ID is required'),
-  body('message').isString().notEmpty().withMessage('Note message is required')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-    const filter = req.user.role === 'super_admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, tenant_id: req.user.tenant_id };
-
-    const claim = await InsuranceClaim.findOne(filter);
-    if (!claim) return res.status(404).json({ error: 'Claim not found' });
-
-    claim.communications = claim.communications || [];
-    claim.communications.push({
-      from_user: req.user._id,
-      message: req.body.message,
-      sent_at: new Date()
-    });
-
-    await claim.save();
-
-    res.json({ message: 'Note added', claim });
-  } catch (error) {
-    console.error('Add note error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * POST /insurance/claims/:id/documents — Upload supporting documents
- */
-router.post('/claims/:id/documents', [
-  auth,
-  param('id').isMongoId().withMessage('Valid claim ID is required')
-], async (req, res) => {
-  try {
-    const filter = req.user.role === 'super_admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, tenant_id: req.user.tenant_id };
-
-    const claim = await InsuranceClaim.findOne(filter);
-    if (!claim) return res.status(404).json({ error: 'Claim not found' });
-
-    // Add document references from body
-    const docs = req.body.documents || [];
-    claim.supporting_documents = claim.supporting_documents || [];
-    docs.forEach(doc => {
-      claim.supporting_documents.push({
-        document_type: doc.document_type || 'other',
-        file_url: doc.file_url,
-        original_name: doc.original_name,
-        uploaded_by: req.user._id,
-        uploaded_at: new Date()
-      });
-    });
-
-    await claim.save();
-
-    try {
-      await LoggingService.logInsuranceClaimDocumentUploaded(req.user, claim, docs.map(d => d.document_type).join(', '), req.ip);
-    } catch (logErr) { console.error('Logging error:', logErr.message); }
-
-    res.json({ message: `${docs.length} document(s) added`, claim });
-  } catch (error) {
-    console.error('Upload documents error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * PUT /insurance/policies/:id/renew — Renew an expired/expiring policy
- */
-router.put('/policies/:id/renew', [
-  auth,
-  requirePermission('insurance.manage'),
-  param('id').isMongoId().withMessage('Valid policy ID is required'),
-  body('new_end_date').isISO8601().withMessage('Valid new end date is required')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-    const policy = await InsurancePolicy.findById(req.params.id);
-    if (!policy) return res.status(404).json({ error: 'Policy not found' });
-
-    policy.end_date = new Date(req.body.new_end_date);
-    policy.renewal_date = new Date();
-    policy.status = 'active';
-    if (req.body.premium_amount) policy.premium_amount = req.body.premium_amount;
-
-    await policy.save();
-
-    try {
-      await LoggingService.logInsurancePolicyRenewed(req.user, policy, req.ip);
-    } catch (logErr) { console.error('Logging error:', logErr.message); }
-
-    res.json({ message: 'Policy renewed', policy });
-  } catch (error) {
-    console.error('Renew policy error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * DELETE /insurance/policies/:id — Soft-delete (cancel) a policy
- */
-router.delete('/policies/:id', [
-  auth,
-  requirePermission('insurance.manage'),
-  param('id').isMongoId().withMessage('Valid policy ID is required')
-], async (req, res) => {
-  try {
-    const policy = await InsurancePolicy.findById(req.params.id);
-    if (!policy) return res.status(404).json({ error: 'Policy not found' });
-
-    policy.status = 'cancelled';
-    policy.deleted_at = new Date();
-    await policy.save();
-
-    try {
-      await LoggingService.logInsurancePolicyCancelled(req.user, policy, req.body.reason || 'Cancelled by user', req.ip);
-      await AlertEngine.processLogEntry({
-        action: 'insurance_policy_cancelled',
-        tenant_id: policy.tenant_id,
-        user_id: req.user._id,
-        user_name: req.user.name,
-        entity_ref: policy.policy_number,
-        description: `Policy ${policy.policy_number} cancelled`,
-        category: 'insurance'
-      });
-    } catch (logErr) { console.error('Logging error:', logErr.message); }
-
-    res.json({ message: 'Policy cancelled', policy });
-  } catch (error) {
-    console.error('Delete policy error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * GET /insurance/claims/review-queue — All pending claims for super admin review
- */
-router.get('/review-queue', [
-  auth,
-  requirePermission('insurance.manage')
-], async (req, res) => {
-  try {
-    const filter = req.user.role === 'super_admin'
-      ? { status: { $in: ['pending', 'under_review', 'flagged'] } }
-      : { tenant_id: req.user.tenant_id, status: { $in: ['pending', 'under_review', 'flagged'] } };
-
-    const claims = await InsuranceClaim.find(filter)
-      .populate('policy_id', 'policy_number provider_name coverage_type')
-      .populate('batch_affected.batch_id', 'batch_id grain_type quantity_kg')
-      .populate('created_by', 'name email role')
-      .sort({ created_at: -1 })
-      .lean();
-
-    res.json({ claims, total: claims.length });
-  } catch (error) {
-    console.error('Review queue error:', error);
+    console.error('Record claim payment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 module.exports = router;
-

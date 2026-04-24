@@ -114,7 +114,7 @@ router.post('/readings', [
         // Create sensor reading with probe type
         const reading = new SensorReading({
             device_id,
-            tenant_id: sensorDevice.tenant_id,
+            admin_id: sensorDevice.admin_id,
             silo_id: sensorDevice.silo_id,
             timestamp: timestamp ? new Date(timestamp) : new Date(),
             probe_type, // Add probe type to distinguish ambient vs core
@@ -182,7 +182,7 @@ router.get('/readings', [
         const endDate = end_date ? new Date(end_date) : new Date();
 
         const filter = {
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id || req.user._id,
             timestamp: { $gte: startDate, $lte: endDate }
         };
 
@@ -236,7 +236,7 @@ router.get('/analysis', [
         const startDate = new Date(endDate.getTime() - parseInt(days) * 24 * 60 * 60 * 1000);
 
         const filter = {
-            tenant_id: req.user.tenant_id,
+            admin_id: req.user.admin_id || req.user._id,
             timestamp: { $gte: startDate, $lte: endDate }
         };
 
@@ -331,7 +331,7 @@ router.get('/health', [
     try {
         const { silo_id } = req.query;
 
-        const filter = { tenant_id: req.user.tenant_id };
+        const filter = { admin_id: req.user.admin_id || req.user._id };
         if (silo_id) filter.silo_id = silo_id;
 
         // Get health status for all dual-probe devices
@@ -411,7 +411,7 @@ async function checkProbeSpecificAlerts(reading, sensorDevice) {
             for (const violation of violations) {
                 const alert = new GrainAlert({
                     alert_id: require('uuid').v4(),
-                    tenant_id: reading.tenant_id,
+                    admin_id: reading.admin_id,
                     silo_id: reading.silo_id,
                     device_id: reading.device_id,
                     title: `${probeType.toUpperCase()} ${violation.sensor_type.toUpperCase()} ${violation.severity.toUpperCase()}`,
@@ -534,7 +534,7 @@ async function checkAmbientCoreDifferences(coreReading, sensorDevice) {
         if (significantDifferences.length > 0) {
             const alert = new GrainAlert({
                 alert_id: require('uuid').v4(),
-                tenant_id: coreReading.tenant_id,
+                admin_id: coreReading.admin_id,
                 silo_id: coreReading.silo_id,
                 device_id: coreReading.device_id,
                 title: 'SIGNIFICANT AMBIENT-CORE DIFFERENCE',

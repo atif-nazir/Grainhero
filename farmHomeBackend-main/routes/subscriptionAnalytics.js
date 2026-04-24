@@ -27,7 +27,7 @@ router.get("/my-analytics", auth, async (req, res) => {
 
     // Update usage stats
     await updateUsageStats(subscription._id);
-    await subscription.populate("tenant_id");
+    await subscription.populate("admin_id");
 
     // Check for limit warnings
     const warnings = await checkUsageLimits(subscription._id);
@@ -102,7 +102,7 @@ router.get("/all-analytics", auth, requireSuperAdmin, async (req, res) => {
       status: SUBSCRIPTION_STATUSES.ACTIVE,
       deleted_at: null,
     })
-      .populate("tenant_id")
+      .populate("admin_id")
       .populate("created_by", "name email")
       .sort({ created_at: -1 });
 
@@ -114,7 +114,7 @@ router.get("/all-analytics", auth, requireSuperAdmin, async (req, res) => {
         return {
           subscription_id: sub._id,
           plan_name: sub.plan_name,
-          tenant: sub.tenant_id?.name || "N/A",
+          tenant: sub.admin_id?.name || "N/A",
           status: sub.status,
           price_per_month: sub.price_per_month,
           usage: sub.current_usage,

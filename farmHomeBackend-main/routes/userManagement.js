@@ -10,7 +10,6 @@ const {
   requireTenantAccess,
 } = require("../middleware/roleAuth");
 const User = require("../models/User");
-const Tenant = require("../models/Tenant");
 const { USER_ROLES } = require("../configs/enum");
 const { canManageUser } = require("../configs/role-permissions");
 const LoggingService = require("../services/loggingService");
@@ -30,7 +29,7 @@ const LoggingService = require("../services/loggingService");
  *           type: string
  *           enum: [super_admin, admin, manager, technician]
  *       - in: query
- *         name: tenant_id
+ *         name: admin_id
  *         schema:
  *           type: string
  *       - in: query
@@ -53,9 +52,8 @@ const LoggingService = require("../services/loggingService");
  */
 router.get("/users", auth, async (req, res) => {
   try {
-    const { role, tenant_id, limit = 50, page = 1 } = req.query;
+    const { role, admin_id, limit = 50, page = 1 } = req.query;
     const userRole = req.user.role;
-    const userTenantId = req.user.tenant_id || req.user.owned_tenant_id;
 
     // Build query based on user role
     let query = {};
@@ -63,7 +61,7 @@ router.get("/users", auth, async (req, res) => {
     if (userRole === USER_ROLES.SUPER_ADMIN) {
       // Super admin can see all users
       if (role) query.role = role;
-      if (tenant_id) query.$or = [{ tenant_id }, { owned_tenant_id: tenant_id }];
+      if (admin_id) query.admin_id = admin_id;
     } else if (userRole === USER_ROLES.ADMIN) {
       // Admin can only see their team members (managers and technicians)
       query.$or = [
@@ -155,7 +153,6 @@ router.post("/users", auth, requireUserCreationPermission, async (req, res) => {
   try {
     const { name, email, phone, password, role, location } = req.body;
     const creatorRole = req.user.role;
-    const creatorTenantId = req.user.tenant_id || req.user.owned_tenant_id;
 
     // Validation
     if (!name || !email || !phone || !password || !role) {
@@ -268,7 +265,6 @@ router.get(
     try {
       const { userId } = req.params;
       const userRole = req.user.role;
-      const userTenantId = req.user.tenant_id || req.user.owned_tenant_id;
 
       // Validate userId format
       if (!/^[0-9a-fA-F]{24}$/.test(userId)) {
@@ -277,8 +273,7 @@ router.get(
 
       const user = await User.findById(userId)
         .select("-password -resetPasswordToken -resetPasswordExpires -__v")
-        .populate("tenant_id", "name email")
-        .populate("owned_tenant_id", "name email");
+        .populate("admin_id", "name email");
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -288,9 +283,7 @@ router.get(
       if (userRole === USER_ROLES.SUPER_ADMIN) {
         // Super admin can see any user
       } else if (userRole === USER_ROLES.ADMIN) {
-        // Admin can only see users in their tenant
-        const userTenant = user.tenant_id || user.owned_tenant_id;
-        if (!userTenant || userTenant.toString() !== userTenantId.toString()) {
+        if (user.admin_id?.toString() !== req.user.id && user._id.toString() !== req.user.id) {
           return res.status(403).json({
             error: "Access denied. Cannot view this user",
             code: "USER_ACCESS_DENIED",
@@ -361,7 +354,6 @@ router.put(
       const { userId } = req.params;
       const { name, phone, role, location, blocked } = req.body;
       const updaterRole = req.user.role;
-      const updaterTenantId = req.user.tenant_id || req.user.owned_tenant_id;
 
       // Validate userId format
       if (!/^[0-9a-fA-F]{24}$/.test(userId)) {
@@ -377,12 +369,7 @@ router.put(
       if (updaterRole === USER_ROLES.SUPER_ADMIN) {
         // Super admin can update any user
       } else if (updaterRole === USER_ROLES.ADMIN) {
-        // Admin can only update users in their tenant
-        const userTenant = user.tenant_id || user.owned_tenant_id;
-        if (
-          !userTenant ||
-          userTenant.toString() !== updaterTenantId.toString()
-        ) {
+        if (user.admin_id?.toString() !== req.user.id && user._id.toString() !== req.user.id) {
           return res.status(403).json({
             error: "Access denied. Cannot update this user",
             code: "USER_ACCESS_DENIED",
@@ -471,7 +458,6 @@ router.delete(
     try {
       const { userId } = req.params;
       const deleterRole = req.user.role;
-      const deleterTenantId = req.user.tenant_id || req.user.owned_tenant_id;
 
       // Validate userId format
       if (!/^[0-9a-fA-F]{24}$/.test(userId)) {
@@ -495,12 +481,7 @@ router.delete(
       if (deleterRole === USER_ROLES.SUPER_ADMIN) {
         // Super admin can delete any user
       } else if (deleterRole === USER_ROLES.ADMIN) {
-        // Admin can only delete users in their tenant
-        const userTenant = user.tenant_id || user.owned_tenant_id;
-        if (
-          !userTenant ||
-          userTenant.toString() !== deleterTenantId.toString()
-        ) {
+        if (user.admin_id?.toString() !== req.user.id) {
           return res.status(403).json({
             error: "Access denied. Cannot delete this user",
             code: "USER_ACCESS_DENIED",

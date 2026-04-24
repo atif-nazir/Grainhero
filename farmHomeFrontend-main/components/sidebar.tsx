@@ -13,6 +13,7 @@ import {
   LayoutDashboard, Users, BarChart3, Cloud, Smartphone, Settings, LogOut,
   Package, OctagonAlert, ChevronDown, ChevronRight, Sparkles, QrCode,
   CreditCard, Shield, Brain, Zap, ClipboardList, Menu, X, PanelLeftClose,
+  Building2, Activity, Warehouse,
 } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslations } from "next-intl"
@@ -20,6 +21,7 @@ import { LanguageSelector } from "@/components/language-selector"
 import { useAuth } from "@/app/[locale]/providers"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/app/[locale]/providers"
+import { api } from "@/lib/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 // ── Types ──
@@ -41,7 +43,7 @@ const dashboardNav = [
 ]
 const grainOperationsNav = [
   { name: "grain-batches", label: "Grain Procurement & Intake", href: "/grain-batches", icon: Package, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
-  { name: "silos", label: "Storage Assignment", href: "/silos", icon: Package, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
+  { name: "silos", label: "Storage Assignment", href: "/silos", icon: Warehouse, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
   { name: "buyers", label: "Buyers & Dispatch", href: "/buyers", icon: Users, roles: ["super_admin", "admin", "manager"], badge: undefined },
   { name: "traceability", label: "Traceability", href: "/traceability", icon: QrCode, roles: ["super_admin", "admin", "manager", "technician"], badge: undefined },
 ]
@@ -70,7 +72,12 @@ const systemNav = [
   { name: "team-management", label: "Team Management", href: "/team-management", icon: Users, roles: ["admin", "super_admin", "manager"], badge: undefined },
   { name: "settings", label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin"], badge: undefined },
 ]
-const superAdminNav: NavItem[] = []
+const superAdminNav: NavItem[] = [
+  { name: "tenant-management", label: "Tenant Management", href: "/super-admin/tenants", icon: Building2, roles: ["super_admin"], badge: "CORE" },
+  { name: "plan-management", label: "Plan Management", href: "/super-admin/subscriptions", icon: CreditCard, roles: ["super_admin"], badge: "BIZ" },
+  { name: "system-health", label: "System Health", href: "/system-health", icon: Activity, roles: ["super_admin"], badge: "LIVE" },
+  { name: "global-analytics", label: "Global Analytics", href: "/global-analytics", icon: BarChart3, roles: ["super_admin"], badge: "DATA" },
+]
 
 // ══════════════════════════════════════
 // SIDEBAR COMPONENT
@@ -84,19 +91,17 @@ export function Sidebar() {
   const { currentLanguage } = useLanguage()
   const userRole = user?.role || "technician"
 
-  // ── State ──
-  const [isPinned, setIsPinned] = useState(false)
-  const [isHovering, setIsHovering] = useState(false)
+  const [isExpandedState, setIsExpandedState] = useState(true)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [grainOpsExpanded, setGrainOpsExpanded] = useState(true)
   const [aiAnalyticsExpanded, setAiAnalyticsExpanded] = useState(false)
   const [iotMonitoringExpanded, setIotMonitoringExpanded] = useState(false)
   const [businessSystemExpanded, setBusinessSystemExpanded] = useState(true)
   const [systemExpanded, setSystemExpanded] = useState(true)
-  const enterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const leaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [alertStats, setAlertStats] = useState({ unresolved: 0, critical: 0 })
+  const sidebarRef = useRef<HTMLElement>(null)
 
-  const isExpanded = isMobile ? true : (isPinned || isHovering)
+  const isExpanded = isMobile ? true : isExpandedState
 
   // Close mobile sidebar on route change
   useEffect(() => { if (isMobile) setIsMobileOpen(false) }, [pathname, isMobile])
@@ -109,6 +114,17 @@ export function Sidebar() {
     }
   }, [isMobile, isMobileOpen])
 
+  // Click outside to collapse
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (isExpandedState && !isMobile && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setIsExpandedState(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [isExpandedState, isMobile])
+
   // Escape key closes mobile
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsMobileOpen(false) }
@@ -116,26 +132,23 @@ export function Sidebar() {
     return () => document.removeEventListener('keydown', h)
   }, [])
 
-  // ── Hover handlers with generous delays to prevent flickering ──
-  const handleMouseEnter = useCallback(() => {
-    if (isPinned || isMobile) return
-    if (leaveTimeoutRef.current) { clearTimeout(leaveTimeoutRef.current); leaveTimeoutRef.current = null }
-    enterTimeoutRef.current = setTimeout(() => setIsHovering(true), 150)
-  }, [isPinned, isMobile])
+  // Removed hover handlers
 
-  const handleMouseLeave = useCallback(() => {
-    if (isPinned || isMobile) return
-    if (enterTimeoutRef.current) { clearTimeout(enterTimeoutRef.current); enterTimeoutRef.current = null }
-    leaveTimeoutRef.current = setTimeout(() => setIsHovering(false), 400)
-  }, [isPinned, isMobile])
-
-  // Cleanup timeouts
-  useEffect(() => {
-    return () => {
-      if (enterTimeoutRef.current) clearTimeout(enterTimeoutRef.current)
-      if (leaveTimeoutRef.current) clearTimeout(leaveTimeoutRef.current)
+  // ── Fetch Stats ──
+  const fetchStats = useCallback(async () => {
+    const res = await api.get<{ unresolved: number, critical: number }>("/api/alerts/grain/stats")
+    if (res.ok && res.data) {
+      setAlertStats(res.data)
     }
   }, [])
+
+  useEffect(() => {
+    fetchStats()
+    const interval = setInterval(fetchStats, 60000) // Every minute
+    return () => clearInterval(interval)
+  }, [fetchStats])
+
+  // Removed cleanup timeouts
 
   const handleNavClick = useCallback(() => {
     if (isMobile) setIsMobileOpen(false)
@@ -150,7 +163,12 @@ export function Sidebar() {
 
   const visibleDashboardNav = dashboardNav.filter(hasAccess)
   const visibleGrainOpsNav = showOnlyManager ? grainOperationsNav.filter(hasAccess) : []
-  const visibleIoTNav = showIoTSections ? iotMonitoringNav.filter(hasAccess) : []
+  const visibleIoTNav = (showIoTSections ? iotMonitoringNav.filter(hasAccess) : []).map(item => {
+    if (item.name === "grain-alerts" && alertStats.unresolved > 0) {
+      return { ...item, badge: alertStats.unresolved > 99 ? "99+" : String(alertStats.unresolved) }
+    }
+    return item
+  })
   const visibleAINav = showOnlyManager ? aiAnalyticsNav.filter(hasAccess) : []
   const visibleBusinessNav = showBusinessSections ? businessNav.filter(hasAccess) : []
   const visibleSystemNav = showSystemSections ? systemNav.filter(hasAccess) : []
@@ -174,20 +192,23 @@ export function Sidebar() {
           <TooltipTrigger asChild>
             <Link href={`/${currentLanguage}${item.href}`} onClick={handleNavClick}
               className={cn(
-                "relative flex items-center justify-center w-10 h-10 mx-auto rounded-xl transition-all duration-200 group",
+                "relative flex items-center justify-center w-10 h-10 mx-auto rounded-xl transition-all duration-200 group mb-1.5",
                 isActive
-                  ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200"
-                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  ? "bg-emerald-50/60 text-emerald-600"
+                  : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
               )}>
-              <Icon className="h-[18px] w-[18px]" />
+              <Icon className={cn("h-[20px] w-[20px]", isActive ? "text-emerald-600" : "group-hover:text-slate-700")} strokeWidth={isActive ? 2 : 1.5} />
               {item.badge && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full ring-2 ring-white" />
+                <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-amber-500 rounded-full" />
+              )}
+              {isActive && (
+                <span className="absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 bg-emerald-600 rounded-r-full" />
               )}
             </Link>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="font-medium text-sm px-3 py-1.5 rounded-lg">
+          <TooltipContent side="right" sideOffset={12} className="font-semibold text-xs px-3 py-1.5 bg-slate-900 text-white rounded-lg border-none shadow-xl">
             {label}
-            {item.badge && <span className="ml-2 text-[10px] font-semibold text-blue-400">• {item.badge}</span>}
+            {item.badge && <span className="ml-2 text-[10px] font-bold text-emerald-300">• {item.badge}</span>}
           </TooltipContent>
         </Tooltip>
       )
@@ -196,17 +217,20 @@ export function Sidebar() {
     return (
       <Link key={item.name} href={`/${currentLanguage}${item.href}`} onClick={handleNavClick}
         className={cn(
-          "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group",
+          "relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13.5px] font-semibold transition-all duration-300 group mb-1",
           isActive
-            ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 shadow-sm ring-1 ring-blue-100/80"
-            : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+            ? "bg-gradient-to-r from-emerald-50 to-emerald-50/20 text-emerald-700 ring-1 ring-emerald-200/50 shadow-sm"
+            : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
         )}>
-        {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-600 rounded-r-full" />}
-        <Icon className={cn("h-[16px] w-[16px] shrink-0", isActive && "text-blue-600")} />
+        {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-600 rounded-r-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />}
+        <Icon className={cn("h-[18px] w-[18px] shrink-0 transition-transform duration-300 group-hover:scale-110", isActive ? "text-emerald-600" : "group-hover:text-slate-700")} strokeWidth={isActive ? 2.5 : 2} />
         <span className="truncate">{label}</span>
         {item.badge && (
           <Badge variant={item.badge === "AI" || item.badge === "ML" ? "default" : "secondary"}
-            className="ml-auto text-[9px] px-1.5 py-0 h-4 shrink-0 font-semibold">
+            className={cn(
+              "ml-auto text-[9px] px-1.5 py-0 h-4 shrink-0 font-bold uppercase tracking-wider",
+              (item.badge === "AI" || item.badge === "ML") ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-100 text-slate-500"
+            )}>
             {item.badge}
           </Badge>
         )}
@@ -214,29 +238,47 @@ export function Sidebar() {
     )
   }
 
-  function renderSection(title: string, expanded: boolean, setExpanded: (v: boolean) => void, items: NavItem[]) {
+  function renderSection(title: string, expanded: boolean, setExpanded: (v: boolean) => void, items: NavItem[], SectionIcon?: React.ElementType) {
     if (items.length === 0) return null
 
     if (!isExpanded) {
-      if (!expanded) return null
+      const Icon = SectionIcon || Package
       return (
-        <div key={title} className="space-y-1 py-1">
-          <div className="mx-3 my-1 border-t border-gray-100" />
-          {items.map(renderNavItem)}
+        <div key={title} className="py-2 border-t border-slate-50 mt-2 first:mt-0 first:border-0 flex flex-col items-center">
+           <Tooltip>
+             <TooltipTrigger asChild>
+               <button onClick={() => setExpanded(!expanded)}
+                 className={cn("relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 group mb-1.5", expanded ? "text-emerald-600 bg-emerald-50 border border-emerald-100" : "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 bg-slate-50/80 border border-slate-100")}>
+                 <Icon className={cn("h-[20px] w-[20px] transition-transform", expanded ? "scale-110" : "group-hover:scale-110")} strokeWidth={1.5} />
+                 <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm border border-slate-100">
+                   <span className={cn("text-[10px] font-black", expanded ? "text-emerald-500" : "text-slate-400 group-hover:text-emerald-500")}>
+                     {expanded ? "-" : "+"}
+                   </span>
+                 </div>
+               </button>
+             </TooltipTrigger>
+             <TooltipContent side="right" sideOffset={12} className="font-semibold text-xs px-3 py-1.5 bg-slate-900 text-white rounded-lg border-none shadow-xl">
+               {expanded ? "Collapse" : "Expand"} {title}
+             </TooltipContent>
+           </Tooltip>
+
+           <div className={cn("overflow-hidden transition-all duration-300 w-full", expanded ? "max-h-[800px] opacity-100 mt-1" : "max-h-0 opacity-0")}>
+             {items.map(renderNavItem)}
+           </div>
         </div>
       )
     }
 
     return (
-      <div key={title} className="mt-4 first:mt-0">
+      <div key={title} className="mt-6 first:mt-0">
         <button onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-between px-3 py-1 text-[10px] font-bold text-gray-300 uppercase tracking-[0.08em] hover:text-gray-500 transition-colors">
-          <span>{title}</span>
-          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          className="w-full flex items-center justify-between px-3.5 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-[0.15em] hover:text-emerald-600 transition-colors group">
+          <span className="group-hover:translate-x-1 transition-transform">{title}</span>
+          {expanded ? <ChevronDown className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100" /> : <ChevronRight className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100" />}
         </button>
         <div className={cn(
-          "overflow-hidden transition-all duration-300",
-          expanded ? "max-h-[500px] opacity-100 mt-1" : "max-h-0 opacity-0"
+          "overflow-hidden transition-all duration-300 ease-in-out",
+          expanded ? "max-h-[800px] opacity-100 mt-1" : "max-h-0 opacity-0"
         )}>
           <div className="space-y-0.5">{items.map(renderNavItem)}</div>
         </div>
@@ -248,115 +290,118 @@ export function Sidebar() {
   // SIDEBAR CONTENT
   // ══════════════════════════════════════
   const sidebarContent = (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white/70 backdrop-blur-md">
       {/* ── Header ── */}
       <div className={cn(
-        "flex items-center shrink-0 h-16 border-b border-gray-100/80",
-        isExpanded ? "px-5 justify-between" : "px-0 justify-center"
+        "flex items-center shrink-0 h-20 border-b border-slate-100/50",
+        isExpanded ? "px-6 justify-between" : "px-0 justify-center"
       )}>
         {isExpanded ? (
           <>
-            <Link href={`/${currentLanguage}/dashboard`} className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-200/50">
-                <span className="text-white font-extrabold text-sm">G</span>
+            <Link href={`/${currentLanguage}/dashboard`} className="flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-200 group-hover:scale-105 transition-transform duration-300 ring-2 ring-emerald-50">
+                <span className="text-white font-black text-lg">G</span>
               </div>
-              <div>
-                <span className="text-base font-bold text-gray-900 tracking-tight">GrainHero</span>
-                <span className="block text-[9px] font-medium text-gray-300 uppercase tracking-widest -mt-0.5">Platform</span>
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-slate-900 tracking-tight leading-tight">GrainHero</span>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em]">Enterprise</span>
               </div>
             </Link>
-            {isMobile ? (
-              <button onClick={() => setIsMobileOpen(false)} aria-label="Close"
-                className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            ) : (
-              <button onClick={() => { setIsPinned(false); setIsHovering(false) }} aria-label="Collapse"
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-300 hover:text-gray-500 transition-colors">
-                <PanelLeftClose className="h-4 w-4" />
-              </button>
-            )}
           </>
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={() => setIsPinned(true)} aria-label="Expand sidebar"
-                className="p-0 rounded-xl hover:scale-105 transition-transform">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-200/50">
-                  <span className="text-white font-extrabold text-sm">G</span>
+              <button onClick={() => setIsExpandedState(true)} className="group mt-2">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-200 group-hover:scale-110 transition-all duration-300 ring-2 ring-white">
+                  <span className="text-white font-black text-xl">G</span>
                 </div>
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12}>Pin sidebar open</TooltipContent>
+            <TooltipContent side="right" sideOffset={16} className="bg-slate-900 text-white font-bold border-none shadow-xl">
+              Expand Menu
+            </TooltipContent>
           </Tooltip>
         )}
       </div>
 
-      {/* ── Navigation (scrollable) ── */}
-      <div className="flex-1 overflow-hidden min-h-0">
-        <ScrollArea className="h-full">
-          <nav className={cn("py-3", isExpanded ? "px-3" : "px-1.5 space-y-1")}>
-            {visibleDashboardNav.map(renderNavItem)}
-            {visibleGrainOpsNav.length > 0 && renderSection("Grain Operations", grainOpsExpanded, setGrainOpsExpanded, visibleGrainOpsNav)}
-            {visibleIoTNav.length > 0 && renderSection("IoT Monitoring", iotMonitoringExpanded, setIotMonitoringExpanded, visibleIoTNav)}
-            {visibleAINav.length > 0 && renderSection("AI & Analytics", aiAnalyticsExpanded, setAiAnalyticsExpanded, visibleAINav)}
-            {visibleBusinessNav.length > 0 && renderSection("Business & System", businessSystemExpanded, setBusinessSystemExpanded, visibleBusinessNav)}
-            {visibleSuperAdminNav.length > 0 && renderSection("Super Admin", true, () => {}, visibleSuperAdminNav)}
-            {visibleSystemNav.length > 0 && renderSection("System", systemExpanded, setSystemExpanded, visibleSystemNav)}
+      {/* ── Navigation ── */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <style dangerouslySetInnerHTML={{ __html: `::-webkit-scrollbar { display: none; }` }} />
+        <div className="h-full">
+          <nav className={cn("py-4", isExpanded ? "px-4" : "px-2")}>
+            <div className="mb-4">
+              {visibleDashboardNav.map(renderNavItem)}
+            </div>
+            {visibleGrainOpsNav.length > 0 && renderSection("Grain Operations", grainOpsExpanded, setGrainOpsExpanded, visibleGrainOpsNav, Package)}
+            {visibleIoTNav.length > 0 && renderSection("IoT Monitoring", iotMonitoringExpanded, setIotMonitoringExpanded, visibleIoTNav, Activity)}
+            {visibleAINav.length > 0 && renderSection("AI & Analytics", aiAnalyticsExpanded, setAiAnalyticsExpanded, visibleAINav, Brain)}
+            {visibleBusinessNav.length > 0 && renderSection("Business & Reports", businessSystemExpanded, setBusinessSystemExpanded, visibleBusinessNav, BarChart3)}
+            {visibleSuperAdminNav.length > 0 && renderSection("Platform Admin", true, () => {}, visibleSuperAdminNav, Building2)}
+            {visibleSystemNav.length > 0 && renderSection("System Management", systemExpanded, setSystemExpanded, visibleSystemNav, Settings)}
           </nav>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* ── Bottom ── */}
-      <div className={cn("border-t border-gray-100/80 shrink-0", isExpanded ? "p-3 space-y-1" : "p-2 space-y-1.5")}>
-        {isExpanded && <div className="px-1 pb-1"><LanguageSelector /></div>}
+      <div className={cn("border-t border-slate-100/50 bg-slate-50/50 p-4 space-y-3 shrink-0", !isExpanded && "px-2 py-6 items-center")}>
+        {isExpanded && <LanguageSelector />}
 
-        {/* User */}
+        {/* User Profile */}
         {isExpanded ? (
-          <div onClick={() => { router.push("/profile"); handleNavClick() }} role="button" tabIndex={0}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-gray-50 transition-all group">
-            {user?.avatarUrl ? (
-              <Image src={user.avatarUrl} alt={user.name || "User"} width={36} height={36}
-                className="w-9 h-9 rounded-xl object-cover border border-gray-200 shrink-0" />
-            ) : (
-              <div className="w-9 h-9 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center shrink-0 ring-1 ring-blue-100">
-                <span className="text-sm font-bold text-blue-600">{user?.name?.[0] || "U"}</span>
-              </div>
-            )}
+          <div onClick={() => { router.push("/profile"); handleNavClick() }}
+            className="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-white hover:shadow-md hover:shadow-slate-200/50 hover:ring-1 hover:ring-emerald-100 transition-all group">
+            <div className="relative">
+              {user?.avatarUrl ? (
+                <Image src={user.avatarUrl} alt={user.name || "User"} width={40} height={40}
+                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-white shadow-sm" />
+              ) : (
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl flex items-center justify-center ring-1 ring-emerald-200/50 shadow-sm group-hover:scale-105 transition-transform">
+                  <span className="text-sm font-bold text-emerald-700">{user?.name?.[0] || "U"}</span>
+                </div>
+              )}
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
+            </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 truncate">{user?.name || "User"}</p>
-              <p className="text-[11px] text-gray-400 truncate capitalize">{user?.role || "Role"}</p>
+              <p className="text-[13.5px] font-bold text-slate-900 truncate">{user?.name || "Anonymous User"}</p>
+              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-[0.1em] truncate">{user?.role?.replace('_', ' ') || "Guest"}</p>
             </div>
           </div>
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={() => { router.push("/profile"); handleNavClick() }} aria-label="Profile"
-                className="flex items-center justify-center w-10 h-10 mx-auto rounded-xl hover:bg-gray-100 transition-colors">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center">
-                  <span className="text-xs font-bold text-blue-600">{user?.name?.[0] || "U"}</span>
+              <button onClick={() => { router.push("/profile"); handleNavClick() }}
+                className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-emerald-50 hover:shadow-sm hover:ring-1 hover:ring-emerald-200 transition-all mx-auto">
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-lg flex items-center justify-center ring-1 ring-emerald-200/50 shadow-sm">
+                  <span className="text-xs font-bold text-emerald-700">{user?.name?.[0] || "U"}</span>
                 </div>
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12}>{user?.name || "Profile"}</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="bg-slate-900 text-white font-bold border-none shadow-xl">
+              {user?.name || "Profile"}
+            </TooltipContent>
           </Tooltip>
         )}
 
-        {/* Logout */}
+        {/* Logout Button */}
         {isExpanded ? (
-          <button onClick={() => { localStorage.clear(); router.push(`/${currentLanguage}/auth/login`) }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all">
-            <LogOut className="h-4 w-4 shrink-0" /><span>{t("logout")}</span>
+          <button onClick={() => { logout(); router.push(`/${currentLanguage}/auth/login`) }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all group">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:bg-rose-100/50 transition-colors">
+              <LogOut className="h-4 w-4" />
+            </div>
+            <span>Logout</span>
           </button>
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={() => { localStorage.clear(); router.push(`/${currentLanguage}/auth/login`) }} aria-label="Logout"
-                className="flex items-center justify-center w-10 h-10 mx-auto rounded-xl text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all">
-                <LogOut className="h-[18px] w-[18px]" />
+              <button onClick={() => { logout(); router.push(`/${currentLanguage}/auth/login`) }}
+                className="w-12 h-12 flex items-center justify-center rounded-xl text-slate-300 hover:bg-rose-50 hover:text-rose-600 transition-all mx-auto">
+                <LogOut className="h-5 w-5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12}>Logout</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="bg-rose-600 text-white font-bold border-none">
+              Sign Out
+            </TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -368,41 +413,36 @@ export function Sidebar() {
   // ══════════════════════════════════════
   return (
     <TooltipProvider delayDuration={0}>
-      {/* Mobile hamburger */}
+      {/* Mobile Menu Button */}
       {isMobile && !isMobileOpen && (
-        <button onClick={() => setIsMobileOpen(true)} aria-label="Open menu"
-          className="fixed top-4 left-4 z-30 p-2.5 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 hover:shadow-xl hover:scale-105 transition-all duration-200 active:scale-95">
-          <Menu className="h-5 w-5 text-gray-700" />
+        <button onClick={() => setIsMobileOpen(true)}
+          className="fixed top-5 left-5 z-40 p-3 bg-white/90 backdrop-blur-md rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 hover:scale-105 active:scale-95 transition-all">
+          <Menu className="h-5 w-5 text-slate-700" />
         </button>
       )}
 
-      {/* Mobile backdrop */}
+      {/* Backdrop */}
       {isMobile && (
-        <div onClick={() => setIsMobileOpen(false)} aria-hidden="true"
+        <div onClick={() => setIsMobileOpen(false)}
           className={cn(
-            "fixed inset-0 z-40 bg-black/20 backdrop-blur-[3px] transition-all duration-300",
+            "fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all duration-300",
             isMobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
           )} />
       )}
 
-      {/* Sidebar */}
-      {isMobile ? (
-        <aside className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col bg-white/[0.98] backdrop-blur-xl shadow-2xl shadow-gray-300/30 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full"
-        )} style={{ width: 290 }}>
-          {sidebarContent}
-        </aside>
-      ) : (
-        <aside
-          className="relative flex flex-col h-full bg-white/[0.98] backdrop-blur-xl border-r border-gray-100/80 transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] shrink-0 overflow-hidden will-change-[width]"
-          style={{ width: isExpanded ? 270 : 68 }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          {sidebarContent}
-        </aside>
-      )}
+      {/* Sidebar Aside */}
+      <aside
+        ref={sidebarRef}
+        className={cn(
+          "flex flex-col bg-white border-r border-slate-100 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] shrink-0 overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]",
+          isMobile ? "fixed inset-y-0 left-0 z-50 shadow-2xl" : "relative h-screen",
+          isMobile && !isMobileOpen ? "-translate-x-full" : "translate-x-0"
+        )}
+        style={{ width: isExpanded ? (isMobile ? 290 : 280) : 80 }}
+      >
+        {sidebarContent}
+      </aside>
     </TooltipProvider>
   )
 }
+

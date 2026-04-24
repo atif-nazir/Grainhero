@@ -2,16 +2,15 @@ const mongoose = require('mongoose');
 
 const buyerPaymentSchema = new mongoose.Schema({
     // Scoping
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant',
-        required: true,
-        index: true
-    },
     admin_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
+        index: true
+    },
+    tenant_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Tenant'
     },
 
     // References
@@ -70,6 +69,7 @@ const buyerPaymentSchema = new mongoose.Schema({
     versionKey: false
 });
 
+buyerPaymentSchema.index({ admin_id: 1, buyer_id: 1 });
 buyerPaymentSchema.index({ tenant_id: 1, buyer_id: 1 });
 buyerPaymentSchema.index({ invoice_id: 1 });
 buyerPaymentSchema.index({ batch_id: 1 });

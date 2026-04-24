@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { config } from "@/config";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -44,6 +45,31 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>(path, "PATCH", body),
   put: <T>(path: string, body?: unknown) => request<T>(path, "PUT", body),
   delete: <T>(path: string) => request<T>(path, "DELETE"),
+
+  // For file uploads
+  postFormData: async <T>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
+    try {
+      const res = await fetch(`${config.backendUrl}${path}`, {
+        method: "POST",
+        headers: { ...getAuthHeaders() }, // Browser sets Content-Type with boundary
+        body: formData,
+      });
+      const payload = await res.json();
+      if (!res.ok) return { ok: false, status: res.status, error: payload?.error || res.statusText };
+      return { ok: true, status: res.status, data: payload as T };
+    } catch (e: any) { return { ok: false, status: 0, error: e.message }; }
+  },
+
+  // For file downloads
+  download: async (path: string): Promise<Blob | null> => {
+    try {
+      const res = await fetch(`${config.backendUrl}${path}`, {
+        headers: { ...getAuthHeaders() },
+      });
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch { return null; }
+  }
 };
 
 

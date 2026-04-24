@@ -33,6 +33,7 @@ class LoggingService {
     }) {
         try {
             const logEntry = new ActivityLog({
+                admin_id: user.admin_id || user._id,
                 tenant_id: user.tenant_id || user.owned_tenant_id,
                 user_id: user._id,
                 user_name: user.name || user.email,

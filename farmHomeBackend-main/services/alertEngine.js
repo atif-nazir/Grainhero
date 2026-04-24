@@ -14,6 +14,7 @@ class AlertEngine {
      * Create an alert and notify relevant users
      */
     static async createAlert({
+        admin_id,
         tenant_id,
         silo_id = null,
         batch_id = null,
@@ -30,6 +31,7 @@ class AlertEngine {
     }) {
         try {
             const alert = new GrainAlert({
+                admin_id: admin_id || tenant_id, // Fallback
                 tenant_id,
                 silo_id,
                 batch_id,
@@ -50,7 +52,7 @@ class AlertEngine {
 
             // Determine who to notify based on priority
             const rolesToNotify = this._getRolesToNotify(priority);
-            await this._notifyUsers(tenant_id, alert, rolesToNotify);
+            await this._notifyUsers(alert.admin_id, alert, rolesToNotify);
 
             return alert;
         } catch (error) {
@@ -67,6 +69,7 @@ class AlertEngine {
         if (!alertConfig) return null;
 
         return this.createAlert({
+            admin_id: logEntry.admin_id,
             tenant_id: logEntry.tenant_id,
             title: alertConfig.title(logEntry),
             message: alertConfig.message(logEntry),
@@ -199,13 +202,12 @@ class AlertEngine {
     /**
      * Send notifications to users by role
      */
-    static async _notifyUsers(tenantId, alert, roles) {
+    static async _notifyUsers(adminId, alert, roles) {
         try {
             const users = await User.find({
-                $or: [
-                    { tenant_id: tenantId, role: { $in: roles }, status: 'active' },
-                    { owned_tenant_id: tenantId, role: { $in: roles }, status: 'active' }
-                ]
+                admin_id: adminId,
+                role: { $in: roles },
+                status: 'active'
             }).select('_id');
 
             if (users.length === 0) return;
@@ -214,7 +216,7 @@ class AlertEngine {
                 alert.priority === ALERT_PRIORITIES.HIGH ? 'warning' : 'info';
 
             await NotificationService.notify({
-                tenant_id: tenantId,
+                admin_id: adminId,
                 recipient_ids: users.map(u => u._id),
                 title: alert.title,
                 message: alert.message,
@@ -259,7 +261,7 @@ class AlertEngine {
 
                 // Check if we already created an alert for this today
                 const existingAlert = await GrainAlert.findOne({
-                    tenant_id: policy.tenant_id,
+                    admin_id: policy.admin_id,
                     source: 'insurance',
                     'tags': `policy_expiry_${policy._id}`,
                     triggered_at: { $gte: new Date(now.toDateString()) }
@@ -267,6 +269,7 @@ class AlertEngine {
 
                 if (!existingAlert) {
                     await this.createAlert({
+                        admin_id: policy.admin_id,
                         tenant_id: policy.tenant_id,
                         title: `🛡️ Policy Expiring in ${daysLeft} days: ${policy.policy_number}`,
                         message: `Insurance policy ${policy.policy_number} (${policy.provider_name}) expires on ${new Date(policy.end_date).toLocaleDateString()}. Coverage: PKR ${policy.coverage_amount?.toLocaleString()}.`,
@@ -311,7 +314,8 @@ class AlertEngine {
                         batch.risk_score >= 80 ? ALERT_PRIORITIES.HIGH : ALERT_PRIORITIES.MEDIUM;
 
                     await this.createAlert({
-                        tenant_id: batch.admin_id,
+                        admin_id: batch.admin_id,
+                        tenant_id: batch.tenant_id,
                         silo_id: batch.silo_id,
                         batch_id: batch._id,
                         title: `⚠️ High Risk Batch: ${batch.batch_id}`,

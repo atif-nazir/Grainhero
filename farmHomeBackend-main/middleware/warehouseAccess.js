@@ -25,7 +25,7 @@ const requireWarehouseAccess = (allowSuperAdmin = true) => {
         return next();
       }
 
-      // Admin can access all warehouses under their tenant
+      // Admin can access all warehouses under their admin_id
       if (user.role === USER_ROLES.ADMIN) {
         req.warehouseFilter = { admin_id: user._id };
         return next();

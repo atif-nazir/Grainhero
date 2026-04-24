@@ -434,7 +434,7 @@ router.post("/signup", async (req, res) => {
     // Handle tenant association based on role
     if (userRole === "super_admin") {
       // Super admin doesn't need a tenant, they manage the entire system
-      userData.owned_tenant_id = null; // Super admin doesn't own a specific tenant
+      userData.admin_id = null; // Super admin doesn't belong to a specific admin
     } else if (userRole === "admin") {
       // Admin creates and owns a tenant
       const Tenant = require("../models/Tenant");
@@ -468,25 +468,11 @@ router.post("/signup", async (req, res) => {
       }
     }
 
-    // Handle tenant association based on role
+    // Handle admin context
     if (userRole === "admin") {
-      // Admin creates and owns a tenant
-      const Tenant = require("../models/Tenant");
-      const tenant = new Tenant({
-        name: `${name}'s Farm`,
-        email: email,
-        business_type: "farm",
-        created_by: null, // Will be set after user creation
-      });
-      await tenant.save();
-      userData.owned_tenant_id = tenant._id;
+      // Admins are independent owners
     } else if (userRole === "manager" || userRole === "technician") {
-      // Manager and Technician belong to an existing tenant
-      const Tenant = require("../models/Tenant");
-      const existingTenant = await Tenant.findOne().sort({ created_at: -1 });
-      if (existingTenant) {
-        userData.tenant_id = existingTenant._id;
-      }
+      // Manager and Technician are assigned an admin_id via invitation
     }
 
     // If this is an invited user, update the invitation record instead of creating new
@@ -502,14 +488,8 @@ router.post("/signup", async (req, res) => {
       invitationData.invitationExpires = undefined;
       invitationData.emailVerified = true;
 
-      // Ensure tenant_id and warehouse_id are set for invited users
+      // Ensure warehouse_id is set for invited users
       if (userRole === "manager" || userRole === "technician") {
-        const Tenant = require("../models/Tenant");
-        const existingTenant = await Tenant.findOne().sort({ created_at: -1 });
-        if (existingTenant) {
-          invitationData.tenant_id = existingTenant._id;
-          console.log("Set tenant_id for invited user:", existingTenant._id);
-        }
 
         // Assign warehouse for managers and technicians
         if (userRole === "manager") {
@@ -592,10 +572,8 @@ router.post("/signup", async (req, res) => {
         console.log("Final user data:", {
           id: invitationData._id,
           name: invitationData.name,
-          email: invitationData.email,
           role: invitationData.role,
           emailVerified: invitationData.emailVerified,
-          tenant_id: invitationData.tenant_id,
         });
         res.status(200).json({ msg: "User Registered Successfully" });
       } catch (saveError) {
@@ -609,14 +587,6 @@ router.post("/signup", async (req, res) => {
       let user = new User(userData);
 
       await user.save();
-
-      // Update tenant's created_by if this is an admin
-      if (userRole === "admin" && userData.owned_tenant_id) {
-        const Tenant = require("../models/Tenant");
-        await Tenant.findByIdAndUpdate(userData.owned_tenant_id, {
-          created_by: user._id,
-        });
-      }
 
       res.status(200).json({ msg: "User Registered Successfully" });
     }
@@ -2093,7 +2063,6 @@ router.post("/invite-team-member", auth, async (req, res) => {
       invitationRole: role,
       invitedBy: req.user.id,
       admin_id: req.user.id, // Set admin_id for manager/technician roles
-      tenant_id: req.user.tenant_id || req.user.owned_tenant_id,
       emailVerified: false,
       // Set admin_id for managers and technicians
       admin_id: role === USER_ROLES.MANAGER || role === USER_ROLES.TECHNICIAN ? admin_id : undefined,

@@ -35,7 +35,7 @@ async function checkAllSubscriptionsForWarnings() {
         if (warningResult && warningResult.warnings.length > 0) {
           // Get admin user for this subscription
           const adminUser = await User.findOne({
-            tenant_id: subscription.tenant_id,
+            admin_id: subscription.admin_id,
             role: "admin",
           });
 

@@ -13,7 +13,7 @@ class NotificationService {
      * @param {Object} params
      */
     static async notify({
-        tenant_id,
+        admin_id,
         recipient_ids = [],
         title,
         message,
@@ -29,7 +29,7 @@ class NotificationService {
 
             for (const recipientId of recipient_ids) {
                 const notification = new NotificationModel({
-                    tenant_id,
+                    admin_id,
                     recipient_id: recipientId,
                     title,
                     message,
@@ -60,10 +60,10 @@ class NotificationService {
     }
 
     /**
-     * Notify all admins and managers of a tenant
+     * Notify all admins and managers of an administrative context
      */
     static async notifyAdminsAndManagers({
-        tenant_id,
+        admin_id,
         title,
         message,
         type = 'info',
@@ -74,11 +74,11 @@ class NotificationService {
         channels = { in_app: true, email: true, sms: false }
     }) {
         try {
-            // Find all admin and manager users for this tenant
+            // Find all admin and manager users for this administrative context
             const users = await User.find({
                 $or: [
-                    { tenant_id: tenant_id, role: { $in: ['admin', 'manager'] } },
-                    { owned_tenant_id: tenant_id, role: 'admin' }
+                    { admin_id: admin_id, role: { $in: ['admin', 'manager'] } },
+                    { _id: admin_id, role: 'admin' }
                 ],
                 status: 'active'
             }).select('_id');
@@ -86,7 +86,7 @@ class NotificationService {
             const recipient_ids = users.map(u => u._id);
 
             return this.notify({
-                tenant_id,
+                admin_id,
                 recipient_ids,
                 title,
                 message,
@@ -148,9 +148,9 @@ class NotificationService {
 
     // ====== Convenience Methods ======
 
-    static async notifySpoilageEvent(tenant_id, batch, spoilageEvent) {
+    static async notifySpoilageEvent(admin_id, batch, spoilageEvent) {
         return this.notifyAdminsAndManagers({
-            tenant_id,
+            admin_id,
             title: `⚠️ Spoilage Alert: ${batch.batch_id}`,
             message: `${spoilageEvent.event_type} spoilage detected on batch ${batch.batch_id} (${spoilageEvent.severity}). Estimated loss: ${spoilageEvent.estimated_loss_kg || 'N/A'}kg. ${spoilageEvent.description || ''}`,
             type: spoilageEvent.severity === 'severe' || spoilageEvent.severity === 'total_loss' ? 'critical' : 'warning',
@@ -162,9 +162,9 @@ class NotificationService {
         });
     }
 
-    static async notifyDispatch(tenant_id, batch, buyerName, quantity) {
+    static async notifyDispatch(admin_id, batch, buyerName, quantity) {
         return this.notifyAdminsAndManagers({
-            tenant_id,
+            admin_id,
             title: `🚚 Dispatch: ${batch.batch_id}`,
             message: `${quantity}kg of ${batch.grain_type} from batch ${batch.batch_id} dispatched to ${buyerName}`,
             type: 'success',
@@ -176,9 +176,9 @@ class NotificationService {
         });
     }
 
-    static async notifyPaymentReceived(tenant_id, buyerName, amount, currency) {
+    static async notifyPaymentReceived(admin_id, buyerName, amount, currency) {
         return this.notifyAdminsAndManagers({
-            tenant_id,
+            admin_id,
             title: `💰 Payment Received`,
             message: `Payment of ${currency} ${amount.toLocaleString()} received from ${buyerName}`,
             type: 'success',
@@ -188,9 +188,9 @@ class NotificationService {
         });
     }
 
-    static async notifyInvoiceGenerated(tenant_id, invoiceNumber, buyerName) {
+    static async notifyInvoiceGenerated(admin_id, invoiceNumber, buyerName) {
         return this.notifyAdminsAndManagers({
-            tenant_id,
+            admin_id,
             title: `📄 Invoice Generated`,
             message: `Invoice #${invoiceNumber} generated for ${buyerName}`,
             type: 'info',

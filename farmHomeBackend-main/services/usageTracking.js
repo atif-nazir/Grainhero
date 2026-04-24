@@ -21,29 +21,30 @@ async function updateUsageStats(subscriptionId) {
       throw new Error("Subscription not found");
     }
 
+    const adminId = subscription.admin_id;
     const tenantId = subscription.tenant_id;
 
     // Count users (managers + technicians, excluding admin)
     const users = await User.countDocuments({
-      tenant_id: tenantId,
+      admin_id: adminId,
       role: { $in: ["manager", "technician"] },
       deleted_at: null,
     });
 
     // Count grain batches
     const batches = await GrainBatch.countDocuments({
-      tenant_id: tenantId,
+      admin_id: adminId,
       deleted_at: null,
     });
 
     // Count sensors/devices
     const devices = await SensorDevice.countDocuments({
-      tenant_id: tenantId,
+      admin_id: adminId,
       deleted_at: null,
     });
 
     // Calculate storage from actual files
-    const storage_gb = await calculateStorageGB(tenantId);
+    const storage_gb = await calculateStorageGB(adminId);
 
     // Update subscription usage
     subscription.current_usage = {
@@ -211,30 +212,17 @@ async function decrementUsage(subscriptionId, resourceType, decrement = 1) {
 }
 
 /**
- * Calculate total storage in GB for a tenant
- * @param {String} tenantId - Tenant ID
+ * Calculate total storage in GB for an admin
+ * @param {String} adminId - Admin ID
  * @returns {Promise<Number>} Storage in GB
  */
-async function calculateStorageGB(tenantId) {
+async function calculateStorageGB(adminId) {
   try {
     let totalBytes = 0;
 
-    // Get all admin users for this tenant
-    const adminUsers = await User.find({
-      tenant_id: tenantId,
-      role: "admin",
-    }).select("_id");
-
-    const adminIds = adminUsers.map((admin) => admin._id);
-
-    if (adminIds.length === 0) {
-      return 0; // No admins for this tenant
-    }
-
     // 1. Calculate from GrainBatch photos (stored in database with size)
-    // Filter by admin_id to get only batches for this tenant
     const batches = await GrainBatch.find({
-      admin_id: { $in: adminIds },
+      admin_id: adminId,
       "spoilage_events.photos": { $exists: true, $ne: [] },
     }).select("spoilage_events");
 

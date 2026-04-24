@@ -69,7 +69,7 @@ router.get('/impact/:lat/:lon', async (req, res) => {
 
 // Store environmental data in database
 router.post('/store', [
-  body('tenant_id').isMongoId().withMessage('Valid tenant ID required'),
+  body('admin_id').isMongoId().withMessage('Valid admin ID required'),
   body('silo_id').isMongoId().withMessage('Valid silo ID required'),
   body('device_id').isMongoId().withMessage('Valid device ID required'),
   body('lat').isFloat().withMessage('Valid latitude required'),
@@ -84,7 +84,7 @@ router.post('/store', [
       });
     }
 
-    const { tenant_id, silo_id, device_id, lat, lon } = req.body;
+    const { admin_id, silo_id, device_id, lat, lon } = req.body;
 
     // Fetch environmental data
     const environmentalData = await weatherService.getEnvironmentalData(lat, lon);
@@ -93,7 +93,7 @@ router.post('/store', [
 
     // Create sensor reading with environmental context
     const sensorReading = new SensorReading({
-      tenant_id,
+      admin_id,
       silo_id,
       device_id,
       timestamp: new Date(),
@@ -211,20 +211,18 @@ async function buildFallbackHistory(lat, lon, limit) {
 }
 
 // Get environmental data history (cached for 15 seconds, but limit is configurable)
-router.get('/history/:tenant_id', createCacheMiddleware(15 * 1000, null, { allowBypass: true }), async (req, res) => {
+router.get('/history/:admin_id', createCacheMiddleware(15 * 1000, null, { allowBypass: true }), async (req, res) => {
   try {
-    const { tenant_id } = req.params;
+    const { admin_id } = req.params;
     // Smart default: Use 50 for quick loads, but allow up to 288 (24h) for detailed analysis
-    // 288 = 24 hours * 12 readings/hour (5-min intervals)
-    // Frontend can request more by passing limit explicitly
     const requestedLimit = parseInt(req.query.limit);
     const limit = requestedLimit && requestedLimit > 0 && requestedLimit <= 500 
       ? requestedLimit 
-      : 50; // Default to 50 for performance, but allow override
+      : 50; 
     const { start_date, end_date, lat, lon } = req.query;
 
     let query = { 
-      tenant_id,
+      admin_id,
       'environmental_context.weather': { $exists: true }
     };
 
@@ -270,9 +268,9 @@ router.get('/history/:tenant_id', createCacheMiddleware(15 * 1000, null, { allow
 });
 
 // Get environmental data statistics (cached for 30 seconds)
-router.get('/stats/:tenant_id', createCacheMiddleware(30 * 1000), async (req, res) => {
+router.get('/stats/:admin_id', createCacheMiddleware(30 * 1000), async (req, res) => {
   try {
-    const { tenant_id } = req.params;
+    const { admin_id } = req.params;
     const { days = 30 } = req.query;
 
     const startDate = new Date();
@@ -281,7 +279,7 @@ router.get('/stats/:tenant_id', createCacheMiddleware(30 * 1000), async (req, re
     const stats = await SensorReading.aggregate([
       {
         $match: {
-          tenant_id: new require('mongoose').Types.ObjectId(tenant_id),
+          admin_id: new require('mongoose').Types.ObjectId(admin_id),
           timestamp: { $gte: startDate },
           'environmental_context.weather': { $exists: true }
         }
@@ -376,7 +374,7 @@ router.get('/air-quality/:lat/:lon', async (req, res) => {
 
 // Manual data collection trigger
 router.post('/collect/:lat/:lon', [
-  body('tenant_id').isMongoId().withMessage('Valid tenant ID required'),
+  body('admin_id').isMongoId().withMessage('Valid admin ID required'),
   body('silo_id').optional().isMongoId().withMessage('Valid silo ID required')
 ], async (req, res) => {
   try {
@@ -389,7 +387,7 @@ router.post('/collect/:lat/:lon', [
     }
 
     const { lat, lon } = req.params;
-    const { tenant_id, silo_id } = req.body;
+    const { admin_id, silo_id } = req.body;
     const latitude = parseFloat(lat);
     const longitude = parseFloat(lon);
 
@@ -401,7 +399,7 @@ router.post('/collect/:lat/:lon', [
     const result = await environmentalDataService.collectDataForLocation(
       latitude, 
       longitude, 
-      tenant_id, 
+      admin_id, 
       silo_id
     );
 
@@ -441,7 +439,6 @@ router.get('/service/status', (req, res) => {
 });
 
 // Get environmental data for all user's locations (role-based)
-// Cache locations for 60 seconds (they don't change often)
 router.get('/my-locations', auth, createCacheMiddleware(60 * 1000), async (req, res) => {
   try {
     const user = req.user;
@@ -465,44 +462,25 @@ router.get('/my-locations', auth, createCacheMiddleware(60 * 1000), async (req, 
       })
       .select('silo_id name location');
     }
-    // Manager: See silos they manage (specific warehouse/location)
-    else if (user.role === 'manager') {
-      // Assuming manager_id field or admin_id for managers under admin
+    // Manager/Technician: See silos under their admin
+    else if (['manager', 'technician'].includes(user.role)) {
+      const adminId = user.admin_id || user._id;
       silos = await Silo.find({
-        admin_id: user.admin_id,
-        'location.coordinates.latitude': { $exists: true },
-        'location.coordinates.longitude': { $exists: true }
-      })
-      .select('silo_id name location');
-    }
-    // Technician: See all silos under their admin
-    else if (user.role === 'technician') {
-      silos = await Silo.find({
-        admin_id: user.admin_id,
+        admin_id: adminId,
         'location.coordinates.latitude': { $exists: true },
         'location.coordinates.longitude': { $exists: true }
       })
       .select('silo_id name location');
     }
 
-    // If user has no silos with location data, return a sensible default demo location
     if (!silos || silos.length === 0) {
       try {
-        // Default to Lahore coordinates used in the frontend page
         const defaultLat = 31.5204;
         const defaultLon = 74.3587;
 
-        const environmentalData = await weatherService.getEnvironmentalData(
-          defaultLat,
-          defaultLon
-        );
-
+        const environmentalData = await weatherService.getEnvironmentalData(defaultLat, defaultLon);
         const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
-        const regionalAnalysis = weatherService.analyzeRegionalClimate(
-          environmentalData,
-          defaultLat,
-          defaultLon
-        );
+        const regionalAnalysis = weatherService.analyzeRegionalClimate(environmentalData, defaultLat, defaultLon);
 
         return res.json({
           success: true,
@@ -526,17 +504,12 @@ router.get('/my-locations', auth, createCacheMiddleware(60 * 1000), async (req, 
         });
       } catch (error) {
         console.error('Error fetching default environmental location:', error);
-        // fall through to normal error handling below
       }
     }
 
-    // Group silos by location (city/coordinates)
     const locationGroups = {};
-    
     for (const silo of silos) {
-      if (!silo.location?.coordinates?.latitude || !silo.location?.coordinates?.longitude) {
-        continue;
-      }
+      if (!silo.location?.coordinates?.latitude || !silo.location?.coordinates?.longitude) continue;
 
       const lat = silo.location.coordinates.latitude;
       const lon = silo.location.coordinates.longitude;
@@ -562,22 +535,12 @@ router.get('/my-locations', auth, createCacheMiddleware(60 * 1000), async (req, 
       locationGroups[key].silo_count++;
     }
 
-    // Fetch weather for each unique location
     const locationsWithWeather = [];
-    
     for (const [key, location] of Object.entries(locationGroups)) {
       try {
-        const environmentalData = await weatherService.getEnvironmentalData(
-          location.latitude,
-          location.longitude
-        );
-        
+        const environmentalData = await weatherService.getEnvironmentalData(location.latitude, location.longitude);
         const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
-        const regionalAnalysis = weatherService.analyzeRegionalClimate(
-          environmentalData,
-          location.latitude,
-          location.longitude
-        );
+        const regionalAnalysis = weatherService.analyzeRegionalClimate(environmentalData, location.latitude, location.longitude);
 
         locationsWithWeather.push({
           ...location,
@@ -589,10 +552,7 @@ router.get('/my-locations', auth, createCacheMiddleware(60 * 1000), async (req, 
         });
       } catch (error) {
         console.error(`Failed to fetch weather for ${location.city}:`, error);
-        locationsWithWeather.push({
-          ...location,
-          error: 'Failed to fetch weather data'
-        });
+        locationsWithWeather.push({ ...location, error: 'Failed to fetch weather data' });
       }
     }
 

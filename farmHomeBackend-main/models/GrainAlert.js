@@ -9,11 +9,16 @@ const grainAlertSchema = new mongoose.Schema({
     required: [true, "Alert ID is required"]
   },
   
-  // Tenant and references
+  // Admin and Tenant references
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, "Admin ID is required"],
+    index: true
+  },
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
-    required: [true, "Tenant ID is required"],
     index: true
   },
   silo_id: {
@@ -278,7 +283,7 @@ const grainAlertSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance (alert_id already has unique index)
-grainAlertSchema.index({ tenant_id: 1, status: 1, triggered_at: -1 });
+grainAlertSchema.index({ admin_id: 1, status: 1, triggered_at: -1 });
 grainAlertSchema.index({ silo_id: 1, status: 1 });
 grainAlertSchema.index({ priority: 1, status: 1 });
 grainAlertSchema.index({ triggered_at: -1 });
@@ -287,7 +292,7 @@ grainAlertSchema.index({ source: 1, sensor_type: 1 });
 
 // Compound indexes for common queries
 grainAlertSchema.index({ 
-  tenant_id: 1, 
+  admin_id: 1, 
   priority: 1, 
   status: 1, 
   triggered_at: -1 
@@ -381,8 +386,8 @@ grainAlertSchema.methods.addAction = function(actionType, description, userId, e
 };
 
 // Static method to get alert statistics
-grainAlertSchema.statics.getStatistics = function(tenantId, dateRange) {
-  const matchQuery = { tenant_id: tenantId };
+grainAlertSchema.statics.getStatistics = function(adminId, dateRange) {
+  const matchQuery = { admin_id: adminId };
   
   if (dateRange) {
     matchQuery.triggered_at = {

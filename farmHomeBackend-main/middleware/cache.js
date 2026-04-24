@@ -29,7 +29,7 @@ function createCacheMiddleware(ttl = DEFAULT_TTL, keyGenerator = null, options =
     // Generate cache key
     const cacheKey = keyGenerator 
       ? keyGenerator(req)
-      : `${req.originalUrl}:${req.user?.tenant_id || 'anonymous'}`;
+      : `${req.originalUrl}:${(req.user?.admin_id || req.user?._id) || 'anonymous'}`;
 
     // Check cache
     const cached = cache.get(cacheKey);

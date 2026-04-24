@@ -5,7 +5,6 @@ const Silo = require("../models/Silo");
 const { auth } = require("../middleware/auth");
 const {
   requirePermission,
-  requireTenantAccess,
 } = require("../middleware/permission");
 const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const { body, validationResult, param, query } = require("express-validator");
@@ -90,7 +89,7 @@ router.get("/test", (req, res) => {
  *       401:
  *         description: Unauthorized
  */
-router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, res) => {
+router.get("/generate-id/:grain_type", [auth], async (req, res) => {
   try {
     const { grain_type } = req.params;
     const currentYear = new Date().getFullYear();
@@ -110,9 +109,9 @@ router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, 
       return res.status(400).json({ error: "Invalid grain type" });
     }
 
-    // Find all batches for this tenant in the current year with this grain type
+    const adminId = req.user.admin_id || req.user._id;
     const existingBatches = await GrainBatch.find({
-      tenant_id: req.user.tenant_id,
+      admin_id: adminId,
       grain_type: grain_type,
       intake_date: {
         $gte: new Date(`${currentYear}-01-01`),
@@ -158,29 +157,13 @@ router.get("/generate-id/:grain_type", [auth, requireTenantAccess], async (req, 
  *       401:
  *         description: Unauthorized
  */
-router.get("/available-silos/:grain_type", [auth, requireTenantAccess], async (req, res) => {
+router.get("/available-silos/:grain_type", [auth], async (req, res) => {
   try {
     const { grain_type } = req.params;
+    const adminId = req.user.admin_id || req.user._id;
 
-    // Determine the tenant/admin filter
-    const filterQuery = {};
-
-    // Try tenant_id first, then admin_id
-    if (req.user.tenant_id) {
-      filterQuery.tenant_id = req.user.tenant_id;
-    } else if (req.user.admin_id) {
-      filterQuery.admin_id = req.user.admin_id;
-    } else {
-      // Fallback: use user's own id if they are an admin
-      filterQuery.admin_id = req.user._id;
-    }
-
-    console.log("Available silos filter query:", filterQuery);
-
-    // Get all silos for this tenant/admin
-    const silos = await Silo.find(filterQuery).sort({ name: 1 });
-
-    console.log(`Found ${silos.length} silos for user ${req.user._id}`);
+    // Get all silos for this admin
+    const silos = await Silo.find({ admin_id: adminId }).sort({ name: 1 });
 
     // For each silo, check what grain types it currently contains
     const availableSilos = [];
@@ -278,7 +261,6 @@ router.post(
   [
     auth,
     requirePermission("batch.create"),
-    requireTenantAccess,
     [
       body("batch_id").notEmpty().withMessage("Batch ID is required"),
       body("silo_id").isMongoId().withMessage("Valid silo ID is required"),
@@ -325,8 +307,13 @@ router.post(
         purchase_price_per_kg,
       } = req.body;
 
-        // Check if silo exists and has capacity
-        const silo = await Silo.findById(silo_id);
+        const adminId = req.user.admin_id || req.user._id;
+
+        // Check if silo exists and belongs to the admin
+        const silo = await Silo.findOne({
+            _id: silo_id,
+            admin_id: adminId,
+        });
         if (!silo) {
         return res.status(404).json({ error: "Silo not found" });
         }
@@ -347,7 +334,7 @@ router.post(
       // Create batch
       const batch = new GrainBatch({
         batch_id,
-        admin_id: req.user.admin_id,
+        admin_id: adminId,
         silo_id,
         grain_type,
         quantity_kg,
@@ -433,53 +420,21 @@ router.post(
  */
 router.get(
   "/",
-  [auth, requirePermission("batch.view"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("batch.view")],
   async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-      // Build filter
-      let filter = {};
+        const adminId = req.user.admin_id || req.user._id;
 
-      // Super Admin: See all batches
-      if (req.user.role === "super_admin") {
-        filter = {};
-      }
-      // Admin: See batches in their warehouses
-      else if (req.user.role === "admin") {
-        const Warehouse = require("../models/Warehouse");
-        const warehouses = await Warehouse.find({ admin_id: req.user._id }).select("_id");
-        const warehouseIds = warehouses.map(w => w._id);
-        const silos = await Silo.find({ warehouse_id: { $in: warehouseIds } }).select("_id");
-        filter = { silo_id: { $in: silos.map(s => s._id) } };
-      }
-      // Manager and Technician: See batches in their assigned warehouse
-      else if (req.user.role === "manager" || req.user.role === "technician") {
-        if (!req.user.warehouse_id) {
-          return res.status(403).json({ error: "User not assigned to any warehouse" });
-        }
-        const silos = await Silo.find({ warehouse_id: req.user.warehouse_id }).select("_id");
-        filter = { silo_id: { $in: silos.map(s => s._id) } };
-      }
+        // Build filter scoped to admin
+        let filter = { admin_id: adminId };
 
-      if (req.query.status) filter.status = req.query.status;
-      if (req.query.grain_type) filter.grain_type = req.query.grain_type;
-      if (req.query.silo_id) {
-        // Validate silo_id belongs to user's accessible warehouses
-        const silo = await Silo.findById(req.query.silo_id);
-        if (!silo) {
-          return res.status(404).json({ error: "Silo not found" });
-        }
-        // Check access (already handled by filter above, but double-check)
-        if (req.user.role === "manager" || req.user.role === "technician") {
-          if (silo.warehouse_id.toString() !== req.user.warehouse_id.toString()) {
-            return res.status(403).json({ error: "Access denied to this silo" });
-          }
-        }
-        filter.silo_id = req.query.silo_id;
-      }
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.grain_type) filter.grain_type = req.query.grain_type;
+        if (req.query.silo_id) filter.silo_id = req.query.silo_id;
 
         // Get batches with pagination
         const [batches, total] = await Promise.all([
@@ -545,10 +500,12 @@ router.get(
             return res.status(400).json({ errors: errors.array() });
         }
 
+        const adminId = req.user.admin_id || req.user._id;
+
         const batch = await GrainBatch.findOne({
             _id: req.params.id,
-        admin_id: req.user.admin_id,
-      })
+            admin_id: adminId,
+        })
         .populate("silo_id")
         .populate("buyer_id")
         .populate("created_by", "name email")
@@ -598,7 +555,6 @@ router.put(
   [
     auth,
     requirePermission("batch.manage"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
   ],
   async (req, res) => {
@@ -608,9 +564,11 @@ router.put(
             return res.status(400).json({ errors: errors.array() });
         }
 
+        const adminId = req.user.admin_id || req.user._id;
+
         const batch = await GrainBatch.findOne({
             _id: req.params.id,
-        admin_id: req.user.admin_id,
+            admin_id: adminId,
         });
 
         if (!batch) {
@@ -672,18 +630,14 @@ router.get(
   [
     auth,
     requirePermission("batch.dispatch"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
   ],
   async (req, res) => {
     try {
-      const Buyer = require("../models/Buyer");
-      const tenantId = req.user.tenant_id || req.user.owned_tenant_id || req.user._id;
       const adminId = req.user.admin_id || req.user._id;
 
-      // Get all active buyers for this tenant/admin
+      // Get all active buyers for this admin
       const buyers = await Buyer.find({
-        tenant_id: tenantId,
         admin_id: adminId,
         status: "active",
       })
@@ -724,7 +678,6 @@ router.post(
   [
     auth,
     requirePermission("batch.dispatch"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
       body("buyer_id").isMongoId().withMessage("Valid buyer ID is required"),
@@ -752,9 +705,11 @@ router.post(
             return res.status(400).json({ errors: errors.array() });
         }
 
+        const adminId = req.user.admin_id || req.user._id;
+
         const batch = await GrainBatch.findOne({
             _id: req.params.id,
-        admin_id: req.user.admin_id,
+            admin_id: adminId,
         });
 
         if (!batch) {
@@ -811,7 +766,6 @@ router.post(
       });
 
       // Log dispatch & create transaction (async)
-      const tenantId = req.user.tenant_id || req.user.owned_tenant_id;
       LoggingService.logBatchDispatched(req.user, batch, {
         buyer_id: buyerId,
         quantity_kg: dispatchedQuantity,
@@ -820,7 +774,6 @@ router.post(
 
       // Create dispatch transaction record
       const dt = new DispatchTransaction({
-        tenant_id: tenantId,
         admin_id: req.user.admin_id || req.user._id,
         batch_id: batch._id,
         batch_ref: batch.batch_id,
@@ -840,7 +793,7 @@ router.post(
       // Notify admin/manager
       const Buyer = require("../models/Buyer");
       const buyerDoc = await Buyer.findById(buyerId).select('name');
-      NotificationService.notifyDispatch(tenantId, batch, buyerDoc?.name || 'Unknown', dispatchedQuantity).catch(() => { });
+      NotificationService.notifyDispatch(req.user.admin_id || req.user._id, batch, buyerDoc?.name || 'Unknown', dispatchedQuantity).catch(() => { });
     } catch (error) {
       console.error("Dispatch batch error:", error);
       if (error.message.includes('exceeds available')) {
@@ -882,7 +835,6 @@ router.post(
   [
     auth,
     requirePermission("batch.dispatch"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
       body("buyer_name").notEmpty().withMessage("Buyer name is required"),
@@ -904,9 +856,10 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
+      const adminId = req.user.admin_id || req.user._id;
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        admin_id: req.user.admin_id,
+        admin_id: adminId,
       });
 
       if (!batch) {
@@ -933,8 +886,6 @@ router.post(
 
       // Buyer upsert logic: unify with manual buyer creation
       const Buyer = require("../models/Buyer");
-      const tenantId =
-        req.user.tenant_id || req.user.owned_tenant_id || req.user._id;
 
       // Build query for duplicate detection (email or phone)
       const buyerQueryOr = [];
@@ -955,7 +906,6 @@ router.post(
       const adminId = req.user.admin_id || req.user._id;
 
       const buyerQuery = {
-        tenant_id: tenantId,
         admin_id: adminId,
         $or: buyerQueryOr,
       };
@@ -970,7 +920,6 @@ router.post(
             phone: req.body.buyer_contact,
           },
           status: "active",
-          tenant_id: tenantId,
           admin_id: adminId,
         },
       };
@@ -1040,7 +989,6 @@ router.put(
   [
     auth,
     requirePermission("ai.enable"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
       body("risk_score")
@@ -1059,9 +1007,11 @@ router.put(
             return res.status(400).json({ errors: errors.array() });
         }
 
+        const adminId = req.user.admin_id || req.user._id;
+
         const batch = await GrainBatch.findOne({
             _id: req.params.id,
-        admin_id: req.user.admin_id,
+            admin_id: adminId,
         });
 
         if (!batch) {
@@ -1145,11 +1095,12 @@ router.get("/qr/:qr_code", async (req, res) => {
  */
 router.get(
   "/stats",
-  [auth, requirePermission("batch.view"), requireTenantAccess],
+  [auth, requirePermission("batch.view")],
   async (req, res) => {
     try {
+        const adminId = req.user.admin_id || req.user._id;
         const stats = await GrainBatch.aggregate([
-        { $match: { admin_id: req.user.admin_id } },
+        { $match: { admin_id: adminId } },
             {
                 $group: {
                     _id: null,
@@ -1178,7 +1129,7 @@ router.get(
         ]);
 
         const grainTypeStats = await GrainBatch.aggregate([
-        { $match: { admin_id: req.user.admin_id } },
+        { $match: { admin_id: adminId } },
             {
                 $group: {
             _id: "$grain_type",
@@ -1256,7 +1207,6 @@ router.put(
   [
     auth,
     requirePermission("batch.update"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
       body("batch_id")
@@ -1368,7 +1318,6 @@ router.delete(
   [
     auth,
     requirePermission("batch.delete"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
   ],
   async (req, res) => {
@@ -1416,7 +1365,6 @@ router.post(
   [
     auth,
     requirePermission("insurance.create"),
-    requireTenantAccess,
     upload.array("photos", 10), // Allow up to 10 photos
     param("id").isMongoId().withMessage("Valid batch ID is required"),
     [
@@ -1445,9 +1393,10 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
+      const adminId = req.user.admin_id || req.user._id;
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: adminId,
       });
 
       if (!batch) {
@@ -1518,14 +1467,14 @@ router.get(
   [
     auth,
     requirePermission("insurance.view"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
   ],
   async (req, res) => {
     try {
+      const adminId = req.user.admin_id || req.user._id;
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: adminId,
       })
         .populate("silo_id")
         .populate("created_by", "name email");
@@ -1627,15 +1576,15 @@ router.get(
   [
     auth,
     requirePermission("insurance.manage"),
-    requireTenantAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
   ],
   async (req, res) => {
     try {
       const { format } = req.query; // efu, adamjee, ztbl
+      const adminId = req.user.admin_id || req.user._id;
       const batch = await GrainBatch.findOne({
         _id: req.params.id,
-        tenant_id: req.user.tenant_id,
+        admin_id: adminId,
       })
         .populate("silo_id")
         .populate("created_by", "name email");

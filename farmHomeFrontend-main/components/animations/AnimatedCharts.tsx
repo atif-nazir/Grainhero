@@ -283,68 +283,71 @@ export function AnimatedMetricCard(
   }
 ) {
   const colorClasses = {
-    blue: 'bg-blue-500 text-blue-500',
-    green: 'bg-green-500 text-green-500',
-    yellow: 'bg-yellow-500 text-yellow-500',
-    red: 'bg-red-500 text-red-500',
-    purple: 'bg-purple-500 text-purple-500'
+    blue: 'bg-blue-50 text-blue-600 ring-1 ring-blue-100/50',
+    green: 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/50',
+    yellow: 'bg-amber-50 text-amber-600 ring-1 ring-amber-100/50',
+    red: 'bg-rose-50 text-rose-600 ring-1 ring-rose-100/50',
+    purple: 'bg-purple-50 text-purple-600 ring-1 ring-purple-100/50'
   }
 
   return (
     <motion.div
-      className={`bg-white rounded-lg shadow-lg p-6 ${className}`}
-      initial={{ opacity: 0, y: 20, scale: 0.9 }}
+      className={`bg-white border border-slate-100 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-6 relative overflow-hidden ${className}`}
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.6 }}
-      whileHover={{ scale: 1.05, y: -5 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      whileHover={{ y: -4, shadow: "0 10px 25px rgba(0,0,0,0.05)" }}
     >
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-start justify-between relative z-10">
+        <div className="space-y-2">
           <motion.p
-            className="text-sm font-medium text-gray-600"
-            initial={{ opacity: 0, x: -20 }}
+            className="text-[13px] font-bold text-slate-500 uppercase tracking-wider"
+            initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
           >
             {title}
           </motion.p>
-          <motion.p
-            className="text-2xl font-bold text-gray-900"
-            initial={{ opacity: 0, scale: 0.5 }}
+          <motion.div
+            className="text-3xl font-black text-slate-800 tracking-tight"
+            initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
           >
             {value}
-          </motion.p>
+          </motion.div>
           {change !== undefined && (
             <motion.div
-              className={`flex items-center mt-2 ${change >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}
+              className={`flex items-center mt-3 ${change >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'
+                } px-2 py-1 rounded-md w-fit`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: 0.3 }}
             >
               {change >= 0 ? (
-                <TrendingUp className="w-4 h-4 mr-1" />
+                <TrendingUp className="w-3.5 h-3.5 mr-1" strokeWidth={2.5} />
               ) : (
-                <TrendingDown className="w-4 h-4 mr-1" />
+                <TrendingDown className="w-3.5 h-3.5 mr-1" strokeWidth={2.5} />
               )}
-              <span className="text-sm font-medium">
-                {Math.abs(change)}%
+              <span className="text-[11px] font-bold">
+                {Math.abs(change)}% vs last month
               </span>
             </motion.div>
           )}
         </div>
         <motion.div
-          className={`p-3 rounded-full ${colorClasses[color as keyof typeof colorClasses]}`}
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-          whileHover={{ rotate: 360 }}
+          className={`p-3.5 rounded-2xl ${colorClasses[color as keyof typeof colorClasses]} shadow-sm`}
+          initial={{ opacity: 0, scale: 0, rotate: -45 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 150 }}
+          whileHover={{ scale: 1.1, rotate: 10 }}
         >
-          <Icon className="w-6 h-6" />
+          <Icon className="w-6 h-6" strokeWidth={2} />
         </motion.div>
       </div>
+      
+      {/* Decorative background circle */}
+      <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-[0.03] pointer-events-none ${colorClasses[color as keyof typeof colorClasses].split(' ')[0]}`} />
     </motion.div>
   )
 }

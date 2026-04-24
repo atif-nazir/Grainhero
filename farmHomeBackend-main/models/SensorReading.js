@@ -8,6 +8,12 @@ const sensorReadingSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     required: [true, "Device ID is required"]
   },
+  admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, "Admin ID is required"],
+    index: true
+  },
   tenant_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant'
@@ -377,7 +383,7 @@ const sensorReadingSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 sensorReadingSchema.index({ device_id: 1, timestamp: -1 });
-sensorReadingSchema.index({ tenant_id: 1, timestamp: -1 });
+sensorReadingSchema.index({ admin_id: 1, timestamp: -1 });
 sensorReadingSchema.index({ silo_id: 1, timestamp: -1 });
 sensorReadingSchema.index({ batch_id: 1, timestamp: -1 });
 sensorReadingSchema.index({ timestamp: -1 });
@@ -386,7 +392,7 @@ sensorReadingSchema.index({ 'quality_indicators.anomaly_detected': 1 });
 
 // Compound indexes for common queries
 sensorReadingSchema.index({
-  tenant_id: 1,
+  admin_id: 1,
   silo_id: 1,
   timestamp: -1
 });

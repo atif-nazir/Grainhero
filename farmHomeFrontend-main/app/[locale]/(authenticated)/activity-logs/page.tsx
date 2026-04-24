@@ -176,6 +176,34 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
         }
     }
 
+    const handleExportCSV = async () => {
+        try {
+            const token = localStorage.getItem("token")
+            let url = `${config.backendUrl}/api/activity-logs/export?format=csv`
+            if (categoryFilter !== "all") url += `&category=${categoryFilter}`
+            if (severityFilter !== "all") url += `&severity=${severityFilter}`
+            if (dateFrom) url += `&from=${dateFrom}`
+            if (dateTo) url += `&to=${dateTo}`
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+            if (!res.ok) throw new Error("Export failed")
+            const blob = await res.blob()
+            const blobUrl = URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = blobUrl
+            a.download = `activity-logs-${new Date().toISOString().slice(0,10)}.csv`
+            a.click()
+            URL.revokeObjectURL(blobUrl)
+            toast.success("CSV exported!")
+        } catch {
+            toast.error("Failed to export CSV")
+        }
+    }
+
+    const handleEntityClick = (entityRef: string) => {
+        setSearch(entityRef)
+        fetchLogs(1)
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-6 space-y-6">
             {/* Header */}
@@ -186,15 +214,25 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
                     </h1>
                     <p className="text-gray-500 mt-1">Complete audit trail of all system activities</p>
                 </div>
-                <Button
-                    variant="outline"
-                    onClick={() => fetchLogs(pagination.current_page)}
-                    disabled={loading}
-                    className="gap-2"
-                >
-                    <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                    Refresh
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={handleExportCSV}
+                        className="gap-2"
+                    >
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => fetchLogs(pagination.current_page)}
+                        disabled={loading}
+                        className="gap-2"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                        Refresh
+                    </Button>
+                </div>
             </div>
 
             {/* Summary Cards */}
@@ -353,7 +391,7 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
                                                             {catCfg.label}
                                                         </Badge>
                                                         {log.entity_ref && (
-                                                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 cursor-pointer hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); handleEntityClick(log.entity_ref) }}>
                                                                 {log.entity_ref}
                                                             </Badge>
                                                         )}

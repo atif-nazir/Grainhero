@@ -205,7 +205,8 @@ class EnvironmentalDataService {
 
       // Create sensor reading with environmental context
       const sensorReading = new SensorReading({
-        tenant_id: silo.admin_id, // Use admin_id instead of tenant_id
+        admin_id: silo.admin_id,
+        tenant_id: silo.tenant_id,
         silo_id: silo._id,
         device_id: this.environmentalDeviceId,
         timestamp: new Date(),
@@ -251,18 +252,19 @@ class EnvironmentalDataService {
    * Manually trigger data collection for a specific location
    * @param {number} lat - Latitude
    * @param {number} lon - Longitude
-   * @param {string} tenant_id - Tenant ID
+   * @param {string} admin_id - Admin ID
    * @param {string} silo_id - Silo ID (optional)
    */
-  async collectDataForLocation(lat, lon, tenant_id, silo_id = null) {
+  async collectDataForLocation(lat, lon, admin_id, silo_id = null) {
     try {
       console.log(`Manually collecting environmental data for location ${lat}, ${lon}`);
       
       const environmentalData = await weatherService.getEnvironmentalData(lat, lon);
       const impactAssessment = weatherService.assessWeatherImpact(environmentalData.weather);
-
+      
       const sensorReading = new SensorReading({
-        tenant_id,
+        admin_id,
+        tenant_id: null, // Global environmental reading
         silo_id,
         device_id: this.environmentalDeviceId,
         timestamp: new Date(),

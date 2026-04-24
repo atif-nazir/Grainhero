@@ -41,7 +41,7 @@ class RealTimePredictionService extends EventEmitter {
             const activeBatches = await GrainBatch.find({
                 status: { $in: ['stored', 'monitoring'] },
                 deleted_at: null
-            }).populate('silo_id').populate('tenant_id');
+            }).populate('silo_id');
 
             for (const batch of activeBatches) {
                 await this.monitorBatch(batch);

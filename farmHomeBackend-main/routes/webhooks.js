@@ -265,9 +265,8 @@ router.post("/", (request, response) => {
                 user.subscription_plan = planKey;
                 user.customerId = customerId;
                 user.priceId = priceId;
-                if (tenant && !user.tenant_id) {
-                  user.tenant_id = tenant._id;
-                  user.owned_tenant_id = tenant._id;
+                if (tenant && !user.admin_id) {
+                  user.admin_id = null; // Admin users don't have an admin_id (they ARE the admin)
                 }
                 await user.save();
               } else {
@@ -286,10 +285,9 @@ router.post("/", (request, response) => {
                   updated_at: new Date(),
                 };
 
-                // Only add tenant_id if we have a tenant
+                // Only add admin_id if we have a tenant
                 if (tenant) {
-                  userData.tenant_id = tenant._id;
-                  userData.owned_tenant_id = tenant._id;
+                  userData.admin_id = null; // Pending admin users
                 }
 
                 user = new User(userData);
@@ -322,7 +320,7 @@ router.post("/", (request, response) => {
               user.customerId = customerId;
 
               // Get tenant if not already set
-              if (!user.tenant_id) {
+              if (!user.admin_id) {
                 const Tenant = require("../models/Tenant");
                 // Check if tenant already exists for this email
                 try {
@@ -371,13 +369,14 @@ router.post("/", (request, response) => {
                 }
 
                 if (tenant) {
-                  user.tenant_id = tenant._id;
-                  user.owned_tenant_id = tenant._id;
+                if (tenant && !user.admin_id) {
+                  user.admin_id = null;
+                }
                 }
               } else {
                 try {
                   tenant = await require("../models/Tenant").findById(
-                    user.tenant_id
+                    user.admin_id
                   );
                 } catch (tenantError) {
                   console.warn(
@@ -406,9 +405,9 @@ router.post("/", (request, response) => {
             if (!tenant) {
               const Tenant = require("../models/Tenant");
               try {
-                // Try to find tenant by user's tenant_id first
-                if (user.tenant_id) {
-                  tenant = await Tenant.findById(user.tenant_id);
+                // Try to find tenant by user's admin_id first
+                if (user.admin_id) {
+                  tenant = await Tenant.findById(user.admin_id);
                 }
                 // If still not found, try by email
                 if (!tenant) {
@@ -427,10 +426,9 @@ router.post("/", (request, response) => {
                     await tenant.save();
                     console.log("Created tenant as fallback:", tenant._id);
 
-                    // Update user with tenant_id if not set
-                    if (!user.tenant_id) {
-                      user.tenant_id = tenant._id;
-                      user.owned_tenant_id = tenant._id;
+                    // Update user with admin_id if not set
+                    if (!user.admin_id) {
+                      user.admin_id = null;
                       await user.save();
                     }
                   } catch (createError) {
@@ -440,9 +438,8 @@ router.post("/", (request, response) => {
                         "Tenant created between checks, finding it..."
                       );
                       tenant = await Tenant.findOne({ email: customer.email });
-                      if (tenant && !user.tenant_id) {
-                        user.tenant_id = tenant._id;
-                        user.owned_tenant_id = tenant._id;
+                      if (tenant && !user.admin_id) {
+                        user.admin_id = null;
                         await user.save();
                       }
                     } else {
@@ -465,15 +462,13 @@ router.post("/", (request, response) => {
 
             // Create or update Subscription record
             try {
-              // Use tenant_id if available, otherwise use user._id as fallback
-              const subscriptionTenantId = tenant
-                ? tenant._id
-                : user.tenant_id || user._id;
+              // Use admin_id if available, otherwise use user._id as fallback
+              const subscriptionAdminId = user.admin_id || user._id;
 
               // Check if subscription already exists for this tenant/user
               let subscription = await Subscription.findOne({
                 $or: [
-                  { tenant_id: subscriptionTenantId },
+                  { admin_id: subscriptionAdminId },
                   { stripe_customer_id: customerId },
                 ],
                 stripe_subscription_id: sessionFull.subscription || null,
@@ -532,7 +527,7 @@ router.post("/", (request, response) => {
               } else {
                 // Create new subscription
                 subscription = new Subscription({
-                  tenant_id: subscriptionTenantId,
+                  admin_id: subscriptionAdminId,
                   plan_name: subscriptionPlanName,
                   plan_description: planFeatures.description,
                   price_per_month: plan.price,
@@ -994,7 +989,7 @@ The GrainHero Team
             // Update Subscription record
             const subscription = await Subscription.findOne({
               stripe_subscription_id: event.data.object.id,
-              tenant_id: user.tenant_id,
+              admin_id: user.admin_id || user._id,
             });
 
             if (subscription) {

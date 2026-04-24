@@ -275,6 +275,7 @@ const userSchema = new mongoose.Schema(
 );
 
 // Indexes (email index is already defined by unique: true)
+userSchema.index({ admin_id: 1, role: 1 });
 userSchema.index({ tenant_id: 1, role: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ role: 1 });

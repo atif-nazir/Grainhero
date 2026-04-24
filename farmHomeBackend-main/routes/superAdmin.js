@@ -43,7 +43,7 @@ router.get("/super-admin/tenants", [
         $lookup: {
           from: "warehouses",
           localField: "_id",
-          foreignField: "tenant_id",
+          foreignField: "admin_id",
           as: "warehouses"
         }
       },
@@ -80,9 +80,9 @@ router.get("/super-admin/tenants", [
     for (const tenant of recentTenants) {
       // Use created_by (admin's id) to count users for this admin
       if (tenant.created_by) {
-        // Assuming users are linked to admin via admin_id or tenant_id
+        // Users are linked to admin via admin_id
         const userCount = await User.countDocuments({
-          $or: [{ admin_id: tenant.created_by }, { tenant_id: tenant._id }]
+          admin_id: tenant.created_by
         });
         tenant.users_count = userCount;
       }
@@ -120,7 +120,7 @@ router.get("/super-admin/alerts", [
 
     // Get recent system alerts with more detailed information
     const systemAlerts = await GrainAlert.find({})
-      .populate('tenant_id', 'name')
+      .populate('admin_id', 'name')
       .populate('silo_id', 'name')
       .populate('created_by', 'name email')
       .populate('resolved_by', 'name')
@@ -135,7 +135,7 @@ router.get("/super-admin/alerts", [
       message: alert.message || "System notification",
       time: moment(alert.triggered_at).fromNow() || "Just now",
       timestamp: alert.triggered_at,
-      tenant: alert.tenant_id?.name || "Unknown Tenant",
+      tenant: alert.admin_id?.name || "Unknown Tenant",
       createdBy: alert.created_by?.name || "System",
       resolved: alert.status === 'resolved',
       details: alert.message,
@@ -383,22 +383,15 @@ router.post('/tenants/:id/impersonate', [auth], async (req, res) => {
     if (!tenantInfo) return res.status(404).json({ error: 'Tenant not found' });
 
     // Find the admin user for this tenant
-    // Admin might have tenant_id set OR owned_tenant_id set
     let targetUser = await User.findOne({
       email: tenantInfo.email,
-      $or: [
-        { tenant_id: tenantInfo._id },
-        { owned_tenant_id: tenantInfo._id }
-      ]
+      admin_id: tenantInfo.created_by
     });
 
     if (!targetUser) {
       // Fallback: try to find ANY admin for this tenant
       targetUser = await User.findOne({
-        $or: [
-          { tenant_id: tenantInfo._id },
-          { owned_tenant_id: tenantInfo._id }
-        ],
+        admin_id: tenantInfo.created_by,
         role: 'admin'
       });
     }
@@ -406,7 +399,7 @@ router.post('/tenants/:id/impersonate', [auth], async (req, res) => {
     if (!targetUser) return res.status(404).json({ error: 'No admin user found for this tenant to impersonate' });
 
     const token = jwt.sign(
-      { id: targetUser._id, role: targetUser.role, tenant_id: targetUser.tenant_id, is_impersonating: true },
+      { id: targetUser._id, role: targetUser.role, admin_id: targetUser.admin_id, is_impersonating: true },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
@@ -440,9 +433,8 @@ router.post('/reports/generate', [auth], async (req, res) => {
     } else if (type === 'full-user-report') {
       // Fetch all users except super admins
       const users = await User.find({ role: { $ne: 'super_admin' } })
-        .populate('tenant_id', 'name')
-        .populate('owned_tenant_id', 'name') // Admin users have owned_tenant_id
-        .sort({ tenant_id: 1, role: 1 });
+        .populate('admin_id', 'name')
+        .sort({ admin_id: 1, role: 1 });
 
       const csvRows = [];
       // Header
@@ -450,7 +442,7 @@ router.post('/reports/generate', [auth], async (req, res) => {
 
       for (const user of users) {
         // Determine tenant name (either assigned tenant or owned tenant)
-        const tenantName = user.tenant_id?.name || user.owned_tenant_id?.name || 'N/A';
+        const tenantName = user.admin_id?.name || 'N/A';
         const lastLogin = user.lastLogin && !isNaN(new Date(user.lastLogin).getTime())
           ? new Date(user.lastLogin).toISOString().split('T')[0]
           : 'Never';
@@ -499,7 +491,7 @@ router.post('/reports/generate', [auth], async (req, res) => {
 
         // Table Rows
         for (const user of users) {
-          const tenantName = user.tenant_id?.name || user.owned_tenant_id?.name || 'N/A';
+          const tenantName = user.admin_id?.name || 'N/A';
           const lastLogin = user.lastLogin && !isNaN(new Date(user.lastLogin).getTime())
             ? new Date(user.lastLogin).toISOString().split('T')[0]
             : 'Never';
@@ -743,14 +735,14 @@ router.get('/financials/invoices', [auth], async (req, res) => {
     if (count === 0) {
       // Fallback: Generate "Virtual" invoices from Subscriptions
       const subscriptions = await Subscription.find({})
-        .populate('tenant_id', 'name')
+        .populate('admin_id', 'name')
         .sort({ created_at: -1 })
         .limit(50);
 
       invoices = subscriptions.map(sub => ({
         id: sub._id,
         invoice_number: `INV-${sub._id.toString().substring(18)}`,
-        tenant_name: sub.tenant_id?.name || 'Unknown',
+        tenant_name: sub.admin_id?.name || 'Unknown',
         amount: sub.price_per_month || 0,
         status: sub.payment_status || 'paid',
         date: sub.last_payment_date || sub.created_at,
@@ -758,14 +750,14 @@ router.get('/financials/invoices', [auth], async (req, res) => {
       }));
     } else {
       const dbInvoices = await Invoice.find({})
-        .populate('tenant_id', 'name')
+        .populate('admin_id', 'name')
         .sort({ billing_date: -1 })
         .limit(50);
 
       invoices = dbInvoices.map(inv => ({
         id: inv._id,
         invoice_number: inv.invoice_number,
-        tenant_name: inv.tenant_id?.name || 'Unknown',
+        tenant_name: inv.admin_id?.name || 'Unknown',
         amount: inv.amount,
         status: inv.status,
         date: inv.billing_date,

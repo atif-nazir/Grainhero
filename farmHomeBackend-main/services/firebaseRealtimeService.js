@@ -133,7 +133,8 @@ async function handleLatest(deviceId, snapshot, io) {
     // ─── Step 5: Create and SAVE SensorReading to MongoDB ───
     const sensorReading = new SensorReading({
       device_id: device._id,
-      tenant_id: device.admin_id,
+      admin_id: device.admin_id,
+      tenant_id: device.tenant_id,
       silo_id: device.silo_id,
       timestamp: new Date(ts),
 
