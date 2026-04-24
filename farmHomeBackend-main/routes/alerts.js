@@ -12,311 +12,256 @@ const { body, validationResult, param } = require('express-validator');
  * @swagger
  * tags:
  *   name: Alerts
- * @swagger
- * /alerts/{id}:
- *   put:
- *     summary: Update an alert
- *     tags: [Alerts]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Alert ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               title:
- *                 type: string
- *               category:
- *                 type: string
- *               location:
- *                 type: string
- *               description:
- *                 type: string
- *     responses:
- *       200:
- *         description: Alert updated
- *       400:
- *         description: Bad request
- *       403:
- *         description: Access denied. Super admin only.
- *       404:
- *         description: Alert not found
+ *   description: Real-time grain alerts and system notifications
  */
 
 /**
- * @swagger
- * /alerts/{id}:
- *   patch:
- *     summary: Partially update an alert
- *     tags: [Alerts]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Alert ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               title:
- *                 type: string
- *               category:
- *                 type: string
- *               location:
- *                 type: string
- *               description:
- *                 type: string
- *     responses:
- *       200:
- *         description: Alert updated
- *       400:
- *         description: Bad request
- *       403:
- *         description: Access denied. Super admin only.
- *       404:
- *         description: Alert not found
+ * GET /api/alerts
+ * List all alerts for the tenant with role-based filtering
  */
+router.get('/', [auth, requireTenantAccess], async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        let filter = {};
+
+        if (req.user.role === 'super_admin') {
+            if (req.query.tenant_id) filter.tenant_id = req.query.tenant_id;
+        } else {
+            filter.tenant_id = req.user.tenant_id || req.user.owned_tenant_id;
+
+            // Technician only sees alerts assigned to them or sensor-related
+            if (req.user.role === 'technician') {
+                filter.$or = [
+                    { assigned_to: req.user._id },
+                    { source: { $in: ['sensor', 'threshold'] } }
+                ];
+            }
+        }
+
+        if (req.query.priority) filter.priority = req.query.priority;
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.source) filter.source = req.query.source;
+        if (req.query.silo_id) filter.silo_id = req.query.silo_id;
+        if (req.query.batch_id) filter.batch_id = req.query.batch_id;
+
+        const [alerts, total] = await Promise.all([
+            GrainAlert.find(filter)
+                .populate('silo_id', 'name location')
+                .populate('batch_id', 'batch_id grain_type')
+                .populate('assigned_to', 'name email')
+                .sort({ triggered_at: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            GrainAlert.countDocuments(filter)
+        ]);
+
+        res.json({
+            alerts,
+            pagination: {
+                current_page: page,
+                total_pages: Math.ceil(total / limit),
+                total_items: total
+            }
+        });
+
+    } catch (error) {
+        console.error('Get alerts error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 /**
- * @swagger
- * /alerts/{id}:
- *   delete:
- *     summary: Delete an alert
- *     tags: [Alerts]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Alert ID
- *     responses:
- *       200:
- *         description: Alert deleted
- *       403:
- *         description: Access denied. Super admin only.
- *       404:
- *         description: Alert not found
+ * GET /api/alerts/unread-count
+ * Quick count of unresolved alerts for bell icon
  */
+router.get('/unread-count', [auth, requireTenantAccess], async (req, res) => {
+    try {
+        let filter = {
+            status: { $in: ['pending', 'acknowledged'] }
+        };
+
+        if (req.user.role === 'super_admin') {
+            // Super admin sees all
+        } else {
+            filter.tenant_id = req.user.tenant_id || req.user.owned_tenant_id;
+        }
+
+        if (req.user.role === 'technician') {
+            filter.$or = [
+                { assigned_to: req.user._id },
+                { source: { $in: ['sensor', 'threshold'] } }
+            ];
+        }
+
+        const count = await GrainAlert.countDocuments(filter);
+        res.json({ count });
+    } catch (error) {
+        console.error('Get unread count error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 /**
- * @swagger
- * /alerts:
- *   get:
- *     summary: Get alerts for user's farmhouse location
- *     tags: [Alerts]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of alerts for user's farmhouse location
- *       400:
- *         description: User farmhouse location not set
+ * GET /api/alerts/stats
+ * Get alert statistics for dashboard
  */
+router.get('/stats', [auth, requireTenantAccess], async (req, res) => {
+    try {
+        let matchFilter = {};
+        if (req.user.role !== 'super_admin') {
+            const tid = req.user.tenant_id || req.user.owned_tenant_id;
+            if (tid) matchFilter.tenant_id = new mongoose.Types.ObjectId(tid.toString());
+        }
+
+        const stats = await GrainAlert.aggregate([
+            { $match: matchFilter },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: 1 },
+                    critical: { $sum: { $cond: [{ $eq: ['$priority', 'critical'] }, 1, 0] } },
+                    high: { $sum: { $cond: [{ $eq: ['$priority', 'high'] }, 1, 0] } },
+                    medium: { $sum: { $cond: [{ $eq: ['$priority', 'medium'] }, 1, 0] } },
+                    unresolved: { $sum: { $cond: [{ $in: ['$status', ['pending', 'acknowledged', 'escalated']] }, 1, 0] } },
+                    resolved: { $sum: { $cond: [{ $eq: ['$status', 'resolved'] }, 1, 0] } }
+                }
+            }
+        ]);
+
+        const sourceStats = await GrainAlert.aggregate([
+            { $match: matchFilter },
+            { $group: { _id: '$source', count: { $sum: 1 } } }
+        ]);
+
+        res.json({
+            overview: stats[0] || { total: 0, critical: 0, high: 0, medium: 0, unresolved: 0, resolved: 0 },
+            sources: sourceStats
+        });
+    } catch (error) {
+        console.error('Get alert stats error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 /**
- * @swagger
- * /alerts/all-public:
- *   get:
- *     summary: Get all alerts (public)
- *     tags: [Alerts]
- *     responses:
- *       200:
- *         description: List of all alerts
+ * GET /api/alerts/all-public
+ * Public alerts endpoint (backward compatibility)
  */
 router.get('/all-public', async (req, res) => {
-  try {
-    const alerts = await Alert.find();
-    res.json(alerts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * @swagger
- * /alerts/by-admin/{userId}:
- *   get:
- *     summary: Get alerts for an admin by user ID (matching farmhouse location, public)
- *     tags: [Alerts]
- *     parameters:
- *       - in: path
- *         name: userId
- *         schema:
- *           type: string
- *         required: true
- *         description: Admin user ID
- *     responses:
- *       200:
- *         description: List of alerts for the admin's farmhouses
- *       404:
- *         description: No farmhouses or alerts found
- */
-router.get('/by-admin/:userId', async (req, res) => {
-  try {
-    // For grain management - admin can see all alerts in their tenant
-    // TODO: Implement tenant-based filtering
-    const alerts = await Alert.find();
-    res.json(alerts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * @swagger
- * /alerts/by-manager/{userId}:
- *   get:
- *     summary: Get alerts for a manager by user ID (matching farmhouse location, public)
- *     tags: [Alerts]
- *     parameters:
- *       - in: path
- *         name: userId
- *         schema:
- *           type: string
- *         required: true
- *         description: Manager user ID
- *     responses:
- *       200:
- *         description: List of alerts for the manager's farmhouses
- *       404:
- *         description: No farmhouses or alerts found
- */
-router.get('/by-manager/:userId', async (req, res) => {
-  try {
-    // For grain management - manager can see alerts in their tenant
-    // TODO: Implement tenant-based filtering
-    const alerts = await Alert.find();
-    res.json(alerts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * @swagger
- * /alerts/by-assistant/{userId}:
- *   get:
- *     summary: Get alerts for an assistant by user ID (matching farmhouse location, public)
- *     tags: [Alerts]
- *     parameters:
- *       - in: path
- *         name: userId
- *         schema:
- *           type: string
- *         required: true
- *         description: Assistant user ID
- *     responses:
- *       200:
- *         description: List of alerts for the assistant's farmhouses
- *       404:
- *         description: No farmhouses or alerts found
- */
-router.get('/by-technician/:userId', async (req, res) => {
-  try {
-    // For grain management - technician can see alerts in their tenant
-    // TODO: Implement tenant-based filtering
-    const alerts = await Alert.find();
-    res.json(alerts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST: Create alert (super_admin only)
-router.post('/', auth, superadmin, async (req, res) => {
-  try {
-    const { title, category, location, description } = req.body;
-    const alert = new Alert({ title, category, location, description });
-    await alert.save();
-    // Emit socket event if io is attached
-    if (req.app.get('io')) {
-      req.app.get('io').emit('new_alert', alert);
+    try {
+        const alerts = await GrainAlert.find({}).sort({ triggered_at: -1 }).limit(10).lean();
+        res.json(alerts);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    res.status(201).json(alert);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// PUT: Update alert (super_admin only)
-router.put('/:id', auth, superadmin, async (req, res) => {
-  try {
-    const alert = await Alert.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!alert) return res.status(404).json({ error: 'Alert not found' });
-    res.json(alert);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// PATCH: Update alert (super_admin only)
-router.patch('/:id', auth, superadmin, async (req, res) => {
-  try {
-    const alert = await Alert.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!alert) return res.status(404).json({ error: 'Alert not found' });
-    res.json(alert);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// DELETE: Delete alert (super_admin only)
-router.delete('/:id', auth, superadmin, async (req, res) => {
-  try {
-    const alert = await Alert.findByIdAndDelete(req.params.id);
-    if (!alert) return res.status(404).json({ error: 'Alert not found' });
-    res.json({ message: 'Alert deleted' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET: Get alerts for user's farmhouse location
-router.get('/', auth, async (req, res) => {
-  try {
-    // Assume req.user.farmhouse or req.user.location holds user's farmhouse location
-    const location = req.user.farmhouse || req.user.location;
-    if (!location) {
-      return res.status(400).json({ error: 'User farmhouse location not set' });
-    }
-    const alerts = await Alert.find({ location });
-    res.json(alerts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
 });
 
 /**
- * Get all alerts (superadmin only)
- * @route GET /alerts/all
- * @access Protected (auth, superadmin)
+ * POST /api/alerts/:id/acknowledge
+ * Mark an alert as acknowledged
  */
-router.get('/all', auth, superadmin, async (req, res) => {
-  try {
-    const alerts = await Alert.find();
-    res.json(alerts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+router.post('/:id/acknowledge', [
+    auth,
+    param('id').isMongoId().withMessage('Invalid alert ID')
+], async (req, res) => {
+    try {
+        const alert = await GrainAlert.findById(req.params.id);
+        if (!alert) return res.status(404).json({ error: 'Alert not found' });
+
+        alert.status = 'acknowledged';
+        alert.acknowledged_by = req.user._id;
+        alert.acknowledged_at = new Date();
+
+        await alert.save();
+
+        // Log the action
+        try {
+            await LoggingService.logAlertAcknowledged(req.user, alert, req.ip);
+        } catch (logErr) { console.error('Logging error:', logErr.message); }
+
+        res.json({ message: 'Alert acknowledged', alert });
+    } catch (error) {
+        console.error('Acknowledge alert error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
-module.exports = router; 
+/**
+ * POST /api/alerts/:id/resolve
+ * Mark an alert as resolved
+ */
+router.post('/:id/resolve', [
+    auth,
+    param('id').isMongoId().withMessage('Invalid alert ID'),
+    body('resolution_type').notEmpty().withMessage('Resolution type is required'),
+    body('resolution_notes').optional()
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        const alert = await GrainAlert.findById(req.params.id);
+        if (!alert) return res.status(404).json({ error: 'Alert not found' });
+
+        alert.status = 'resolved';
+        alert.resolved_by = req.user._id;
+        alert.resolved_at = new Date();
+        alert.resolution_type = req.body.resolution_type;
+        alert.resolution_notes = req.body.resolution_notes;
+
+        await alert.save();
+
+        try {
+            await LoggingService.logAlertResolved(req.user, alert, req.body.resolution_type, req.ip);
+        } catch (logErr) { console.error('Logging error:', logErr.message); }
+
+        res.json({ message: 'Alert resolved', alert });
+    } catch (error) {
+        console.error('Resolve alert error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/alerts/:id/escalate
+ * Escalate alert to a specific user or higher role
+ */
+router.post('/:id/escalate', [
+    auth,
+    param('id').isMongoId().withMessage('Invalid alert ID'),
+    body('escalated_to').isMongoId().withMessage('Target user ID is required'),
+    body('reason').notEmpty().withMessage('Reason for escalation is required')
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        const alert = await GrainAlert.findById(req.params.id);
+        if (!alert) return res.status(404).json({ error: 'Alert not found' });
+
+        const User = require('../models/User');
+        const targetUser = await User.findById(req.body.escalated_to);
+        if (!targetUser) return res.status(404).json({ error: 'Target user not found' });
+
+        alert.status = 'escalated';
+        alert.assigned_to = targetUser._id;
+        alert.escalation_reason = req.body.reason;
+
+        await alert.save();
+
+        try {
+            await LoggingService.logAlertEscalated(req.user, alert, targetUser.name || targetUser.email, req.ip);
+        } catch (logErr) { console.error('Logging error:', logErr.message); }
+
+        res.json({ message: 'Alert escalated', alert });
+    } catch (error) {
+        console.error('Escalate alert error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+module.exports = router;
