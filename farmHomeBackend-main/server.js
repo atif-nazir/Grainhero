@@ -46,15 +46,15 @@ const paymentsRoute = require("./routes/payments");
 const reportsRoute = require("./routes/reports");
 
 // Super Admin routes
-const tenantManagementRoute = require("./routes/tenantManagement");
+const adminManagementRoute = require("./routes/adminManagement");
 const planManagementRoute = require("./routes/planManagement");
 const superAdminRoute = require("./routes/superAdmin");
 
 // User Management routes
 const userManagementRoute = require("./routes/userManagement");
 
-// Tenant Settings routes
-const tenantSettingsRoute = require("./routes/tenantSettings");
+// Admin Settings routes
+const adminSettingsRoute = require("./routes/adminSettings");
 
 const Alert = require("./models/Alert");
 const environmentalDataService = require("./services/environmentalDataService");
@@ -277,8 +277,8 @@ app.use("/api/logging", loggingRoute);
 app.use("/api/payments", paymentsRoute);
 app.use("/api/reports", reportsRoute);
 
-// Super Admin routes
-app.use("/api/tenant-management", tenantManagementRoute);
+// Admin Management routes
+app.use("/api/admin-management", adminManagementRoute);
 app.use("/api/plan-management", planManagementRoute);
 app.use("/api/super-admin", superAdminRoute);
 
@@ -289,8 +289,8 @@ app.use("/api/subscription-analytics", subscriptionAnalyticsRoute);
 // User Management routes
 app.use("/api/user-management", userManagementRoute);
 
-// Tenant Settings routes
-app.use("/api", tenantSettingsRoute);
+// Admin Settings routes
+app.use("/api", adminSettingsRoute);
 
 // Warehouse Management routes
 const warehousesRoute = require("./routes/warehouses");

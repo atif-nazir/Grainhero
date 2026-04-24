@@ -14,11 +14,6 @@ const subscriptionSchema = new mongoose.Schema(
       required: true,
       index: true
     },
-    tenant_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
-    },
-
     // Plan details
     plan_name: {
       type: String,

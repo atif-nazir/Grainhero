@@ -89,7 +89,7 @@ const requireRole = (roles) => {
  * Admin-based access control
  * Ensures user can only access resources from their admin's team
  */
-const requireTenantAccess = (req, res, next) => {
+const requireAdminAccess = (req, res, next) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });
@@ -102,7 +102,7 @@ const requireTenantAccess = (req, res, next) => {
 
     // Determine admin_id based on user role
     let userAdminId;
-    console.log("=== TENANT ACCESS MIDDLEWARE ===");
+    console.log("=== ADMIN ACCESS MIDDLEWARE ===");
     console.log("User role:", req.user.role);
     console.log("User ID:", req.user._id);
     console.log("User admin_id:", req.user.admin_id);
@@ -242,7 +242,7 @@ const requireTechnician = requireRole([
 module.exports = {
   requirePermission,
   requireRole,
-  requireTenantAccess,
+  requireAdminAccess,
   requireResourceOwnership,
   requireFeature,
   // Backward-compatible aliases

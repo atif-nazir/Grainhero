@@ -15,7 +15,7 @@ class AlertEngine {
      */
     static async createAlert({
         admin_id,
-        tenant_id,
+        admin_id,
         silo_id = null,
         batch_id = null,
         title,
@@ -31,8 +31,8 @@ class AlertEngine {
     }) {
         try {
             const alert = new GrainAlert({
-                admin_id: admin_id || tenant_id, // Fallback
-                tenant_id,
+                admin_id: admin_id || admin_id, // Fallback
+                admin_id,
                 silo_id,
                 batch_id,
                 title,
@@ -70,7 +70,7 @@ class AlertEngine {
 
         return this.createAlert({
             admin_id: logEntry.admin_id,
-            tenant_id: logEntry.tenant_id,
+            admin_id: logEntry.admin_id,
             title: alertConfig.title(logEntry),
             message: alertConfig.message(logEntry),
             priority: alertConfig.priority,
@@ -270,7 +270,7 @@ class AlertEngine {
                 if (!existingAlert) {
                     await this.createAlert({
                         admin_id: policy.admin_id,
-                        tenant_id: policy.tenant_id,
+                        admin_id: policy.admin_id,
                         title: `🛡️ Policy Expiring in ${daysLeft} days: ${policy.policy_number}`,
                         message: `Insurance policy ${policy.policy_number} (${policy.provider_name}) expires on ${new Date(policy.end_date).toLocaleDateString()}. Coverage: PKR ${policy.coverage_amount?.toLocaleString()}.`,
                         priority,
@@ -315,7 +315,7 @@ class AlertEngine {
 
                     await this.createAlert({
                         admin_id: batch.admin_id,
-                        tenant_id: batch.tenant_id,
+                        admin_id: batch.admin_id,
                         silo_id: batch.silo_id,
                         batch_id: batch._id,
                         title: `⚠️ High Risk Batch: ${batch.batch_id}`,

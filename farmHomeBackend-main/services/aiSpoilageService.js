@@ -122,7 +122,7 @@ class AISpoilageService extends EventEmitter {
             const spoilagePrediction = new SpoilagePrediction({
                 prediction_id: predictionId,
                 admin_id: batch.admin_id,
-                tenant_id: batch.tenant_id,
+                admin_id: batch.admin_id,
                 silo_id: batch.silo_id,
                 batch_id: batchId,
                 prediction_type: options.predictionType || 'general_spoilage',
@@ -399,7 +399,7 @@ class AISpoilageService extends EventEmitter {
                 const advisory = new Advisory({
                     advisory_id: advisoryData.advisory_id,
                     admin_id: spoilagePrediction.admin_id,
-                    tenant_id: spoilagePrediction.tenant_id,
+                    admin_id: spoilagePrediction.admin_id,
                     silo_id: spoilagePrediction.silo_id,
                     prediction_id: spoilagePrediction._id,
                     title: this.generateAdvisoryTitle(advisoryData),
@@ -449,7 +449,7 @@ class AISpoilageService extends EventEmitter {
             const alert = new GrainAlert({
                 alert_id: uuidv4(),
                 admin_id: spoilagePrediction.admin_id,
-                tenant_id: spoilagePrediction.tenant_id,
+                admin_id: spoilagePrediction.admin_id,
                 silo_id: spoilagePrediction.silo_id,
                 batch_id: spoilagePrediction.batch_id,
                 title: `CRITICAL SPOILAGE RISK: ${spoilagePrediction.prediction_type.toUpperCase()}`,

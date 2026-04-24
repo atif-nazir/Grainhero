@@ -16,7 +16,7 @@ async function checkAllSubscriptionsForWarnings() {
     const activeSubscriptions = await Subscription.find({
       status: SUBSCRIPTION_STATUSES.ACTIVE,
       deleted_at: null,
-    }).populate("tenant_id");
+    }).populate("admin_id");
 
     console.log(
       `Checking ${activeSubscriptions.length} active subscriptions for limit warnings...`

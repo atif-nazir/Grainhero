@@ -7,7 +7,7 @@ const {
   requirePermission,
   requireUserManagement,
   requireUserCreationPermission,
-  requireTenantAccess,
+  requireAdminAccess,
 } = require("../middleware/roleAuth");
 const User = require("../models/User");
 const { USER_ROLES } = require("../configs/enum");

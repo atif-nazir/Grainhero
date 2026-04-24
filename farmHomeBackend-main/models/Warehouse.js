@@ -23,11 +23,6 @@ const warehouseSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, "Admin ID is required"]
   },
-  tenant_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant'
-  },
-
   // Location information
   location: {
     description: String,
@@ -141,7 +136,6 @@ const warehouseSchema = new mongoose.Schema({
 // Indexes for better query performance
 warehouseSchema.index({ admin_id: 1, status: 1 });
 warehouseSchema.index({ manager_id: 1 });
-warehouseSchema.index({ tenant_id: 1 });
 warehouseSchema.index({ status: 1 });
 
 // Ensure warehouse names are unique per admin

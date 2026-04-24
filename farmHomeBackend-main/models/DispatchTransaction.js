@@ -8,11 +8,6 @@ const dispatchTransactionSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant'
-    },
-
     // References
     batch_id: {
         type: mongoose.Schema.Types.ObjectId,
@@ -84,7 +79,6 @@ const dispatchTransactionSchema = new mongoose.Schema({
 });
 
 dispatchTransactionSchema.index({ admin_id: 1, dispatch_date: -1 });
-dispatchTransactionSchema.index({ tenant_id: 1, dispatch_date: -1 });
 dispatchTransactionSchema.index({ batch_id: 1 });
 dispatchTransactionSchema.index({ buyer_id: 1 });
 

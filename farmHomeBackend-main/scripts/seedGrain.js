@@ -10,7 +10,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
-const Tenant = require('../models/Tenant');
 const User = require('../models/User');
 const Silo = require('../models/Silo');
 const GrainBatch = require('../models/GrainBatch');
@@ -24,47 +23,32 @@ async function connect() {
   await mongoose.connect(uri, { useNewUrlParser: true });
 }
 
-async function ensureTenantAndAdmin() {
-  let tenant = await Tenant.findOne().sort({ created_at: 1 });
-  if (!tenant) {
-    tenant = await Tenant.create({
-      name: 'Demo Farm',
-      email: 'demo@farmhome.local',
-      business_type: 'farm',
-    });
-  }
-
+async function ensureAdmin() {
   let admin = await User.findOne({ role: 'admin' });
   if (!admin) {
     admin = new User({
-      name: 'Demo Admin',
-      email: 'admin@farmhome.local',
+      name: 'Demo Farm Admin',
+      email: 'demo@farmhome.local',
       phone: '+920000000000',
       role: 'admin',
       password: 'Admin123!',
-      // Ensure required tenant ownership fields are set for admin
-      owned_tenant_id: tenant._id,
-      tenant_id: tenant._id,
+      business_type: 'farm',
+      admin_id: null
     });
     await admin.save();
   } else {
     // Backfill missing fields if schema requires
     let needsSave = false;
-    if (!admin.owned_tenant_id) { admin.owned_tenant_id = tenant._id; needsSave = true; }
-    if (!admin.tenant_id) { admin.tenant_id = tenant._id; needsSave = true; }
+    if (admin.business_type === undefined) { admin.business_type = 'farm'; needsSave = true; }
+    if (admin.admin_id !== null) { admin.admin_id = null; needsSave = true; }
     if (needsSave) await admin.save();
   }
 
-  if (!tenant.created_by) {
-    tenant.created_by = admin._id;
-    await tenant.save();
-  }
-
-  return { tenant, admin };
+  return { admin };
 }
 
-async function seedSilos(tenant, admin) {
-  const existing = await Silo.find({ tenant_id: tenant._id });
+async function seedSilos(admin) {
+  const existing = await Silo.find({ admin_id: admin._id });
   if (existing.length > 0) return existing;
 
   const now = new Date();
@@ -72,7 +56,7 @@ async function seedSilos(tenant, admin) {
     {
       silo_id: 'SILO-A-001',
       name: 'Silo A - Main Storage',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       capacity_kg: 10000,
       current_occupancy_kg: 7500,
       status: 'active',
@@ -87,7 +71,7 @@ async function seedSilos(tenant, admin) {
     {
       silo_id: 'SILO-B-001',
       name: 'Silo B - Secondary',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       capacity_kg: 8000,
       current_occupancy_kg: 5200,
       status: 'active',
@@ -102,7 +86,7 @@ async function seedSilos(tenant, admin) {
     {
       silo_id: 'SILO-C-001',
       name: 'Silo C - Reserve',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       capacity_kg: 6000,
       current_occupancy_kg: 0,
       status: 'maintenance',
@@ -113,15 +97,15 @@ async function seedSilos(tenant, admin) {
   return silos;
 }
 
-async function seedBatches(tenant, admin, silos) {
-  const existing = await GrainBatch.find({ tenant_id: tenant._id });
+async function seedBatches(admin, silos) {
+  const existing = await GrainBatch.find({ admin_id: admin._id });
   if (existing.length > 0) return existing;
 
   const [siloA, siloB, siloC] = silos;
   const batches = await GrainBatch.insertMany([
     {
       batch_id: 'GH-2024-001',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       silo_id: siloA._id,
       grain_type: 'Wheat',
       quantity_kg: 5000,
@@ -134,7 +118,7 @@ async function seedBatches(tenant, admin, silos) {
     },
     {
       batch_id: 'GH-2024-002',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       silo_id: siloB._id,
       grain_type: 'Rice',
       quantity_kg: 3500,
@@ -147,7 +131,7 @@ async function seedBatches(tenant, admin, silos) {
     },
     {
       batch_id: 'GH-2024-003',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       silo_id: siloC._id,
       grain_type: 'Maize',
       quantity_kg: 2000,
@@ -167,15 +151,15 @@ async function seedBatches(tenant, admin, silos) {
   return batches;
 }
 
-async function seedSensors(tenant, admin, silos) {
-  const existing = await SensorDevice.find({ tenant_id: tenant._id });
+async function seedSensors(admin, silos) {
+  const existing = await SensorDevice.find({ admin_id: admin._id });
   if (existing.length > 0) return existing;
 
   const devices = await SensorDevice.insertMany([
     {
       device_id: 'SENS-001',
       device_name: 'Silo A - Environmental Sensor',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       silo_id: silos[0]._id,
       sensor_types: ['temperature', 'humidity', 'co2'],
       battery_level: 85,
@@ -191,7 +175,7 @@ async function seedSensors(tenant, admin, silos) {
     {
       device_id: 'SENS-002',
       device_name: 'Silo B - Multi Sensor',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       silo_id: silos[1]._id,
       sensor_types: ['temperature', 'humidity', 'co2', 'voc', 'moisture'],
       battery_level: 92,
@@ -207,7 +191,7 @@ async function seedSensors(tenant, admin, silos) {
     {
       device_id: 'SENS-003',
       device_name: 'Silo C - Basic Sensor',
-      tenant_id: tenant._id,
+      admin_id: admin._id,
       silo_id: silos[2]._id,
       sensor_types: ['temperature', 'humidity'],
       battery_level: 15,
@@ -229,17 +213,16 @@ async function main() {
   try {
     await connect();
     console.log('Connected to MongoDB');
-    const { tenant, admin } = await ensureTenantAndAdmin();
-    console.log('Using tenant:', tenant._id.toString());
+    const { admin } = await ensureAdmin();
     console.log('Using admin:', admin._id.toString());
 
-    const silos = await seedSilos(tenant, admin);
+    const silos = await seedSilos(admin);
     console.log(`Silos seeded: ${silos.length}`);
 
-    const batches = await seedBatches(tenant, admin, silos);
+    const batches = await seedBatches(admin, silos);
     console.log(`Grain batches seeded: ${batches.length}`);
 
-    const sensors = await seedSensors(tenant, admin, silos);
+    const sensors = await seedSensors(admin, silos);
     console.log(`Sensors seeded: ${sensors.length}`);
 
     // Seed super admin and a few tenants for Super Admin dashboard
@@ -255,25 +238,26 @@ async function main() {
       await superAdmin.save();
     }
 
-    const existingTenants = await Subscription.countDocuments();
-    if (existingTenants < 3) {
+    const existingAdmins = await Subscription.countDocuments();
+    if (existingAdmins < 3) {
       const plans = [
         { name: 'Basic', price: 99, users: 5, devices: 10, storage: 1 },
         { name: 'Pro', price: 299, users: 25, devices: 50, storage: 10 },
         { name: 'Enterprise', price: 999, users: 100, devices: 200, storage: 100 },
       ];
       for (let i = 1; i <= 3; i++) {
-        const t = new Tenant({
-          name: `Tenant ${i}`,
-          email: `tenant${i}@example.com`,
+        const t = new User({
+          name: `Demo Admin ${i}`,
+          email: `demoadmin${i}@example.com`,
           business_type: 'farm',
-          created_by: superAdmin._id,
-          is_active: true,
+          role: 'admin',
+          password: 'Admin123!',
+          status: 'active',
         });
         await t.save();
         const plan = plans[i - 1];
         const sub = new Subscription({
-          tenant_id: t._id,
+          admin_id: t._id,
           plan_name: plan.name,
           price_per_month: plan.price,
           price_per_year: plan.price * 10,
@@ -294,10 +278,8 @@ async function main() {
           created_by: superAdmin._id
         });
         await sub.save();
-        t.subscription_id = sub._id;
-        await t.save();
       }
-      console.log('Super Admin and sample tenants seeded');
+      console.log('Super Admin and sample admins seeded');
     }
 
     // Seed insurance policies and claims
@@ -306,7 +288,7 @@ async function main() {
       const policies = await InsurancePolicy.insertMany([
         {
           policy_number: 'POL-2024-001',
-          tenant_id: tenant._id,
+          admin_id: admin._id,
           provider_name: 'AgriShield Insurance',
           coverage_type: 'Comprehensive',
           coverage_amount: 500000,
@@ -340,7 +322,7 @@ async function main() {
         },
         {
           policy_number: 'POL-2024-002',
-          tenant_id: tenant._id,
+          admin_id: admin._id,
           provider_name: 'GrainGuard Ltd',
           coverage_type: 'Fire & Theft',
           coverage_amount: 300000,
@@ -372,7 +354,7 @@ async function main() {
       await InsuranceClaim.create({
         claim_number: 'CLM-2024-001',
         policy_id: policies[1]._id,
-        tenant_id: tenant._id,
+        admin_id: admin._id,
         claim_type: 'Spoilage',
         description: 'Grain spoilage due to moisture damage in storage',
         amount_claimed: 30000,

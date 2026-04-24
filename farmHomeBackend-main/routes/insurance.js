@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission, requireAdminAccess } = require('../middleware/permission');
 const InsurancePolicy = require('../models/InsurancePolicy');
 const InsuranceClaim = require('../models/InsuranceClaim');
 const GrainBatch = require('../models/GrainBatch');
@@ -105,7 +105,7 @@ router.get('/policies', [
 router.post('/policies', [
   auth,
   requirePermission('insurance.manage'),
-  requireTenantAccess,
+  requireAdminAccess,
   [
     body('policy_number').notEmpty().withMessage('Policy number is required'),
     body('provider_name').notEmpty().withMessage('Provider name is required'),
@@ -210,7 +210,7 @@ router.get('/policies/:id', [
 router.put('/policies/:id', [
   auth,
   requirePermission('insurance.manage'),
-  requireTenantAccess,
+  requireAdminAccess,
   param('id').isMongoId().withMessage('Valid policy ID is required')
 ], async (req, res) => {
   try {
@@ -265,7 +265,7 @@ router.put('/policies/:id', [
 router.post('/policies/:id/batches', [
   auth,
   requirePermission('insurance.manage'),
-  requireTenantAccess,
+  requireAdminAccess,
   param('id').isMongoId().withMessage('Valid policy ID is required'),
   [
     body('batch_id').isMongoId().withMessage('Valid batch ID is required'),
@@ -329,7 +329,7 @@ router.post('/policies/:id/batches', [
 router.get('/claims', [
   auth,
   requirePermission('insurance.view'),
-  requireTenantAccess
+  requireAdminAccess
 ], async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -381,7 +381,7 @@ router.get('/claims', [
 router.post('/claims', [
   auth,
   requirePermission('insurance.manage'),
-  requireTenantAccess,
+  requireAdminAccess,
   [
     body('policy_id').isMongoId().withMessage('Valid policy ID is required'),
     body('claim_type').isIn(['Fire', 'Theft', 'Spoilage', 'Weather Damage', 'Equipment Failure', 'Other']).withMessage('Invalid claim type'),
@@ -464,7 +464,7 @@ router.post('/claims', [
 router.get('/statistics', [
   auth,
   requirePermission('insurance.view'),
-  requireTenantAccess
+  requireAdminAccess
 ], async (req, res) => {
   try {
     const adminId = req.user.admin_id || req.user._id;
@@ -584,7 +584,7 @@ router.post('/request-coverage',
 router.get('/claims/:id', [
   auth,
   requirePermission('insurance.view'),
-  requireTenantAccess,
+  requireAdminAccess,
   param('id').isMongoId().withMessage('Valid claim ID is required')
 ], async (req, res) => {
   try {

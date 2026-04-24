@@ -149,7 +149,7 @@ class DataAggregationService extends EventEmitter {
     return {
       silo_id: rawReadings[0].silo_id,
       admin_id: rawReadings[0].admin_id,
-      tenant_id: rawReadings[0].tenant_id,
+      admin_id: rawReadings[0].admin_id,
       device_id: rawReadings[0].device_id,
       batch_id: rawReadings[0].batch_id,
       timestamp: timestamp,

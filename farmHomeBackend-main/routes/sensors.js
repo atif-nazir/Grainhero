@@ -5,7 +5,7 @@ const SensorReading = require('../models/SensorReading');
 const Silo = require('../models/Silo');
 const GrainAlert = require('../models/GrainAlert');
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission, requireAdminAccess } = require('../middleware/permission');
 const { body, validationResult, param, query } = require('express-validator');
 const axios = require('axios');
 const iotDeviceService = require('../services/iotDeviceService');
@@ -68,7 +68,7 @@ const LoggingService = require('../services/loggingService');
 router.post('/register', [
     auth,
     requirePermission('sensor.manage'),
-    requireTenantAccess,
+    requireAdminAccess,
     [
         body('device_id').notEmpty().withMessage('Device ID is required'),
         body('device_name').notEmpty().withMessage('Device name is required'),
@@ -230,7 +230,7 @@ router.post('/iot-data', async (req, res) => {
 router.post('/', [
     auth,
     requirePermission('sensor.manage'),
-    requireTenantAccess,
+    requireAdminAccess,
     [
         body('device_id').notEmpty().withMessage('Device ID is required'),
         body('device_name').notEmpty().withMessage('Device name is required'),
@@ -297,7 +297,7 @@ router.post('/', [
 router.get('/', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -354,7 +354,7 @@ router.get('/', [
 router.get('/:id', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('id').isMongoId().withMessage('Valid sensor ID is required')
 ], async (req, res) => {
     try {
@@ -400,7 +400,7 @@ router.get('/:id', [
 router.put('/:id', [
     auth,
     requirePermission('sensor.manage'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('id').isMongoId().withMessage('Valid sensor ID is required')
 ], async (req, res) => {
     try {
@@ -577,7 +577,7 @@ router.post('/:id/readings', [
 router.get('/:id/readings', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('id').isMongoId().withMessage('Valid sensor ID is required')
 ], async (req, res) => {
     try {
@@ -631,7 +631,7 @@ router.get('/:id/readings', [
 router.post('/:id/calibrate', [
     auth,
     requirePermission('sensor.calibrate'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('id').isMongoId().withMessage('Valid sensor ID is required')
 ], async (req, res) => {
     try {
@@ -828,7 +828,7 @@ function buildControlAdvisory(reading) {
 router.get('/weather-data', [
     auth,
     requirePermission('environmental.monitor'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { latitude, longitude, days = 3 } = req.query;
@@ -880,7 +880,7 @@ router.get('/weather-data', [
 router.get('/regional-adaptation', [
     auth,
     requirePermission('environmental.monitor'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { region = 'punjab', season } = req.query;
@@ -927,7 +927,7 @@ router.get('/regional-adaptation', [
 router.post('/ai-weather-sync', [
     auth,
     requirePermission('ai.enable'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { silo_id, weather_data } = req.body;
@@ -1315,7 +1315,7 @@ async function getCityName(lat, lon) {
 router.get('/export/iot-csv', [
   auth,
   requirePermission('sensor.view'),
-  requireTenantAccess
+  requireAdminAccess
 ], async (req, res) => {
   try {
     const { silo_id, batch_id, start_date, end_date } = req.query;

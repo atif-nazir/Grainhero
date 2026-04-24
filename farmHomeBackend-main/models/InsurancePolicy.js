@@ -16,11 +16,6 @@ const insurancePolicySchema = new mongoose.Schema({
     required: [true, "Admin ID is required"],
     index: true
   },
-  tenant_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant'
-  },
-
   // Insurance provider details
   provider_name: {
     type: String,
@@ -211,7 +206,6 @@ const insurancePolicySchema = new mongoose.Schema({
 
 // Indexes for better query performance
 insurancePolicySchema.index({ admin_id: 1, status: 1 });
-insurancePolicySchema.index({ tenant_id: 1, status: 1 });
 insurancePolicySchema.index({ provider_name: 1 });
 insurancePolicySchema.index({ end_date: 1 });
 insurancePolicySchema.index({ renewal_date: 1 });

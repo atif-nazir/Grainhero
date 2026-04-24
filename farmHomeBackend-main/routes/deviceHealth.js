@@ -5,7 +5,7 @@ const Actuator = require('../models/Actuator');
 const SensorReading = require('../models/SensorReading');
 const GrainAlert = require('../models/GrainAlert');
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission, requireAdminAccess } = require('../middleware/permission');
 const { body, validationResult, param, query } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 
@@ -28,7 +28,7 @@ const { v4: uuidv4 } = require('uuid');
 router.get('/overview', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { silo_id } = req.query;
@@ -84,7 +84,7 @@ router.get('/overview', [
 router.get('/devices', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { device_type, health_status, silo_id } = req.query;
@@ -172,7 +172,7 @@ router.get('/devices', [
 router.post('/:deviceId/calibrate', [
     auth,
     requirePermission('sensor.calibrate'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('deviceId').isMongoId().withMessage('Valid device ID is required'),
     [
         body('calibration_type').isIn(['full', 'sensor', 'actuator']).withMessage('Valid calibration type is required'),
@@ -287,7 +287,7 @@ router.post('/:deviceId/calibrate', [
 router.post('/:deviceId/maintenance', [
     auth,
     requirePermission('sensor.manage'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('deviceId').isMongoId().withMessage('Valid device ID is required'),
     [
         body('maintenance_type').isString().withMessage('Maintenance type is required'),
@@ -399,7 +399,7 @@ router.post('/:deviceId/maintenance', [
 router.get('/:deviceId/diagnostics', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess,
+    requireAdminAccess,
     param('deviceId').isMongoId().withMessage('Valid device ID is required')
 ], async (req, res) => {
     try {
@@ -451,7 +451,7 @@ router.get('/:deviceId/diagnostics', [
 router.post('/bulk-calibration', [
     auth,
     requirePermission('sensor.calibrate'),
-    requireTenantAccess,
+    requireAdminAccess,
     [
         body('device_ids').isArray({ min: 1 }).withMessage('Device IDs array is required'),
         body('calibration_type').isIn(['full', 'sensor', 'actuator']).withMessage('Valid calibration type is required'),

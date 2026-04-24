@@ -8,11 +8,6 @@ const buyerInvoiceSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant'
-    },
-
     // Invoice identification
     invoice_number: {
         type: String,
@@ -106,7 +101,7 @@ const buyerInvoiceSchema = new mongoose.Schema({
     versionKey: false
 });
 
-buyerInvoiceSchema.index({ tenant_id: 1, buyer_id: 1 });
+buyerInvoiceSchema.index({ admin_id: 1, buyer_id: 1 });
 buyerInvoiceSchema.index({ batch_id: 1 });
 buyerInvoiceSchema.index({ payment_status: 1 });
 module.exports = mongoose.model('BuyerInvoice', buyerInvoiceSchema);

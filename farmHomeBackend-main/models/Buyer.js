@@ -9,10 +9,6 @@ const buyerSchema = new mongoose.Schema(
       required: true,
       index: true
     },
-    tenant_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant"
-    },
     name: {
       type: String,
       required: [true, "Buyer name is required"],
@@ -91,7 +87,6 @@ const buyerSchema = new mongoose.Schema(
 );
 
 buyerSchema.index({ admin_id: 1, status: 1 });
-buyerSchema.index({ tenant_id: 1, status: 1 });
 buyerSchema.index({ "contact_person.email": 1 });
 buyerSchema.index({ "location.city": 1 });
 

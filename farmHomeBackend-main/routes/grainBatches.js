@@ -490,7 +490,7 @@ router.get(
   [
     auth,
     requirePermission("batch.view"),
-    requireTenantAccess,
+    requireAdminAccess,
     param("id").isMongoId().withMessage("Valid batch ID is required"),
   ],
   async (req, res) => {

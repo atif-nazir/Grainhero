@@ -377,7 +377,7 @@ router.get('/test', async (req, res) => {
 router.get('/model-performance', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const performanceTracker = require('../ml/model_performance');
@@ -407,7 +407,7 @@ router.get('/model-performance', [
 router.get('/training-history', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const performanceTracker = require('../ml/model_performance');
@@ -427,7 +427,7 @@ router.get('/training-history', [
 router.post('/retrain', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const adminId = req.user.admin_id || req.user._id;
@@ -469,7 +469,7 @@ print(json.dumps({"success": True, "metrics": metrics}))
 router.get('/data-summary', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { spawn } = require('child_process');
@@ -533,7 +533,7 @@ print(json.dumps(summary))
 router.post('/add-data', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { records } = req.body;
@@ -633,7 +633,7 @@ print(json.dumps({'success': success, 'count': len(records)}))
 router.post('/generate-sample-data', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { count = 10 } = req.body;
@@ -735,7 +735,7 @@ router.get('/advisories', async (req, res) => {
 router.post('/retrain', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { force_retrain = false, hyperparameter_tuning = true } = req.body;
@@ -1123,7 +1123,7 @@ router.post('/training-data/label', [
 router.post('/training-data/bulk-label', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { labels } = req.body;
@@ -1149,7 +1149,7 @@ router.post('/training-data/bulk-label', [
 router.get('/training-data/stats', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const adminId = req.user.admin_id || req.user._id;
@@ -1233,7 +1233,7 @@ router.post('/predictions/:id/validate', [
 router.get('/model-performance/validation', [
     auth,
     requirePermission('ai.manage'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { days = 30 } = req.query;

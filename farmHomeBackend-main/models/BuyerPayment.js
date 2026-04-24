@@ -8,11 +8,6 @@ const buyerPaymentSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant'
-    },
-
     // References
     buyer_id: {
         type: mongoose.Schema.Types.ObjectId,
@@ -70,7 +65,6 @@ const buyerPaymentSchema = new mongoose.Schema({
 });
 
 buyerPaymentSchema.index({ admin_id: 1, buyer_id: 1 });
-buyerPaymentSchema.index({ tenant_id: 1, buyer_id: 1 });
 buyerPaymentSchema.index({ invoice_id: 1 });
 buyerPaymentSchema.index({ batch_id: 1 });
 buyerPaymentSchema.index({ payment_date: -1 });

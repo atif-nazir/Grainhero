@@ -134,7 +134,7 @@ async function handleLatest(deviceId, snapshot, io) {
     const sensorReading = new SensorReading({
       device_id: device._id,
       admin_id: device.admin_id,
-      tenant_id: device.tenant_id,
+      admin_id: device.admin_id,
       silo_id: device.silo_id,
       timestamp: new Date(ts),
 

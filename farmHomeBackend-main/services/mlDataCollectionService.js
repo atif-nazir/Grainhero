@@ -24,13 +24,13 @@ class MLDataCollectionService {
         name: 'Rawalpindi',
         latitude: 33.5651,
         longitude: 73.0169,
-        tenant_id: null // Will be set dynamically
+        admin_id: null // Will be set dynamically
       },
       {
         name: 'Islamabad',
         latitude: 33.6844,
         longitude: 73.0479,
-        tenant_id: null
+        admin_id: null
       }
     ];
   }
@@ -322,7 +322,7 @@ class MLDataCollectionService {
       const sensorReading = new SensorReading({
         device_id: this.environmentalDeviceId || null, 
         admin_id: location.admin_id || null,
-        tenant_id: location.tenant_id || null,
+        admin_id: location.admin_id || null,
         silo_id: null, // Location-based, not silo-specific
         timestamp: new Date(timestamp),
         environmental_context: {

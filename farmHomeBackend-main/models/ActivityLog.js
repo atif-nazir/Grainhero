@@ -7,12 +7,6 @@ const activityLogSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    tenant_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tenant',
-        index: true
-    },
-
     // Who performed the action
     user_id: {
         type: mongoose.Schema.Types.ObjectId,
@@ -131,7 +125,6 @@ const activityLogSchema = new mongoose.Schema({
 
 // Indexes for fast querying
 activityLogSchema.index({ admin_id: 1, created_at: -1 });
-activityLogSchema.index({ tenant_id: 1, created_at: -1 });
 activityLogSchema.index({ user_id: 1, created_at: -1 });
 activityLogSchema.index({ entity_type: 1, entity_id: 1 });
 activityLogSchema.index({ category: 1, created_at: -1 });

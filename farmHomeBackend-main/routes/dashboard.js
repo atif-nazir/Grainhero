@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require("../middleware/auth");
 const {
   requirePermission,
-  requireTenantAccess,
+  requireAdminAccess,
 } = require("../middleware/permission");
 const { requireWarehouseAccess } = require('../middleware/warehouseAccess');
 const { body } = require("express-validator");
@@ -18,7 +18,7 @@ const Buyer = require("../models/Buyer");
 const Warehouse = require("../models/Warehouse");
 const WarehouseFinancials = require("../models/WarehouseFinancials");
 const Subscription = require("../models/Subscription");
-const Tenant = require("../models/Tenant");
+// Removed Tenant model require
 const PDFKit = require("pdfkit");
 const json2csv = require("json2csv").parse;
 const fs = require("fs");
@@ -105,7 +105,7 @@ function getStorageStatus(capacity, currentQuantity) {
  */
 router.get(
   "/dashboard",
-  [auth, requirePermission("dashboard.view"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("dashboard.view"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { language = "en" } = req.query;
@@ -774,8 +774,8 @@ router.get(
 
       const filteredStats = [
         {
-          title: isSuperAdmin ? "Total Tenants" : "Total Silos",
-          value: isSuperAdmin ? await Tenant.countDocuments({}) : totalSilos,
+          title: isSuperAdmin ? "Total Admins" : "Total Silos",
+          value: isSuperAdmin ? await User.countDocuments({ role: 'admin' }) : totalSilos,
         },
         {
           title: "Active Staff",
@@ -852,7 +852,7 @@ router.get(
  */
 router.get(
   "/dashboard/live-sensors",
-  [auth, requirePermission("sensor.view"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("sensor.view"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { language = "en" } = req.query;
@@ -982,7 +982,7 @@ router.get(
  */
 router.get(
   "/dashboard/silo-comparison",
-  [auth, requirePermission("silo.view"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("silo.view"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { silo_ids, days = 7 } = req.query;
@@ -1115,7 +1115,7 @@ router.get(
  */
 router.get(
   "/dashboard/export-report",
-  [auth, requirePermission("reports.generate"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("reports.generate"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { format = "pdf", type = "summary", language = "en" } = req.query;
@@ -1275,7 +1275,7 @@ router.get(
  */
 router.get(
   "/dashboard/admin/threshold-config",
-  [auth, requirePermission("thresholds.configure"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("thresholds.configure"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       // Get all sensor devices with their thresholds
@@ -1328,7 +1328,7 @@ router.post(
   [
     auth,
     requirePermission("thresholds.configure"),
-    requireTenantAccess,
+    requireAdminAccess,
     [
       body("device_id")
         .optional()
@@ -1406,7 +1406,7 @@ router.post(
  */
 router.get(
   "/dashboard/admin/user-management",
-  [auth, requirePermission("users.manage"), requireTenantAccess],
+  [auth, requirePermission("users.manage"), requireAdminAccess],
   async (req, res) => {
     try {
       const { role, status, page = 1, limit = 20 } = req.query;
@@ -1487,7 +1487,7 @@ router.get(
  */
 router.get(
   "/dashboard/admin/device-management",
-  [auth, requirePermission("sensor.manage"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("sensor.manage"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const isSuperAdmin = req.user?.role === 'super_admin';
@@ -1571,7 +1571,7 @@ router.post(
   [
     auth,
     requirePermission("system.override"),
-    requireTenantAccess,
+    requireAdminAccess,
     requireWarehouseAccess(),
     [
       body("override_type")
@@ -1715,7 +1715,7 @@ router.post(
  */
 router.get(
   "/dashboard/admin/batch-history",
-  [auth, requirePermission("batch.view"), requireTenantAccess, requireWarehouseAccess()],
+  [auth, requirePermission("batch.view"), requireAdminAccess, requireWarehouseAccess()],
   async (req, res) => {
     try {
       const { days = 30, include_deleted = false } = req.query;

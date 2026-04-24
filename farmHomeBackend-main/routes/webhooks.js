@@ -162,7 +162,6 @@ router.post("/", (request, response) => {
     }
     case "checkout.session.completed": {
       // Grant access to the product (subscription)
-
       (async () => {
         try {
           // Retrieve the full session with line_items
@@ -196,276 +195,55 @@ router.post("/", (request, response) => {
           }
 
           // Get plan mapping for consistent naming
-          const planMapping = getPlanMapping(plan.id);
           const planKey = checkoutPlanIdToPlanKey(plan.id); // Convert to plan-features key
           const planFeatures = getPlanFeatures(planKey);
           const subscriptionPlanName = getSubscriptionPlanName(plan.id);
-
+          
           let user;
-          let tenant;
           if (customer.email) {
             user = await User.findOne({ email: customer.email });
-            console.log("Found user:", user ? user.email : "none");
-
+            
             if (!user) {
               // Create new user for payment-first flow
               console.log("Creating new user for email:", customer.email);
 
-              // Check if tenant already exists (from previous payment)
-              const Tenant = require("../models/Tenant");
-              try {
-                tenant = await Tenant.findOne({ email: customer.email });
-              } catch (tenantError) {
-                console.error("Error finding tenant:", tenantError);
-                tenant = null;
-              }
+              const userData = {
+                email: customer.email,
+                name: customer.name || "Admin User",
+                role: "pending", // Keep as pending until they complete signup
+                hasAccess: plan.id,
+                subscription_plan: planKey,
+                customerId: customerId,
+                priceId: priceId,
+                status: "active",
+                emailVerified: true,
+                createdAt: new Date(),
+                updated_at: new Date(),
+                admin_id: null,
+                business_type: "farm"
+              };
 
-              if (!tenant) {
-                try {
-                  // Create tenant only if it doesn't exist
-                  tenant = new Tenant({
-                    name: `${customer.name || "Admin User"}'s Farm`,
-                    email: customer.email,
-                    business_type: "farm",
-                    created_by: null, // Will be set after user creation
-                  });
-                  await tenant.save();
-                  console.log("New tenant created:", tenant._id);
-                } catch (tenantError) {
-                  // If tenant creation fails (e.g., duplicate), try to find it again
-                  if (tenantError.code === 11000) {
-                    console.log(
-                      "Tenant already exists (duplicate key), finding it..."
-                    );
-                    tenant = await Tenant.findOne({ email: customer.email });
-                    if (tenant) {
-                      console.log("Found existing tenant:", tenant._id);
-                    } else {
-                      console.error(
-                        "Could not find tenant after duplicate error"
-                      );
-                      throw tenantError;
-                    }
-                  } else {
-                    throw tenantError;
-                  }
-                }
-              } else {
-                console.log("Existing tenant found:", tenant._id);
-              }
-
-              // Check if user already exists (race condition check)
-              user = await User.findOne({ email: customer.email });
-              if (user) {
-                console.log(
-                  "User was created between checks, updating instead"
-                );
-                // Update existing user with payment info
-                user.hasAccess = plan.id;
-                user.subscription_plan = planKey;
-                user.customerId = customerId;
-                user.priceId = priceId;
-                if (tenant && !user.admin_id) {
-                  user.admin_id = null; // Admin users don't have an admin_id (they ARE the admin)
-                }
-                await user.save();
-              } else {
-                // Create user - use tenant if available, but don't fail if tenant is missing
-                const userData = {
-                  email: customer.email,
-                  name: customer.name || "Admin User",
-                  role: "pending", // Keep as pending until they complete signup
-                  hasAccess: plan.id, // Keep checkout plan ID for hasAccess
-                  subscription_plan: planKey, // Use plan key for subscription_plan (basic, standard, professional, enterprise)
-                  customerId: customerId,
-                  priceId: priceId,
-                  status: "active",
-                  emailVerified: true,
-                  createdAt: new Date(),
-                  updated_at: new Date(),
-                };
-
-                // Only add admin_id if we have a tenant
-                if (tenant) {
-                  userData.admin_id = null; // Pending admin users
-                }
-
-                user = new User(userData);
-                await user.save();
-                console.log("New user created:", user.email);
-
-                // Update tenant with user reference (if tenant exists)
-                if (tenant) {
-                  try {
-                    await Tenant.findByIdAndUpdate(tenant._id, {
-                      created_by: user._id,
-                    });
-                  } catch (updateError) {
-                    console.warn(
-                      "Could not update tenant created_by:",
-                      updateError.message
-                    );
-                    // Non-critical, continue
-                  }
-                }
-
-                // Add a small delay to ensure user is fully saved
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-              }
+              user = new User(userData);
+              await user.save();
+              console.log("New user created:", user.email);
             } else {
               // Update existing user data and grant access
               user.priceId = priceId;
-              user.hasAccess = plan.id; // Keep checkout plan ID
-              user.subscription_plan = planKey; // Update subscription_plan with plan key
+              user.hasAccess = plan.id;
+              user.subscription_plan = planKey;
               user.customerId = customerId;
-
-              // Get tenant if not already set
-              if (!user.admin_id) {
-                const Tenant = require("../models/Tenant");
-                // Check if tenant already exists for this email
-                try {
-                  tenant = await Tenant.findOne({ email: user.email });
-                } catch (tenantError) {
-                  console.error("Error finding tenant:", tenantError);
-                  tenant = null;
-                }
-
-                if (!tenant) {
-                  try {
-                    // Create tenant only if it doesn't exist
-                    tenant = new Tenant({
-                      name: `${user.name || "Admin User"}'s Farm`,
-                      email: user.email,
-                      business_type: "farm",
-                      created_by: user._id,
-                    });
-                    await tenant.save();
-                    console.log(
-                      "New tenant created for existing user:",
-                      tenant._id
-                    );
-                  } catch (tenantError) {
-                    // If tenant creation fails (e.g., duplicate), try to find it again
-                    if (tenantError.code === 11000) {
-                      console.log(
-                        "Tenant already exists (duplicate key), finding it..."
-                      );
-                      tenant = await Tenant.findOne({ email: user.email });
-                      if (tenant) {
-                        console.log("Found existing tenant:", tenant._id);
-                      } else {
-                        console.error(
-                          "Could not find tenant after duplicate error"
-                        );
-                        // Continue without tenant - user will be updated anyway
-                      }
-                    } else {
-                      console.error("Error creating tenant:", tenantError);
-                      // Continue without tenant - user will be updated anyway
-                    }
-                  }
-                } else {
-                  console.log("Existing tenant found for user:", tenant._id);
-                }
-
-                if (tenant) {
-                if (tenant && !user.admin_id) {
-                  user.admin_id = null;
-                }
-                }
-              } else {
-                try {
-                  tenant = await require("../models/Tenant").findById(
-                    user.admin_id
-                  );
-                } catch (tenantError) {
-                  console.warn(
-                    "Could not find tenant by ID:",
-                    tenantError.message
-                  );
-                  // Try to find by email as fallback
-                  try {
-                    tenant = await require("../models/Tenant").findOne({
-                      email: user.email,
-                    });
-                  } catch (fallbackError) {
-                    console.error(
-                      "Could not find tenant by email either:",
-                      fallbackError.message
-                    );
-                  }
-                }
-              }
-
-              console.log("User updated:", user.email);
+              user.admin_id = null; // Ensure they are an admin
+              
               await user.save();
-            }
-
-            // Ensure tenant is available (but don't fail if we can't get/create one)
-            if (!tenant) {
-              const Tenant = require("../models/Tenant");
-              try {
-                // Try to find tenant by user's admin_id first
-                if (user.admin_id) {
-                  tenant = await Tenant.findById(user.admin_id);
-                }
-                // If still not found, try by email
-                if (!tenant) {
-                  tenant = await Tenant.findOne({ email: customer.email });
-                }
-                // If still not found, try to create one (but handle duplicate gracefully)
-                if (!tenant) {
-                  try {
-                    tenant = new Tenant({
-                      name: `${user.name || customer.name || "Admin User"
-                        }'s Farm`,
-                      email: customer.email,
-                      business_type: "farm",
-                      created_by: user._id || null,
-                    });
-                    await tenant.save();
-                    console.log("Created tenant as fallback:", tenant._id);
-
-                    // Update user with admin_id if not set
-                    if (!user.admin_id) {
-                      user.admin_id = null;
-                      await user.save();
-                    }
-                  } catch (createError) {
-                    if (createError.code === 11000) {
-                      // Duplicate key - tenant was created between checks
-                      console.log(
-                        "Tenant created between checks, finding it..."
-                      );
-                      tenant = await Tenant.findOne({ email: customer.email });
-                      if (tenant && !user.admin_id) {
-                        user.admin_id = null;
-                        await user.save();
-                      }
-                    } else {
-                      console.error(
-                        "Error creating fallback tenant:",
-                        createError.message
-                      );
-                      // Continue without tenant - subscription can still be created
-                    }
-                  }
-                }
-              } catch (tenantError) {
-                console.error(
-                  "Error in tenant fallback logic:",
-                  tenantError.message
-                );
-                // Continue without tenant - subscription can still be created
-              }
+              console.log("User updated:", user.email);
             }
 
             // Create or update Subscription record
             try {
-              // Use admin_id if available, otherwise use user._id as fallback
-              const subscriptionAdminId = user.admin_id || user._id;
+              // The admin_id in subscription is the user ID for top-level admins
+              const subscriptionAdminId = user._id;
 
-              // Check if subscription already exists for this tenant/user
+              // Check if subscription already exists for this user
               let subscription = await Subscription.findOne({
                 $or: [
                   { admin_id: subscriptionAdminId },
@@ -548,13 +326,6 @@ router.post("/", (request, response) => {
                   created_by: user._id,
                 });
                 await subscription.save();
-                console.log("Subscription created for user:", user.email);
-              }
-            } catch (subscriptionError) {
-              console.error(
-                "Error creating/updating subscription:",
-                subscriptionError
-              );
               // Don't fail the webhook if subscription creation fails, but log it
             }
 

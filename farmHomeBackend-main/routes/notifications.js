@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const { requireTenantAccess } = require('../middleware/permission');
+const { requireAdminAccess } = require('../middleware/permission');
 const Notification = require('../models/Notification');
 
 /**

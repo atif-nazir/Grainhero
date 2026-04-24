@@ -153,7 +153,7 @@ class EnvironmentalDataService {
       const silos = await Silo.find({ 
         'location.coordinates.latitude': { $exists: true },
         'location.coordinates.longitude': { $exists: true }
-      }); // Removed populate('tenant_id', '_id') as it's causing StrictPopulateError
+      }); // Removed populate('admin_id', '_id') as it's causing StrictPopulateError
 
       if (silos.length === 0) {
         console.log('No silos with location data found');
@@ -206,7 +206,7 @@ class EnvironmentalDataService {
       // Create sensor reading with environmental context
       const sensorReading = new SensorReading({
         admin_id: silo.admin_id,
-        tenant_id: silo.tenant_id,
+        admin_id: silo.admin_id,
         silo_id: silo._id,
         device_id: this.environmentalDeviceId,
         timestamp: new Date(),
@@ -264,7 +264,7 @@ class EnvironmentalDataService {
       
       const sensorReading = new SensorReading({
         admin_id,
-        tenant_id: null, // Global environmental reading
+        admin_id: null, // Global environmental reading
         silo_id,
         device_id: this.environmentalDeviceId,
         timestamp: new Date(),

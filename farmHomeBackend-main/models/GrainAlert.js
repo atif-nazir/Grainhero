@@ -16,11 +16,6 @@ const grainAlertSchema = new mongoose.Schema({
     required: [true, "Admin ID is required"],
     index: true
   },
-  tenant_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    index: true
-  },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Silo',

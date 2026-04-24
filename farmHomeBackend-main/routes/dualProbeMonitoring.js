@@ -5,7 +5,7 @@ const SensorDevice = require('../models/SensorDevice');
 const Silo = require('../models/Silo');
 const GrainAlert = require('../models/GrainAlert');
 const { auth } = require('../middleware/auth');
-const { requirePermission, requireTenantAccess } = require('../middleware/permission');
+const { requirePermission, requireAdminAccess } = require('../middleware/permission');
 const { body, validationResult, param, query } = require('express-validator');
 const realTimeDataService = require('../services/realTimeDataService');
 
@@ -85,7 +85,7 @@ const realTimeDataService = require('../services/realTimeDataService');
 router.post('/readings', [
     auth,
     requirePermission('sensor.bulk_ingest'),
-    requireTenantAccess,
+    requireAdminAccess,
     [
         body('device_id').isMongoId().withMessage('Valid device ID is required'),
         body('probe_type').isIn(['ambient', 'core']).withMessage('Probe type must be ambient or core'),
@@ -166,7 +166,7 @@ router.post('/readings', [
 router.get('/readings', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const {
@@ -228,7 +228,7 @@ router.get('/readings', [
 router.get('/analysis', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { silo_id, days = 7 } = req.query;
@@ -269,7 +269,7 @@ router.get('/analysis', [
 router.post('/calibration', [
     auth,
     requirePermission('sensor.calibrate'),
-    requireTenantAccess,
+    requireAdminAccess,
     [
         body('device_id').isMongoId().withMessage('Valid device ID is required'),
         body('probe_type').isIn(['ambient', 'core']).withMessage('Probe type must be ambient or core'),
@@ -326,7 +326,7 @@ router.post('/calibration', [
 router.get('/health', [
     auth,
     requirePermission('sensor.view'),
-    requireTenantAccess
+    requireAdminAccess
 ], async (req, res) => {
     try {
         const { silo_id } = req.query;

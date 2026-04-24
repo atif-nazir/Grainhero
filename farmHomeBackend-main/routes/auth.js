@@ -436,36 +436,7 @@ router.post("/signup", async (req, res) => {
       // Super admin doesn't need a tenant, they manage the entire system
       userData.admin_id = null; // Super admin doesn't belong to a specific admin
     } else if (userRole === "admin") {
-      // Admin creates and owns a tenant
-      const Tenant = require("../models/Tenant");
-      
-      // Check if tenant with this email already exists
-      let tenant = await Tenant.findOne({ email: email.toLowerCase() });
-      
-      if (!tenant) {
-        // Create new tenant only if one doesn't exist
-        tenant = new Tenant({
-          name: `${name}'s Farm`,
-          email: email,
-          business_type: "farm",
-          created_by: null, // Will be set after user creation
-        });
-        try {
-          await tenant.save();
-        } catch (error) {
-          // Handle race condition where another signup created the tenant simultaneously
-          if (error.code === 11000) {
-            tenant = await Tenant.findOne({ email: email.toLowerCase() });
-            if (!tenant) {
-              return res.status(500).json({
-                error: "Failed to create tenant. Please try again.",
-              });
-            }
-          } else {
-            throw error;
-          }
-        }
-      }
+      // Admin is the top-level owner
     }
 
     // Handle admin context

@@ -14,10 +14,6 @@ const sensorReadingSchema = new mongoose.Schema({
     required: [true, "Admin ID is required"],
     index: true
   },
-  tenant_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant'
-  },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Silo'

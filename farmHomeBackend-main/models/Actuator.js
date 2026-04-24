@@ -21,10 +21,6 @@ const actuatorSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, "Admin ID is required"]
   },
-  tenant_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant'
-  },
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Silo',

@@ -22,7 +22,7 @@ async function updateUsageStats(subscriptionId) {
     }
 
     const adminId = subscription.admin_id;
-    const tenantId = subscription.tenant_id;
+    const tenantId = subscription.admin_id;
 
     // Count users (managers + technicians, excluding admin)
     const users = await User.countDocuments({
