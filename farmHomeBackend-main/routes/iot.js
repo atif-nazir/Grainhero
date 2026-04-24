@@ -103,6 +103,54 @@ try {
       mqttClient.subscribe('grainhero/actuators/+/feedback');
     });
 
+    // ━━━ CRITICAL: Process incoming MQTT messages from ESP32 ━━━
+    mqttClient.on('message', (topic, message) => {
+      try {
+        const payload = JSON.parse(message.toString());
+        const parts = topic.split('/');
+        const deviceId = parts[2];
+        const action = parts[3];
+
+        if (action === 'readings') {
+          const r = payload.readings || payload;
+          const temperature = Number(r.temperature ?? 0);
+          const humidity = Number(r.humidity ?? 0);
+          const tvoc = Number(r.tvoc ?? 0);
+          const mlDecision = payload.mlDecision || ((humidity > 75 || tvoc > 600) ? 'fan_on' : 'idle');
+          const existing = lastTelemetry.get(deviceId) || {};
+          const update = {
+            ...existing,
+            temperature, humidity, tvoc,
+            pressure: Number(r.pressure ?? existing.pressure ?? 0),
+            mlDecision: payload.control_authority === 'FAILSAFE' ? 'failsafe' : mlDecision,
+            controlAuthority: payload.control_authority || existing.controlAuthority || 'UNKNOWN',
+            timestamp: Date.now()
+          };
+          if (payload.fanState) update.fanState = payload.fanState;
+          if (payload.lidState) update.lidState = payload.lidState;
+          if (payload.pwm_speed !== undefined) update.pwm_speed = Number(payload.pwm_speed);
+          lastTelemetry.set(deviceId, update);
+          console.log(`📡 MQTT readings cached for ${deviceId} [${payload.control_authority || 'N/A'}] fan=${update.fanState || '?'} lid=${update.lidState || '?'}`);
+        }
+
+        if (action === 'feedback') {
+          const existing = lastTelemetry.get(deviceId) || {};
+          lastTelemetry.set(deviceId, {
+            ...existing,
+            fanState: (payload.pwm > 0) ? 'on' : 'off',
+            lidState: payload.servo ? 'open' : 'closed',
+            pwm_speed: Number(payload.pwm ?? 0),
+            led2State: !!payload.led2,
+            led3State: !!payload.led3,
+            led4State: !!payload.led4,
+            humanOverride: !!payload.humanOverride,
+            controlAuthority: payload.control_authority || existing.controlAuthority || 'UNKNOWN',
+            timestamp: Date.now()
+          });
+        }
+      } catch (e) { /* silently ignore parse errors */ }
+    });
+
     mqttClient.on('error', (error) => {
       // Log but NEVER crash — Firebase is the primary data path
       console.warn('⚠️  MQTT error (non-fatal):', error.code || error.message);
@@ -550,20 +598,54 @@ router.get('/silos/:siloId/telemetry', [
 });
 
 // PUBLIC telemetry endpoint — no auth required (for dev/demo)
+// Priority: MQTT cache (real-time) > Firebase (cloud backup)
 router.get('/silos/:siloId/telemetry-public', async (req, res) => {
   try {
     const { siloId } = req.params;
+
+    // ━━━ PRIORITY 1: MQTT cache (real-time, local, always fresh) ━━━
+    const cached = lastTelemetry.get(siloId);
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < 30000)) {
+      const temperature = cached.temperature ?? 0;
+      const humidity = cached.humidity ?? 0;
+      const tvoc = cached.tvoc ?? 0;
+      const riskIndex = Math.min(100, Math.round(
+        (humidity > 70 ? 30 : humidity * 0.3) +
+        (temperature > 35 ? 25 : temperature * 0.5) +
+        (tvoc > 500 ? 25 : tvoc * 0.03)
+      ));
+      const dewPoint = humidity > 0 ? Math.round((temperature - ((100 - humidity) / 5)) * 10) / 10 : null;
+      return res.json({
+        temperature, humidity, tvoc,
+        fanState: cached.fanState || 'off',
+        lidState: cached.lidState || 'closed',
+        alarmState: 'off',
+        mlDecision: cached.mlDecision || 'idle',
+        humanOverride: !!cached.humanOverride,
+        controlAuthority: cached.controlAuthority || 'UNKNOWN',
+        guardrails: [],
+        pressure: cached.pressure || null,
+        light: null, dewPoint,
+        soilMoisture: null, pestRiskScore: null, riskIndex,
+        pwm_speed: cached.pwm_speed ?? 0,
+        led2State: !!cached.led2State,
+        led3State: !!cached.led3State,
+        led4State: !!cached.led4State,
+        timestamp: cached.timestamp,
+        dataSource: 'mqtt'
+      });
+    }
+
+    // ━━━ PRIORITY 2: Firebase (cloud backup) ━━━
     ensureFirebase();
     if (!firebaseDb) {
-      const cached = lastTelemetry.get(siloId);
-      if (cached) return res.json(cached);
-      return res.status(503).json({ error: 'Firebase not initialized and no cache' });
+      if (cached) return res.json({ ...cached, dataSource: 'mqtt_stale' });
+      return res.status(503).json({ error: 'No data source available' });
     }
     try {
       const snapshot = await firebaseDb.ref(`sensor_data/${siloId}/latest`).get();
       if (!snapshot || snapshot.val() === null) {
-        const cached = lastTelemetry.get(siloId);
-        if (cached) return res.json(cached);
+        if (cached) return res.json({ ...cached, dataSource: 'mqtt_stale' });
         return res.status(503).json({ error: 'No data at sensor_data/' + siloId + '/latest' });
       }
       const payload = snapshot.val() || {};
@@ -572,55 +654,42 @@ router.get('/silos/:siloId/telemetry-public', async (req, res) => {
       const tvocRaw = payload.tvoc_ppb !== undefined ? Number(payload.tvoc_ppb) : (payload.tvoc !== undefined ? Number(payload.tvoc) : (payload.voc !== undefined ? Number(payload.voc) : 0));
       const fanState = payload.fanState !== undefined ? (payload.fanState ? 'on' : 'off') : ((payload.pwm_speed && Number(payload.pwm_speed) > 0) ? 'on' : 'off');
       const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
-      const alarmState = payload.alarmState === 'on' || payload.alarm_state === 'on' ? 'on' : 'off';
       const mlDecision = payload.mlDecision || ((humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle');
       const humanOverride = payload.humanOverride !== undefined ? !!payload.humanOverride : !!payload.human_override;
       const guardrails = [];
       if (temperature > 60) guardrails.push('high_temperature');
       if (tvocRaw > 1000) guardrails.push('high_tvoc');
       const pressure = payload.pressure !== undefined ? Number(payload.pressure) : null;
-      const light = payload.light !== undefined ? Number(payload.light) : null;
-      const dewPoint = payload.dewPoint !== undefined ? Number(payload.dewPoint) : (humidity > 0 ? Math.round((temperature - ((100 - humidity) / 5)) * 10) / 10 : null);
-      const soilMoisture = payload.soilMoisture !== undefined ? Number(payload.soilMoisture) : null;
-      const pestRiskScore = payload.pestRiskScore !== undefined ? Number(payload.pestRiskScore) : null;
-      // Risk index: weighted composite
+      const dewPoint = humidity > 0 ? Math.round((temperature - ((100 - humidity) / 5)) * 10) / 10 : null;
       const riskIndex = Math.min(100, Math.round(
         (humidity > 70 ? 30 : humidity * 0.3) +
         (temperature > 35 ? 25 : temperature * 0.5) +
-        (tvocRaw > 500 ? 25 : tvocRaw * 0.03) +
-        (pestRiskScore || 0) * 0.2
+        (tvocRaw > 500 ? 25 : tvocRaw * 0.03)
       ));
-      // Convert timestamp: Arduino sends seconds since epoch, JS needs milliseconds
       let ts = payload.timestamp || payload.timestamp_unix;
-      if (ts && ts < 2000000000) ts = ts * 1000; // seconds → milliseconds
+      if (ts && ts < 2000000000) ts = ts * 1000;
       if (!ts || ts < 1600000000000) ts = Date.now();
 
+      const mqttActuator = cached || {};
       res.json({
-        temperature,
-        humidity,
-        tvoc: tvocRaw,
-        fanState,
-        lidState,
-        alarmState,
-        mlDecision,
-        humanOverride,
-        guardrails,
-        pressure,
-        light,
-        dewPoint,
-        soilMoisture,
-        pestRiskScore,
-        riskIndex,
-        pwm_speed: payload.pwm_speed !== undefined ? Number(payload.pwm_speed) : 0,
-        led2State: !!payload.led2_state,
-        led3State: !!payload.led3_state,
-        led4State: !!payload.led4_state,
-        timestamp: ts
+        temperature, humidity, tvoc: tvocRaw,
+        fanState: mqttActuator.fanState || fanState,
+        lidState: mqttActuator.lidState || lidState,
+        alarmState: 'off',
+        mlDecision, humanOverride: mqttActuator.humanOverride !== undefined ? mqttActuator.humanOverride : humanOverride,
+        controlAuthority: payload.control_mode || mqttActuator.controlAuthority || (humanOverride ? 'HUMAN' : 'ML_AUTO'),
+        guardrails, pressure, light: null, dewPoint,
+        soilMoisture: null, pestRiskScore: null, riskIndex,
+        pwm_speed: mqttActuator.pwm_speed ?? (payload.pwm_speed !== undefined ? Number(payload.pwm_speed) : 0),
+        led2State: mqttActuator.led2State !== undefined ? mqttActuator.led2State : !!payload.led2_state,
+        led3State: mqttActuator.led3State !== undefined ? mqttActuator.led3State : !!payload.led3_state,
+        led4State: mqttActuator.led4State !== undefined ? mqttActuator.led4State : !!payload.led4_state,
+        timestamp: ts,
+        dataSource: 'firebase'
       });
     } catch (e) {
       console.error(`Firebase read error for ${siloId}: ${e.message}`);
-      const cached = lastTelemetry.get(siloId);
-      if (cached) return res.json(cached);
+      if (cached) return res.json({ ...cached, dataSource: 'mqtt_stale' });
       return res.status(503).json({ error: 'Firebase read error' });
     }
   } catch (error) {

@@ -41,6 +41,8 @@ interface LiveTelemetry {
   alarmState: string
   mlDecision: string
   humanOverride: boolean
+  controlAuthority?: string
+  dataSource?: string
   riskIndex: number | null
   dewPoint: number | null
   pressure: number | null
@@ -143,6 +145,31 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
         </div>
       </div>
 
+      {/* Control Authority Banner */}
+      {(() => {
+        const authority = live?.controlAuthority || (controlMode === 'ml' ? 'ML_AUTO' : 'HUMAN')
+        const configs: Record<string, { border: string; bg: string; icon: string; title: string; desc: string; textColor: string; iconBg: string; iconColor: string }> = {
+          'ML_AUTO': { border: 'border-blue-300', bg: 'from-blue-50 to-indigo-50', icon: '🤖', title: 'ML Auto — Controlling Hardware', desc: 'Fan & lid driven by ML model based on sensor thresholds (TVOC > 600 or Humidity > 75%).', textColor: 'text-blue-800', iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
+          'HUMAN': { border: 'border-amber-300', bg: 'from-amber-50 to-orange-50', icon: '🧑', title: 'Human Expert — Manual Override Active', desc: 'You are controlling actuators directly. ML is paused. Click "Return to Auto" to restore ML control.', textColor: 'text-amber-800', iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+          'FAILSAFE': { border: 'border-red-300', bg: 'from-red-50 to-rose-50', icon: '🛡️', title: 'Failsafe Mode — No Backend Connection', desc: 'ESP32 is operating autonomously. Fan activates if TVOC > 600. Reconnect MQTT to restore normal control.', textColor: 'text-red-800', iconBg: 'bg-red-100', iconColor: 'text-red-600' },
+        }
+        const c = configs[authority] || configs['ML_AUTO']
+        return (
+          <div className={`rounded-xl border-2 ${c.border} bg-gradient-to-r ${c.bg} p-4 flex items-center gap-3`}>
+            <div className={`p-2 rounded-lg ${c.iconBg} ${c.iconColor}`}><Activity className="h-5 w-5" /></div>
+            <div className="flex-1">
+              <div className={`font-semibold ${c.textColor}`}>{c.icon} {c.title}</div>
+              <div className={`text-xs ${c.textColor} opacity-75`}>{c.desc}</div>
+            </div>
+            {live?.dataSource && (
+              <Badge variant="outline" className="text-[10px] px-2 py-0.5">
+                via {live.dataSource.toUpperCase()}
+              </Badge>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Live Status Strip */}
       {live && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -162,9 +189,17 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             <div className="text-[10px] uppercase tracking-wider text-emerald-500 font-medium">ML</div>
             <div className="text-lg font-bold text-emerald-700 capitalize">{live.mlDecision}</div>
           </div>
-          <div className="rounded-xl border p-3 bg-gradient-to-br from-yellow-50 to-yellow-100/50">
-            <div className="text-[10px] uppercase tracking-wider text-yellow-600 font-medium">Override</div>
-            <div className="text-lg font-bold text-yellow-700">{live.humanOverride ? 'MANUAL' : 'AUTO'}</div>
+          <div className={`rounded-xl border p-3 bg-gradient-to-br ${
+            live.controlAuthority === 'HUMAN' ? 'from-amber-50 to-amber-100/50' :
+            live.controlAuthority === 'FAILSAFE' ? 'from-red-50 to-red-100/50' :
+            'from-blue-50 to-blue-100/50'
+          }`}>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Control</div>
+            <div className={`text-lg font-bold ${
+              live.controlAuthority === 'HUMAN' ? 'text-amber-600' :
+              live.controlAuthority === 'FAILSAFE' ? 'text-red-600' :
+              'text-blue-600'
+            }`}>{live.controlAuthority === 'HUMAN' ? '🧑 HUMAN' : live.controlAuthority === 'FAILSAFE' ? '🛡️ SAFE' : '🤖 ML'}</div>
           </div>
           <div className={`rounded-xl border p-3 bg-gradient-to-br ${(live.riskIndex ?? 0) > 70 ? 'from-red-50 to-red-100/50' : (live.riskIndex ?? 0) > 40 ? 'from-amber-50 to-amber-100/50' : 'from-green-50 to-green-100/50'}`}>
             <div className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Risk</div>
