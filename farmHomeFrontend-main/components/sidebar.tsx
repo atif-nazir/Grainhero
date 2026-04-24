@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
-import { ScrollArea } from "@/components/ui/scroll-area"
+
 import { Badge } from "@/components/ui/badge"
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -12,7 +12,7 @@ import {
 import {
   LayoutDashboard, Users, BarChart3, Cloud, Smartphone, Settings, LogOut,
   Package, OctagonAlert, ChevronDown, ChevronRight, Sparkles, QrCode,
-  CreditCard, Shield, Brain, Zap, ClipboardList, Menu, X, PanelLeftClose,
+  CreditCard, Shield, Brain, Zap, ClipboardList, Menu,
   Building2, Activity, Warehouse,
 } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
@@ -27,7 +27,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 // ── Types ──
 interface NavItem {
   name: string; label: string; href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   roles: string[]; badge?: string;
 }
 

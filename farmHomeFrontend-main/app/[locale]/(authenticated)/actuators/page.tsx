@@ -147,7 +147,7 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
 
       {/* Control Authority Banner */}
       {(() => {
-        const authority = live?.controlAuthority || (controlMode === 'ml' ? 'ML_AUTO' : 'HUMAN')
+        const authority = live?.controlAuthority || (live?.humanOverride ? 'HUMAN' : 'ML_AUTO')
         const configs: Record<string, { border: string; bg: string; icon: string; title: string; desc: string; textColor: string; iconBg: string; iconColor: string }> = {
           'ML_AUTO': { border: 'border-blue-300', bg: 'from-blue-50 to-indigo-50', icon: '🤖', title: 'ML Auto — Controlling Hardware', desc: 'Fan & lid driven by ML model based on sensor thresholds (TVOC > 600 or Humidity > 75%).', textColor: 'text-blue-800', iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
           'HUMAN': { border: 'border-amber-300', bg: 'from-amber-50 to-orange-50', icon: '🧑', title: 'Human Expert — Manual Override Active', desc: 'You are controlling actuators directly. ML is paused. Click "Return to Auto" to restore ML control.', textColor: 'text-amber-800', iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },

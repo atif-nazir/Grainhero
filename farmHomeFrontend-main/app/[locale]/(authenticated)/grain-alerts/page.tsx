@@ -5,9 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -18,11 +17,11 @@ import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import {
   Search, AlertTriangle, CheckCircle, Clock, AlertCircle, RefreshCw,
-  ChevronLeft, ChevronRight, Eye, Bell, BellOff, Shield, Zap,
-  Activity, TrendingUp, Settings, ArrowUpRight, History
+  ChevronLeft, ChevronRight, Eye, Bell, Shield, Zap,
+  Activity, TrendingUp, ArrowUpRight, History
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+
 
 interface GrainAlert {
   _id: string
@@ -201,12 +200,7 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
     return `${Math.floor(diff / 86400)}d ago`
   }
 
-  const chartData = [
-    { name: 'Critical', value: stats.critical, color: PRIORITY_CFG.critical.hex },
-    { name: 'High', value: stats.high, color: PRIORITY_CFG.high.hex },
-    { name: 'Medium', value: stats.medium, color: PRIORITY_CFG.medium.hex },
-    { name: 'Low', value: stats.low, color: PRIORITY_CFG.low.hex }
-  ].filter(d => d.value > 0);
+
 
   if (loading && alerts.length === 0) {
     return (

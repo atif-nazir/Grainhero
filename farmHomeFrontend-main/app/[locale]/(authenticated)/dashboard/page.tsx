@@ -174,7 +174,7 @@ export default function DashboardPage({ params: _params }: { params: Promise<{ l
       }
     }
     fetchData()
-  }, [])
+  }, [refreshUser])
 
   const userRole = user?.role || "technician"
   console.log("Current User Role:", userRole);

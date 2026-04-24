@@ -20,7 +20,7 @@ import {
 } from 'recharts'
 import { TrendingUp, TrendingDown, Activity } from 'lucide-react'
 
-type IconComponent = React.ComponentType<{ className?: string }>
+type IconComponent = React.ComponentType<{ className?: string; strokeWidth?: number }>
 
 interface ChartData {
   name: string
@@ -296,7 +296,7 @@ export function AnimatedMetricCard(
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      whileHover={{ y: -4, shadow: "0 10px 25px rgba(0,0,0,0.05)" }}
+      whileHover={{ y: -4, boxShadow: "0 10px 25px rgba(0,0,0,0.05)" }}
     >
       <div className="flex items-start justify-between relative z-10">
         <div className="space-y-2">

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from "@/app/[locale]/providers"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
@@ -49,7 +50,7 @@ import {
   FileSearch,
   Check,
   Search,
-  BarChart3,
+  BarChart3, Activity,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { config } from '@/config'
@@ -223,7 +224,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
   const [timelineEvents, setTimelineEvents] = useState<SpoilageEvent[]>([])
 
   // Claim detail view
-  const [selectedClaim, setSelectedClaim] = useState<InsuranceClaim | null>(null)
+
   const [showClaimDetail, setShowClaimDetail] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [claimNote, setClaimNote] = useState('')
