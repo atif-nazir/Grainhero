@@ -185,13 +185,19 @@ const EVENT_ICONS: Record<string, React.ReactNode> = {
 
 // ── Component ───────────────────────────────────────────
 export default function InsurancePage({ params: _params }: { params: Promise<{ locale: string }> }) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'super_admin'
+
   const [policies, setPolicies] = useState<InsurancePolicy[]>([])
   const [claims, setClaims] = useState<InsuranceClaim[]>([])
   const [batches, setBatches] = useState<GrainBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
 
-
+  // Review Queue state
+  const [selectedClaim, setSelectedClaim] = useState<InsuranceClaim | null>(null)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewTab, setReviewTab] = useState('details') // details, investigation, assessment, payment
 
   // Claim modal
   const [showClaimModal, setShowClaimModal] = useState(false)
@@ -281,9 +287,9 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
       if (res.ok) { toast.success('Claim filed with photos'); setShowClaimModal(false); setClaimPhotos([]); loadData() }
       else toast.error(res.error || 'Failed to file claim')
     } catch (e: unknown) { toast.error((e as Error).message) }
-    finally { 
+    finally {
       setClaimSaving(false)
-      setUploadingPhotos(false) 
+      setUploadingPhotos(false)
     }
   }
 
@@ -507,7 +513,8 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+        <TabsList className="flex flex-wrap w-full justify-start h-auto lg:inline-flex p-1">
+          {isAdmin && <TabsTrigger value="review_queue" className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-900"><Activity className="w-4 h-4 mr-2" />Review Queue</TabsTrigger>}
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="spoilage">Spoilage Events</TabsTrigger>
           <TabsTrigger value="claims">Claims & Exports</TabsTrigger>
@@ -515,6 +522,56 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
           <TabsTrigger value="timeline">Event Timeline</TabsTrigger>
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
+
+        {/* ── TAB: Review Queue (Super Admin) ──────────────── */}
+        {isAdmin && (
+          <TabsContent value="review_queue" className="space-y-4">
+            <Card className="border-t-4 border-t-amber-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-amber-500" />Super Admin Claim Review Queue</CardTitle>
+                <CardDescription>Review, investigate, assess, and process payments for filed claims across all tenants.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Claim #</TableHead>
+                      <TableHead>Policy</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Claimed Amt</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Filed Date</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {claims.map(claim => {
+                      const cfg = claimStatusCfg(claim.status)
+                      const Icon = cfg.icon
+                      const policy = policies.find(p => p._id === (typeof claim.policy_id === 'object' ? claim.policy_id?._id : claim.policy_id))
+                      return (
+                        <TableRow key={claim._id}>
+                          <TableCell className="font-medium">{claim.claim_number}</TableCell>
+                          <TableCell>{policy?.policy_number || 'Unknown'}</TableCell>
+                          <TableCell>{claim.claim_type}</TableCell>
+                          <TableCell>PKR {claim.amount_claimed.toLocaleString()}</TableCell>
+                          <TableCell><Badge className={cfg.color}><Icon className="h-3 w-3 mr-1" />{claim.status}</Badge></TableCell>
+                          <TableCell className="text-xs">{new Date(claim.filed_date || claim.incident_date).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => { setSelectedClaim(claim); setShowReviewModal(true); setReviewTab('details'); }}>
+                              Review Claim
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+                {claims.length === 0 && <div className="text-center py-12 text-gray-400"><FileText className="h-12 w-12 mx-auto mb-3" /><p>No claims pending review.</p></div>}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* ── TAB: Overview ──────────────────────────────── */}
         <TabsContent value="overview" className="space-y-4">
@@ -942,10 +999,10 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
 
                 {/* Status Specific Content */}
                 {selectedClaim.status === 'investigation' && (
-                   <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                     <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-2"><Search className="h-4 w-4" />Investigation in Progress</h4>
-                     <p className="text-xs text-blue-600">The claim is currently under investigation by an insurance adjuster. Findings will be posted here once complete.</p>
-                   </div>
+                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                    <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-2"><Search className="h-4 w-4" />Investigation in Progress</h4>
+                    <p className="text-xs text-blue-600">The claim is currently under investigation by an insurance adjuster. Findings will be posted here once complete.</p>
+                  </div>
                 )}
 
                 {selectedClaim.investigation?.findings && (
@@ -1022,7 +1079,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                 {/* Admin Actions Section */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Administrative Actions</h4>
-                  
+
                   {selectedClaim.status === 'pending' && (
                     <div className="space-y-2">
                       <Button className="w-full bg-blue-600 hover:bg-blue-700 gap-2" onClick={() => updateClaimStatus(selectedClaim._id, 'under_review')} disabled={actionLoading}>
@@ -1046,7 +1103,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                   )}
 
                   {selectedClaim.status === 'investigation' && (
-                    <Button className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2" 
+                    <Button className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2"
                       onClick={() => submitInvestigation(selectedClaim._id, 'Damaged verified by on-site inspection.', 'Moisture Spoilage')} disabled={actionLoading}>
                       <UserCheck className="h-4 w-4" />Complete Investigation
                     </Button>
@@ -1055,7 +1112,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                   {selectedClaim.status === 'assessment' && (
                     <div className="space-y-2">
                       <p className="text-[10px] text-gray-400 text-center italic">Awaiting settlement assessment...</p>
-                      <Button className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2" 
+                      <Button className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
                         onClick={() => submitAssessment(selectedClaim._id, selectedClaim.amount_claimed * 0.9, 'Standard spoilage coverage applies.')} disabled={actionLoading}>
                         <BarChart3 className="h-4 w-4" />Finalize Assessment
                       </Button>
@@ -1063,7 +1120,7 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                   )}
 
                   {selectedClaim.status === 'approved' && (
-                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" 
+                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2"
                       onClick={() => processPayment(selectedClaim._id, selectedClaim.amount_approved, 'bank_transfer', 'REF-' + Date.now())} disabled={actionLoading}>
                       <DollarSign className="h-4 w-4" />Process Settlement
                     </Button>
@@ -1079,30 +1136,30 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
                 </div>
 
                 <div className="pt-4 space-y-4">
-                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                     <History className="h-4 w-4" />Audit Log Preview
-                   </h4>
-                   <div className="space-y-3 pl-2 border-l border-gray-100">
-                      <div className="relative pl-4 pb-4 border-l border-green-200 last:pb-0">
-                         <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-green-400" />
-                         <p className="text-[10px] font-bold text-gray-800">Claim Filed</p>
-                         <p className="text-[9px] text-gray-400">{new Date(selectedClaim.filed_date).toLocaleDateString()}</p>
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <History className="h-4 w-4" />Audit Log Preview
+                  </h4>
+                  <div className="space-y-3 pl-2 border-l border-gray-100">
+                    <div className="relative pl-4 pb-4 border-l border-green-200 last:pb-0">
+                      <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-green-400" />
+                      <p className="text-[10px] font-bold text-gray-800">Claim Filed</p>
+                      <p className="text-[9px] text-gray-400">{new Date(selectedClaim.filed_date).toLocaleDateString()}</p>
+                    </div>
+                    {selectedClaim.review_date && (
+                      <div className="relative pl-4 pb-4 border-l border-blue-200 last:pb-0">
+                        <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-blue-400" />
+                        <p className="text-[10px] font-bold text-gray-800">Initial Review Complete</p>
+                        <p className="text-[9px] text-gray-400">{new Date(selectedClaim.review_date).toLocaleDateString()}</p>
                       </div>
-                      {selectedClaim.review_date && (
-                        <div className="relative pl-4 pb-4 border-l border-blue-200 last:pb-0">
-                           <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-blue-400" />
-                           <p className="text-[10px] font-bold text-gray-800">Initial Review Complete</p>
-                           <p className="text-[9px] text-gray-400">{new Date(selectedClaim.review_date).toLocaleDateString()}</p>
-                        </div>
-                      )}
-                   </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
-      
+
       {/* ── Claim Modal (File New) ────────────────────────── */}
       <Dialog open={showClaimModal} onOpenChange={setShowClaimModal}>
         <DialogContent className="max-w-md">
@@ -1131,6 +1188,130 @@ export default function InsurancePage({ params: _params }: { params: Promise<{ l
             <Button variant="ghost" onClick={() => { setShowClaimModal(false); setClaimPhotos([]) }}>Close</Button>
             <Button onClick={submitClaimWithPhotos} disabled={claimSaving || uploadingPhotos}>{claimSaving || uploadingPhotos ? "Submitting..." : "Submit Claim"}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Claim Dialog */}
+      {/* ... Existing Claim Modal ... */}
+
+      {/* ── Super Admin Review Claim Modal ────────────────── */}
+      <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-amber-500" />
+              Review Claim: {selectedClaim?.claim_number}
+            </DialogTitle>
+            <DialogDescription>
+              Complete the end-to-end claim lifecycle. Update statuses and record investigation details.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedClaim && (
+            <div className="space-y-6">
+              {/* Stepper Header */}
+              <div className="flex items-center justify-between border-b pb-4">
+                {['Pending', 'Under Review', 'Investigation', 'Assessment', 'Approved', 'Payment Processed'].map((step, idx) => {
+                  const statuses = ['Pending', 'Under Review', 'Investigation', 'Assessment', 'Approved', 'Payment Processed', 'Closed'];
+                  const currentIndex = statuses.indexOf(selectedClaim.status);
+                  const isCompleted = currentIndex > idx;
+                  const isActive = currentIndex === idx;
+
+                  return (
+                    <div key={step} className="flex flex-col items-center gap-1">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isActive ? 'bg-amber-500 text-white ring-4 ring-amber-100' : isCompleted ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                        {isCompleted ? <CheckCircle className="h-4 w-4" /> : idx + 1}
+                      </div>
+                      <span className={`text-[10px] font-medium ${isActive ? 'text-amber-700' : isCompleted ? 'text-green-700' : 'text-gray-400'}`}>{step}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <Tabs value={reviewTab} onValueChange={setReviewTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="details">Details & Docs</TabsTrigger>
+                  <TabsTrigger value="investigation">Investigation</TabsTrigger>
+                  <TabsTrigger value="assessment">Assessment</TabsTrigger>
+                  <TabsTrigger value="payment">Payment & Status</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="details" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card><CardContent className="p-4"><p className="text-sm font-semibold text-gray-500">Claim Type</p><p>{selectedClaim.claim_type}</p></CardContent></Card>
+                    <Card><CardContent className="p-4"><p className="text-sm font-semibold text-gray-500">Amount Claimed</p><p className="font-bold text-lg text-red-600">PKR {selectedClaim.amount_claimed.toLocaleString()}</p></CardContent></Card>
+                    <Card className="col-span-2"><CardContent className="p-4"><p className="text-sm font-semibold text-gray-500">Description</p><p>{selectedClaim.description}</p></CardContent></Card>
+                    <Card className="col-span-2"><CardContent className="p-4"><p className="text-sm font-semibold text-gray-500">Affected Batch</p><p>ID: {selectedClaim.batch_affected?.batch_id} • Qty: {selectedClaim.batch_affected?.quantity_affected} kg</p></CardContent></Card>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="investigation" className="space-y-4 mt-4">
+                  <Card>
+                    <CardContent className="p-4 space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Cause of Loss</label>
+                        <Select defaultValue={selectedClaim.investigation?.cause_of_loss || ''}>
+                          <SelectTrigger><SelectValue placeholder="Select cause..." /></SelectTrigger>
+                          <SelectContent><SelectItem value="weather">Weather / Moisture</SelectItem><SelectItem value="pest">Pest Infestation</SelectItem><SelectItem value="fire">Fire</SelectItem><SelectItem value="operational">Operational Error</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Investigation Findings</label>
+                        <Input className="mt-1" placeholder="Enter findings..." defaultValue={selectedClaim.investigation?.findings || ''} />
+                      </div>
+                      <Button className="w-full bg-blue-600 hover:bg-blue-700">Save Investigation Details</Button>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="assessment" className="space-y-4 mt-4">
+                  <Card>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium">Estimated Damage Value (PKR)</label>
+                          <Input type="number" defaultValue={selectedClaim.assessment?.estimated_damage_value || selectedClaim.amount_claimed} />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Settlement Recommendation (PKR)</label>
+                          <Input type="number" defaultValue={selectedClaim.assessment?.settlement_recommendation || 0} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Internal Notes</label>
+                        <Input className="mt-1" placeholder="Admin notes..." defaultValue={selectedClaim.assessment?.internal_notes || ''} />
+                      </div>
+                      <Button className="w-full bg-purple-600 hover:bg-purple-700">Update Assessment</Button>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="payment" className="space-y-4 mt-4">
+                  <Card>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium">Approved Amount (PKR)</label>
+                          <Input type="number" defaultValue={selectedClaim.amount_approved || 0} />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Payment Method</label>
+                          <Select defaultValue={selectedClaim.payment?.payment_method || 'bank_transfer'}>
+                            <SelectTrigger><SelectValue placeholder="Method" /></SelectTrigger>
+                            <SelectContent><SelectItem value="bank_transfer">Bank Transfer</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-4">
+                        <Button className="flex-1 bg-green-600 hover:bg-green-700">Approve & Process Payment</Button>
+                        <Button variant="destructive" className="flex-1">Reject Claim</Button>
+                        <Button variant="outline" className="flex-1">Mark as Closed</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -27,6 +27,7 @@ import {
     Info,
     AlertCircle,
     XCircle,
+    X,
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
@@ -93,6 +94,7 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
     const [severityFilter, setSeverityFilter] = useState("all")
     const [dateFrom, setDateFrom] = useState("")
     const [dateTo, setDateTo] = useState("")
+    const [entityFilter, setEntityFilter] = useState("")
 
     const fetchLogs = useCallback(async (page = 1) => {
         setLoading(true)
@@ -103,6 +105,7 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
             if (severityFilter !== "all") url += `&severity=${severityFilter}`
             if (dateFrom) url += `&from=${dateFrom}`
             if (dateTo) url += `&to=${dateTo}`
+            if (entityFilter) url += `&entity_ref=${encodeURIComponent(entityFilter)}`
 
             const res = await api.get<{
                 logs: ActivityLog[]
@@ -120,7 +123,7 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
         } finally {
             setLoading(false)
         }
-    }, [search, categoryFilter, severityFilter, dateFrom, dateTo])
+    }, [search, categoryFilter, severityFilter, dateFrom, dateTo, entityFilter])
 
     useEffect(() => {
         fetchLogs()
@@ -190,7 +193,7 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
             const blobUrl = URL.createObjectURL(blob)
             const a = document.createElement("a")
             a.href = blobUrl
-            a.download = `activity-logs-${new Date().toISOString().slice(0,10)}.csv`
+            a.download = `activity-logs-${new Date().toISOString().slice(0, 10)}.csv`
             a.click()
             URL.revokeObjectURL(blobUrl)
             toast.success("CSV exported!")
@@ -337,11 +340,14 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
                 {/* Log List */}
                 <div className="lg:col-span-2">
                     <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-lg">Event Timeline</CardTitle>
-                            <CardDescription>
-                                Showing {logs.length} of {pagination.total_items} events
-                            </CardDescription>
+                        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle className="text-lg">Event Timeline</CardTitle>
+                                <CardDescription>
+                                    Showing {logs.length} of {pagination.total_items} events
+                                    {entityFilter && <span className="ml-2 font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Filtering by: {entityFilter} <X className="inline h-3 w-3 cursor-pointer ml-1" onClick={() => setEntityFilter('')} /></span>}
+                                </CardDescription>
+                            </div>
                         </CardHeader>
                         <CardContent className="p-0">
                             {loading ? (
@@ -355,20 +361,28 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
                                     <p className="text-sm mt-1">Logs will appear as actions are performed</p>
                                 </div>
                             ) : (
-                                <div className="divide-y">
+                                <div className="relative pl-8 pr-4 py-4 before:absolute before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-gray-300 before:to-gray-100 space-y-6">
                                     {logs.map((log) => {
                                         const catCfg = CATEGORY_CONFIG[log.category] || CATEGORY_CONFIG.system
                                         const sevCfg = SEVERITY_CONFIG[log.severity] || SEVERITY_CONFIG.info
                                         const isSelected = selectedLog?._id === log._id
 
+                                        // Severity Node Colors
+                                        let nodeColor = 'bg-blue-400 border-blue-100'
+                                        if (log.severity === 'critical') nodeColor = 'bg-red-500 border-red-100'
+                                        else if (log.severity === 'warning') nodeColor = 'bg-amber-400 border-amber-100'
+
                                         return (
                                             <div
                                                 key={log._id}
-                                                className={`flex items-start gap-4 p-4 cursor-pointer transition-all hover:bg-gray-50 ${isSelected ? "bg-blue-50/50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"}`}
+                                                className={`relative flex items-start gap-4 p-3 rounded-lg cursor-pointer transition-all ${isSelected ? "bg-gray-50 ring-1 ring-gray-200 shadow-sm" : "hover:bg-gray-50/50"}`}
                                                 onClick={() => setSelectedLog(log)}
                                             >
+                                                {/* Timeline Node */}
+                                                <div className={`absolute -left-5 top-4 w-3 h-3 rounded-full border-2 ${nodeColor} z-10 shadow-sm`} />
+
                                                 {/* Category Icon */}
-                                                <div className={`mt-0.5 flex items-center justify-center w-9 h-9 rounded-lg border ${catCfg.bgColor}`}>
+                                                <div className={`mt-0.5 flex items-center justify-center w-8 h-8 rounded border ${catCfg.bgColor}`}>
                                                     <span className={catCfg.color}>{catCfg.icon}</span>
                                                 </div>
 
@@ -382,7 +396,7 @@ export default function ActivityLogsPage({ params: _params }: { params: Promise<
                                                         </span>
                                                     </div>
 
-                                                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                                                         <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${sevCfg.color}`}>
                                                             {sevCfg.icon}
                                                             <span className="ml-0.5">{sevCfg.label}</span>

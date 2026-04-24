@@ -33,7 +33,7 @@ String getDateTimeString() {
   return String(buf);
 }
 
-#define MQTT_BROKER "192.168.137.1" // Replace with your broker
+#define MQTT_BROKER "192.168.100.229" // Replace with your broker
 #define MQTT_PORT 1883
 #define MQTT_USERNAME "" // if needed
 #define MQTT_PASSWORD "" // if needed
@@ -48,14 +48,14 @@ bool servoIsOpen = false;
 bool servoInitialized = false;
 bool servoEnabled = false;
 unsigned long lastServoAction = 0;
-const unsigned long SERVO_COOLDOWN = 3000; // 3 seconds
+const unsigned long SERVO_COOLDOWN = 1000; // 1 second (fast response)
 
 // ================================
 // SERVO CONTROL STATE
 // ================================
 
-const unsigned long LID_OPEN_DELAY_MS = 3000;
-const unsigned long LID_CLOSE_DELAY_MS = 3000;
+const unsigned long LID_OPEN_DELAY_MS = 1500;
+const unsigned long LID_CLOSE_DELAY_MS = 1500;
 
 // Override expires after 10 minutes (you can change)
 const unsigned long HUMAN_OVERRIDE_TIMEOUT = 10UL * 60UL * 1000UL;
@@ -117,11 +117,11 @@ ControlMode controlMode = AUTO;
 int soilBuffer[N_READS]; // circular buffer for SMA
 int soilIndex = 0;       // current index
 // Output control pins
-#define SERVO_PIN 27 // Servo control pin
-#define PWM_PIN 26   // PWM control pin (GPIO 26 - was RELAY_PIN)
-#define LED2_PIN 14  // LED 2 control pin
-#define LED3_PIN 12  // LED 3 control pin
-#define LED4_PIN 25  // LED 4 control pin (GPIO 25)
+#define SERVO_PIN 27  // Servo control pin
+#define PWM_PIN 26    // PWM control pin (GPIO 26 - was RELAY_PIN)
+#define LED2_PIN 14   // LED 2 - Risky (yellow)
+#define LED3_PIN 12   // LED 3 - Good (green)
+#define LED4_PIN 25   // LED 4 - Spoiled (red)
 #define FAN_PWM_PIN PWM_PIN
 
 // PWM Configuration
@@ -161,7 +161,7 @@ const char *SENSOR_DATA_URL = "/sensor_data";
 const char *CONTROL_URL = "/control";
 
 unsigned long lastMQTTPublish = 0;
-const unsigned long MQTT_PUBLISH_INTERVAL = 3000;
+const unsigned long MQTT_PUBLISH_INTERVAL = 2000;
 unsigned long lastSerialTelemetry = 0;
 const unsigned long SERIAL_TELEMETRY_INTERVAL = 2000;
 
@@ -182,7 +182,7 @@ bool lastServoSent = false;
 #define FIXED_DEVICE_ID "004B12387760"
 // --- GrainHero Patch: Dual-write to backend ---
 bool DUAL_WRITE_TO_BACKEND = true; // enable later for demo
-const char *BACKEND_BASE_URL = "http://192.168.137.1:5000/api/iot";
+const char *BACKEND_BASE_URL = "http://192.168.100.229:5000/api/iot";
 
 // Initialize sensors
 Adafruit_BME680 bme;
@@ -205,19 +205,20 @@ bool wifiConnected = false;
 // Firebase variables
 unsigned long lastFirebaseUpload = 0;
 unsigned long lastControlCheck = 0;
-const unsigned long FIREBASE_UPLOAD_INTERVAL = 10000; // 10 seconds
-const unsigned long CONTROL_CHECK_INTERVAL = 5000;    // 2 seconds
+const unsigned long FIREBASE_UPLOAD_INTERVAL = 5000; // 5 seconds
+const unsigned long CONTROL_CHECK_INTERVAL = 2000;    // 2 seconds
 
 // Control state variables
-bool servoState = false; // Controls servo (open/close lid)
-bool led2State = false;  // Controls LED 2
-bool led3State = false;  // Controls LED 3
-bool led4State = false;  // Controls LED 4 (GPIO 25)
+bool servoState = false;  // Controls servo (open/close lid)
+bool led2State = false;   // Controls LED 2 - Risky (yellow)
+bool led3State = false;   // Controls LED 3 - Good (green)
+bool led4State = false;   // Controls LED 4 - Spoiled (red)
+bool alarmActive = false; // Kept for compatibility but unused
 
 // ---------- ACTUATOR TIMING SAFETY ----------
-const unsigned long MIN_LID_OPEN_TIME_MS = 10UL * 1000UL; // 10 seconds
-const unsigned long MIN_FAN_RUN_TIME_MS = 15UL * 1000UL;  // 15 seconds
-const unsigned long DECISION_DEBOUNCE_MS = 5UL * 1000UL;  // 5 seconds
+const unsigned long MIN_LID_OPEN_TIME_MS = 3UL * 1000UL;  // 3 seconds
+const unsigned long MIN_FAN_RUN_TIME_MS = 3UL * 1000UL;   // 3 seconds
+const unsigned long DECISION_DEBOUNCE_MS = 1UL * 1000UL;  // 1 second
 // ------------------------------------------
 
 // ===== FUNCTION PROTOTYPES =====
@@ -417,13 +418,20 @@ void setup() {
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-  // Wait for time to be set
+  // Wait for time to be set (with 10s timeout - hotspot may have no internet)
   struct tm timeinfo;
+  unsigned long ntpStart = millis();
   while (!getLocalTime(&timeinfo)) {
+    if (millis() - ntpStart > 10000) {
+      Serial.println(F("⚠️ NTP timeout in setup — proceeding without sync"));
+      break;
+    }
     Serial.println(F("Waiting for NTP time..."));
-    delay(1000);
+    delay(500);
   }
-  Serial.println(F("Time synchronized via NTP!"));
+  if (getLocalTime(&timeinfo)) {
+    Serial.println(F("Time synchronized via NTP!"));
+  }
 
   // Initialize Firebase client
   initializeFirebaseClient();
@@ -582,23 +590,33 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     int value = doc["value"] | 0;
 
     if (action == "turn_on") {
-
       controlMode = MANUAL;
       humanOverrideActive = true;
       humanRequestedFan = true;
+      targetFanSpeed = value > 0 ? value : 60;
       lastHumanCommandTime = millis();
-
-      Serial.println(F("🧑 Human requested FAN ON"));
+      Serial.printf("🧑 Human requested FAN ON at %d%%\n", targetFanSpeed);
     }
 
     else if (action == "turn_off") {
-
       controlMode = MANUAL;
       humanOverrideActive = true;
       humanRequestedFan = false;
+      targetFanSpeed = 0;
       lastHumanCommandTime = millis();
-
       Serial.println(F("🧑 Human requested FAN OFF"));
+    }
+
+    else if (action == "set_value") {
+      bool isLedControl = doc.containsKey("led2") || doc.containsKey("led3") || doc.containsKey("led4");
+      if (!isLedControl) {
+        controlMode = MANUAL;
+        humanOverrideActive = true;
+        targetFanSpeed = value;
+        humanRequestedFan = value > 0;
+        lastHumanCommandTime = millis();
+        Serial.printf("🧑 Human set fan speed to %d%%\n", value);
+      }
     }
 
     else if (action == "auto") {
@@ -613,13 +631,22 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     }
   }
 
-  // --- Optional LED control ---
-  if (doc.containsKey("led2"))
-    digitalWrite(LED2_PIN, doc["led2"] ? HIGH : LOW);
-  if (doc.containsKey("led3"))
-    digitalWrite(LED3_PIN, doc["led3"] ? HIGH : LOW);
-  if (doc.containsKey("led4"))
-    digitalWrite(LED4_PIN, doc["led4"] ? HIGH : LOW);
+  // --- LED control (handled independently, track state) ---
+  if (doc.containsKey("led2")) {
+    led2State = doc["led2"] ? true : false;
+    digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
+    Serial.printf("💡 LED2 %s via MQTT\n", led2State ? "ON" : "OFF");
+  }
+  if (doc.containsKey("led3")) {
+    led3State = doc["led3"] ? true : false;
+    digitalWrite(LED3_PIN, led3State ? HIGH : LOW);
+    Serial.printf("💡 LED3 %s via MQTT\n", led3State ? "ON" : "OFF");
+  }
+  if (doc.containsKey("led4")) {
+    led4State = doc["led4"] ? true : false;
+    digitalWrite(LED4_PIN, led4State ? HIGH : LOW);
+    Serial.printf("💡 LED4 %s via MQTT\n", led4State ? "ON" : "OFF");
+  }
 }
 
 float calculateDewPoint(float temperature, float humidity) {
@@ -729,12 +756,17 @@ void loop() {
   processTVOCData(); // process TVOC / air quality data
 
   // ================================
-  // 3️⃣ WAIT FOR VALID NTP TIME
+  // 3️⃣ WAIT FOR VALID NTP TIME (with timeout)
   // ================================
+  static unsigned long ntpWaitStart = 0;
   if (time(nullptr) < 1700000000) {
-    Serial.println(F("⏳ Waiting for valid NTP time..."));
-    delay(1000);
-    return;
+    if (ntpWaitStart == 0) ntpWaitStart = millis();
+    if (millis() - ntpWaitStart < 10000) {
+      Serial.println(F("⏳ Waiting for valid NTP time..."));
+      delay(500);
+      return;
+    }
+    Serial.println(F("⚠️ NTP timeout — proceeding with system clock"));
   }
 
   // ================================
@@ -767,9 +799,15 @@ void loop() {
   }
 
   // ================================
+  // 6.5 CHECK FIREBASE CONTROLS (fallback if MQTT missed)
+  // ================================
+  checkFirebaseControls();
+  updateControlOutputs();
+
+  // ================================
   // ML DECISION INPUT (from backend)
   // ================================
-  // Temporary demo logic (until backend wiring)
+  // Only run ML logic when human is NOT overriding
   if (!humanOverrideActive) {
     if (currentData.tvoc_approx > 600 || currentData.humidity > 75) {
       mlRequestedFan = true;
@@ -820,7 +858,7 @@ void loop() {
   // ================================
   // 1️⃣2️⃣ MAIN LOOP DELAY
   // ================================
-  delay(1000);
+  delay(500); // fast loop for responsive actuator control
 }
 
 // Function to set fixed Device ID
@@ -1205,7 +1243,7 @@ void publishToMQTT() {
   if (!mqttClient.connected())
     return;
 
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(768);
 
   // REQUIRED STRUCTURE FOR BACKEND
   JsonObject readings = doc.createNestedObject("readings");
@@ -1221,6 +1259,19 @@ void publishToMQTT() {
   doc["signal_strength"] = -60;
   doc["timestamp"] = currentData.dateTime;
   doc["timestamp_unix"] = currentData.timestamp;
+
+  // Control authority — WHO is driving actuators
+  if (humanOverrideActive) {
+    doc["control_authority"] = "HUMAN";
+  } else {
+    doc["control_authority"] = "ML_AUTO";
+  }
+
+  // Actuator state (so dashboard can show real state via MQTT)
+  doc["fanState"] = pwmSpeed > 0 ? "on" : "off";
+  doc["lidState"] = lidIsOpen ? "open" : "closed";
+  doc["pwm_speed"] = pwmSpeed;
+  doc["mlDecision"] = mlRequestedFan ? "fan_on" : "idle";
 
   String payload;
   serializeJson(doc, payload);
@@ -1658,25 +1709,33 @@ void checkFirebaseControls() {
 }
 
 void updateControlOutputs() {
-  // Update servo based on servoState
-  if (servoState != lastServoState) {
-    // ❌ OLD direct call commented out — centralized in
-    // processLidFanStateMachine() moveServoCommand(servoState);
-  }
+  // Servo/fan handled by processLidFanStateMachine() — do NOT override here
 
-  // Update PWM speed
-  // ❌ OLD direct call commented out — centralized in
-  // processLidFanStateMachine() setPWMSpeed(pwmSpeed);
-
-  // Update LED outputs based on state variables
+  // Update LED outputs — always follow state directly
   digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
   digitalWrite(LED3_PIN, led3State ? HIGH : LOW);
   digitalWrite(LED4_PIN, led4State ? HIGH : LOW);
 
-  if (mqttClient.connected()) {
-    DynamicJsonDocument fb(256);
+  // Publish feedback to MQTT so backend knows actual state
+  static unsigned long lastFeedback = 0;
+  if (mqttClient.connected() && millis() - lastFeedback > 2000) {
+    lastFeedback = millis();
+    DynamicJsonDocument fb(384);
     fb["servo"] = servoState;
     fb["pwm"] = pwmSpeed;
+    fb["led2"] = led2State;
+    fb["led3"] = led3State;
+    fb["led4"] = led4State;
+    fb["humanOverride"] = humanOverrideActive;
+
+    // Control authority — WHO is driving the actuators right now
+    if (humanOverrideActive) {
+      fb["control_authority"] = "HUMAN";
+    } else if (!mqttClient.connected()) {
+      fb["control_authority"] = "FAILSAFE";
+    } else {
+      fb["control_authority"] = "ML_AUTO";
+    }
 
     String out;
     serializeJson(fb, out);

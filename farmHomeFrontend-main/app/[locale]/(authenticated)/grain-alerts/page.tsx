@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -25,10 +28,10 @@ interface GrainAlert {
   _id: string
   title: string
   message: string
-  priority: string
-  status: string
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  status: 'pending' | 'acknowledged' | 'resolved'
   source: string
-  sensor_type?: string
+  category: string
   triggered_at: string
   acknowledged_at?: string
   resolved_at?: string
@@ -85,32 +88,32 @@ const SOURCE_COLORS: Record<string, string> = {
 
 export default function GrainAlertsPage({ params: _params }: { params: Promise<{ locale: string }> }) {
   const [alerts, setAlerts] = useState<GrainAlert[]>([])
-  const [stats, setStats] = useState<AlertStats>({ 
-    total: 0, pending: 0, acknowledged: 0, critical: 0, 
-    high: 0, medium: 0, low: 0, resolved_today: 0, active: 0, 
-    resolution_rate: 0, avg_response_mins: 0 
+  const [stats, setStats] = useState<AlertStats>({
+    total: 0, pending: 0, acknowledged: 0, critical: 0,
+    high: 0, medium: 0, low: 0, resolved_today: 0, active: 0,
+    resolution_rate: 0, avg_response_mins: 0
   })
   const [pagination, setPagination] = useState<Pagination>({ current_page: 1, total_pages: 1, total_items: 0, items_per_page: 20 })
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  
+
   // Modals state
   const [selectedAlert, setSelectedAlert] = useState<GrainAlert | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [showEscalate, setShowEscalate] = useState(false)
   const [escalateData, setEscalateData] = useState({ escalated_to_id: '', reason: '' })
-  
+
   const [preferences, setPreferences] = useState({
     critical_system: true,
     sensor_deviations: true,
     insurance_payments: true,
     batch_activity: false
   })
-  
+
   // Available users for escalation (mocked for now, in real scenario fetch from API)
-  const [escalatableUsers, setEscalatableUsers] = useState<{_id: string, name: string, role: string}[]>([])
+  const [escalatableUsers, setEscalatableUsers] = useState<{ _id: string, name: string, role: string }[]>([])
 
   const fetchAlerts = useCallback(async (page = 1) => {
     setLoading(true)
@@ -126,11 +129,11 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
         setStats(res.data.stats)
         setPagination(res.data.pagination)
       }
-      
+
       // Load users for escalation (simplified)
-      const usersRes = await api.get<{users: any[]}>('/user-management/users')
+      const usersRes = await api.get<{ users: any[] }>('/user-management/users')
       if (usersRes.ok && usersRes.data) {
-          setEscalatableUsers(usersRes.data.users.filter(u => ['admin', 'superadmin', 'manager'].includes(u.role)))
+        setEscalatableUsers(usersRes.data.users.filter(u => ['admin', 'superadmin', 'manager'].includes(u.role)))
       }
     } catch {
       toast.error('Failed to fetch alerts')
@@ -139,9 +142,9 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
     }
   }, [searchTerm, priorityFilter, statusFilter])
 
-  useEffect(() => { 
+  useEffect(() => {
     fetchAlerts();
-    api.get<{user: any}>('/auth/me').then(res => {
+    api.get<{ user: any }>('/auth/me').then(res => {
       if (res.ok && res.data?.user?.preferences?.alert_preferences) {
         setPreferences(res.data.user.preferences.alert_preferences);
       }
@@ -334,13 +337,13 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
                     const sCfg = STATUS_CFG[alert.status] || STATUS_CFG.pending
                     const SIcon = sCfg.icon
                     const isBlinking = alert.priority === 'critical' && alert.status === 'pending';
-                    
+
                     return (
                       <TableRow key={alert._id} className={alert.status !== 'resolved' ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/50 opacity-80'}>
                         <TableCell>
                           <div className="flex items-start gap-3">
                             <div className={`mt-1 p-2 rounded-full ${pCfg.bg} ${isBlinking ? 'animate-pulse ring-2 ring-red-400' : ''}`}>
-                                <pCfg.icon className={`h-4 w-4 ${pCfg.color}`} />
+                              <pCfg.icon className={`h-4 w-4 ${pCfg.color}`} />
                             </div>
                             <div>
                               <div className="font-medium text-sm text-gray-900">{alert.title}</div>
@@ -406,28 +409,28 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
                     <Label className="text-base">Critical System Alerts</Label>
                     <p className="text-sm text-gray-500">Hardware failures, extremely high risks, subscription expiration.</p>
                   </div>
-                  <Switch checked={preferences.critical_system} onCheckedChange={(v) => setPreferences({...preferences, critical_system: v})} />
+                  <Switch checked={preferences.critical_system} onCheckedChange={(v) => setPreferences({ ...preferences, critical_system: v })} />
                 </div>
                 <div className="flex items-center justify-between border-b pb-4">
                   <div>
                     <Label className="text-base">Sensor Deviations</Label>
                     <p className="text-sm text-gray-500">Receive emails when sensors detect abnormal temperatures or moisture.</p>
                   </div>
-                  <Switch checked={preferences.sensor_deviations} onCheckedChange={(v) => setPreferences({...preferences, sensor_deviations: v})} />
+                  <Switch checked={preferences.sensor_deviations} onCheckedChange={(v) => setPreferences({ ...preferences, sensor_deviations: v })} />
                 </div>
                 <div className="flex items-center justify-between border-b pb-4">
                   <div>
                     <Label className="text-base">Insurance & Payments</Label>
                     <p className="text-sm text-gray-500">Claims approved, overdue payments, policy renewals.</p>
                   </div>
-                  <Switch checked={preferences.insurance_payments} onCheckedChange={(v) => setPreferences({...preferences, insurance_payments: v})} />
+                  <Switch checked={preferences.insurance_payments} onCheckedChange={(v) => setPreferences({ ...preferences, insurance_payments: v })} />
                 </div>
                 <div className="flex items-center justify-between border-b pb-4">
                   <div>
                     <Label className="text-base">Batch Activity</Label>
                     <p className="text-sm text-gray-500">Large dispatches, spoilage logged, batches deleted.</p>
                   </div>
-                  <Switch checked={preferences.batch_activity} onCheckedChange={(v) => setPreferences({...preferences, batch_activity: v})} />
+                  <Switch checked={preferences.batch_activity} onCheckedChange={(v) => setPreferences({ ...preferences, batch_activity: v })} />
                 </div>
               </div>
               <Button onClick={savePreferences} className="bg-emerald-600 hover:bg-emerald-700 text-white">Save Preferences</Button>
@@ -446,7 +449,7 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
             </div>
             <DialogDescription>Full lifecycle and action history for this alert.</DialogDescription>
           </DialogHeader>
-          
+
           {selectedAlert && (
             <div className="space-y-6 mt-2">
               <div className="bg-gray-50 p-4 rounded-lg border">
@@ -468,7 +471,7 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
                     <p className="text-sm font-medium">Triggered</p>
                     <p className="text-xs text-gray-500">{new Date(selectedAlert.triggered_at).toLocaleString()}</p>
                   </div>
-                  
+
                   {selectedAlert.acknowledged_at && (
                     <div className="relative pl-6">
                       <div className="absolute w-3 h-3 bg-yellow-400 rounded-full -left-[7px] top-1.5 ring-4 ring-white"></div>
@@ -516,7 +519,7 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Escalate To</Label>
-              <Select value={escalateData.escalated_to_id} onValueChange={(val) => setEscalateData({...escalateData, escalated_to_id: val})}>
+              <Select value={escalateData.escalated_to_id} onValueChange={(val) => setEscalateData({ ...escalateData, escalated_to_id: val })}>
                 <SelectTrigger><SelectValue placeholder="Select admin or manager" /></SelectTrigger>
                 <SelectContent>
                   {escalatableUsers.map(u => (
@@ -527,7 +530,7 @@ export default function GrainAlertsPage({ params: _params }: { params: Promise<{
             </div>
             <div className="space-y-2">
               <Label>Reason for Escalation</Label>
-              <Textarea placeholder="Explain why this requires escalation..." value={escalateData.reason} onChange={(e) => setEscalateData({...escalateData, reason: e.target.value})} />
+              <Textarea placeholder="Explain why this requires escalation..." value={escalateData.reason} onChange={(e) => setEscalateData({ ...escalateData, reason: e.target.value })} />
             </div>
           </div>
           <DialogFooter>

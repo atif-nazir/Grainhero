@@ -103,6 +103,54 @@ try {
       mqttClient.subscribe('grainhero/actuators/+/feedback');
     });
 
+    // ━━━ CRITICAL: Process incoming MQTT messages from ESP32 ━━━
+    mqttClient.on('message', (topic, message) => {
+      try {
+        const payload = JSON.parse(message.toString());
+        const parts = topic.split('/');
+        const deviceId = parts[2];
+        const action = parts[3];
+
+        if (action === 'readings') {
+          const r = payload.readings || payload;
+          const temperature = Number(r.temperature ?? 0);
+          const humidity = Number(r.humidity ?? 0);
+          const tvoc = Number(r.tvoc ?? 0);
+          const mlDecision = payload.mlDecision || ((humidity > 75 || tvoc > 600) ? 'fan_on' : 'idle');
+          const existing = lastTelemetry.get(deviceId) || {};
+          const update = {
+            ...existing,
+            temperature, humidity, tvoc,
+            pressure: Number(r.pressure ?? existing.pressure ?? 0),
+            mlDecision: payload.control_authority === 'FAILSAFE' ? 'failsafe' : mlDecision,
+            controlAuthority: payload.control_authority || existing.controlAuthority || 'UNKNOWN',
+            timestamp: Date.now()
+          };
+          if (payload.fanState) update.fanState = payload.fanState;
+          if (payload.lidState) update.lidState = payload.lidState;
+          if (payload.pwm_speed !== undefined) update.pwm_speed = Number(payload.pwm_speed);
+          lastTelemetry.set(deviceId, update);
+          console.log(`📡 MQTT readings cached for ${deviceId} [${payload.control_authority || 'N/A'}] fan=${update.fanState || '?'} lid=${update.lidState || '?'}`);
+        }
+
+        if (action === 'feedback') {
+          const existing = lastTelemetry.get(deviceId) || {};
+          lastTelemetry.set(deviceId, {
+            ...existing,
+            fanState: (payload.pwm > 0) ? 'on' : 'off',
+            lidState: payload.servo ? 'open' : 'closed',
+            pwm_speed: Number(payload.pwm ?? 0),
+            led2State: !!payload.led2,
+            led3State: !!payload.led3,
+            led4State: !!payload.led4,
+            humanOverride: !!payload.humanOverride,
+            controlAuthority: payload.control_authority || existing.controlAuthority || 'UNKNOWN',
+            timestamp: Date.now()
+          });
+        }
+      } catch (e) { /* silently ignore parse errors */ }
+    });
+
     mqttClient.on('error', (error) => {
       console.warn('⚠️ MQTT error (non-fatal):', error.code || error.message);
     });
@@ -250,11 +298,11 @@ router.post('/devices/:id/control', [
     let guardrailBlocked = false;
     let guardrailReason = '';
     try {
-      const recentReading = await SensorReading.findOne({ 
-        admin_id: adminId, 
-        device_id: device._id || id 
+      const recentReading = await SensorReading.findOne({
+        admin_id: adminId,
+        device_id: device._id || id
       }).sort({ timestamp: -1 });
-      
+
       if (recentReading) {
         const t = recentReading.temperature?.value || 0;
         const tv = recentReading.voc?.value || 0;
@@ -367,9 +415,9 @@ router.get('/silos/:siloId/telemetry', [
     const adminId = req.user.admin_id || req.user._id;
 
     // Verify silo belongs to admin (optional but recommended)
-    const silo = await Silo.findOne({ 
+    const silo = await Silo.findOne({
       $or: [{ silo_id: siloId }, { _id: siloId }],
-      admin_id: adminId 
+      admin_id: adminId
     });
 
     ensureFirebase();
@@ -395,15 +443,17 @@ router.get('/silos/:siloId/telemetry', [
       const lidState = payload.lidState !== undefined ? (payload.lidState ? 'open' : 'closed') : ((payload.servo_state ? Number(payload.servo_state) : 0) ? 'open' : 'closed');
       const mlDecision = payload.mlDecision || ((humidity > 75 || tvocRaw > 600) ? 'fan_on' : 'idle');
       const humanOverride = payload.humanOverride !== undefined ? !!payload.humanOverride : !!payload.human_override;
-      
+
       const guardrails = [];
       if (temperature > 60) guardrails.push('high_temperature');
       if (tvocRaw > 1000) guardrails.push('high_tvoc');
 
       let ts = payload.timestamp || payload.timestamp_unix;
       if (ts && ts < 2000000000) ts = ts * 1000;
+      if (ts && ts < 2000000000) ts = ts * 1000;
       if (!ts || ts < 1600000000000) ts = Date.now();
 
+      const mqttActuator = cached || {};
       res.json({
         temperature,
         humidity,
@@ -478,9 +528,9 @@ router.get('/diagnostics/:deviceId', [
     const adminId = req.user.admin_id || req.user._id;
 
     // Verify ownership
-    const device = await SensorDevice.findOne({ 
+    const device = await SensorDevice.findOne({
       $or: [{ device_id: deviceId }, { _id: deviceId }],
-      admin_id: adminId 
+      admin_id: adminId
     });
 
     res.json({
