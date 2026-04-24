@@ -163,4 +163,73 @@ router.get('/stats', auth, requireTenantAccess, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/activity-logs/entity/:type/:id
+ * Get all logs for a specific entity (e.g., InsuranceClaim, GrainBatch)
+ */
+router.get('/entity/:type/:id', auth, requireTenantAccess, async (req, res) => {
+    try {
+        const { type, id } = req.params;
+        const logs = await ActivityLog.find({
+            entity_type: type,
+            entity_id: id
+        }).sort({ created_at: -1 }).lean();
+
+        res.json({ logs, total: logs.length });
+    } catch (error) {
+        console.error('Get entity logs error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/activity-logs/user/:userId
+ * Get all logs performed by a specific user
+ */
+router.get('/user/:userId', auth, requireTenantAccess, async (req, res) => {
+    try {
+        const logs = await ActivityLog.find({
+            user_id: req.params.userId
+        }).sort({ created_at: -1 }).lean();
+
+        res.json({ logs, total: logs.length });
+    } catch (error) {
+        console.error('Get user logs error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/activity-logs/export
+ * Export logs as CSV (returns raw data for frontend to process or generates a file)
+ */
+router.get('/export', auth, requireTenantAccess, async (req, res) => {
+    try {
+        // Reuse the logic from the main GET / endpoint but without pagination
+        let filter = {};
+        if (req.user.role === USER_ROLES.SUPER_ADMIN) {
+            if (req.query.tenant_id) filter.tenant_id = req.query.tenant_id;
+        } else {
+            filter.tenant_id = req.user.tenant_id || req.user.owned_tenant_id;
+        }
+
+        if (req.query.category) filter.category = req.query.category;
+        if (req.query.action) filter.action = req.query.action;
+        if (req.query.severity) filter.severity = req.query.severity;
+        if (req.query.from || req.query.to) {
+            filter.created_at = {};
+            if (req.query.from) filter.created_at.$gte = new Date(req.query.from);
+            if (req.query.to) filter.created_at.$lte = new Date(req.query.to);
+        }
+
+        const logs = await ActivityLog.find(filter).sort({ created_at: -1 }).lean();
+        
+        // For now, return JSON. In a full implementation, we'd use a CSV library like json2csv
+        res.json({ logs });
+    } catch (error) {
+        console.error('Export logs error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 module.exports = router;

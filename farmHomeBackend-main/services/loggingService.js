@@ -232,7 +232,286 @@ class LoggingService {
         });
     }
 
+    static async logInsurancePolicyCreated(user, policy, ip) {
+        return this.log({
+            action: 'insurance_policy_created',
+            category: 'insurance',
+            description: `Insurance policy ${policy.policy_number} created - ${policy.provider_name} (${policy.coverage_type})`,
+            user,
+            entity_type: 'InsurancePolicy',
+            entity_id: policy._id,
+            entity_ref: policy.policy_number,
+            metadata: {
+                provider: policy.provider_name,
+                coverage_type: policy.coverage_type,
+                coverage_amount: policy.coverage_amount,
+                premium_amount: policy.premium_amount
+            },
+            ip_address: ip
+        });
+    }
+
+    static async logInsurancePolicyUpdated(user, policy, changes, ip) {
+        return this.log({
+            action: 'insurance_policy_updated',
+            category: 'insurance',
+            description: `Insurance policy ${policy.policy_number} updated - fields: ${Object.keys(changes).join(', ')}`,
+            user,
+            entity_type: 'InsurancePolicy',
+            entity_id: policy._id,
+            entity_ref: policy.policy_number,
+            metadata: { changes },
+            ip_address: ip
+        });
+    }
+
+    static async logInsurancePolicyRenewed(user, policy, ip) {
+        return this.log({
+            action: 'insurance_policy_renewed',
+            category: 'insurance',
+            description: `Insurance policy ${policy.policy_number} renewed until ${new Date(policy.end_date).toLocaleDateString()}`,
+            user,
+            entity_type: 'InsurancePolicy',
+            entity_id: policy._id,
+            entity_ref: policy.policy_number,
+            metadata: { new_end_date: policy.end_date },
+            ip_address: ip
+        });
+    }
+
+    static async logInsurancePolicyCancelled(user, policy, reason, ip) {
+        return this.log({
+            action: 'insurance_policy_cancelled',
+            category: 'insurance',
+            description: `Insurance policy ${policy.policy_number} cancelled - Reason: ${reason}`,
+            user,
+            entity_type: 'InsurancePolicy',
+            entity_id: policy._id,
+            entity_ref: policy.policy_number,
+            metadata: { reason },
+            severity: 'warning',
+            ip_address: ip
+        });
+    }
+
+    static async logInsuranceClaimReviewed(user, claim, ip) {
+        return this.log({
+            action: 'insurance_claim_reviewed',
+            category: 'insurance',
+            description: `Insurance claim ${claim.claim_number} moved to review`,
+            user,
+            entity_type: 'InsuranceClaim',
+            entity_id: claim._id,
+            entity_ref: claim.claim_number,
+            ip_address: ip
+        });
+    }
+
+    static async logInsuranceClaimApproved(user, claim, approvedAmount, ip) {
+        return this.log({
+            action: 'insurance_claim_approved',
+            category: 'insurance',
+            description: `Insurance claim ${claim.claim_number} approved - PKR ${approvedAmount.toLocaleString()}`,
+            user,
+            entity_type: 'InsuranceClaim',
+            entity_id: claim._id,
+            entity_ref: claim.claim_number,
+            metadata: {
+                amount_claimed: claim.amount_claimed,
+                amount_approved: approvedAmount
+            },
+            ip_address: ip
+        });
+    }
+
+    static async logInsuranceClaimRejected(user, claim, reason, ip) {
+        return this.log({
+            action: 'insurance_claim_rejected',
+            category: 'insurance',
+            description: `Insurance claim ${claim.claim_number} rejected - ${reason}`,
+            user,
+            entity_type: 'InsuranceClaim',
+            entity_id: claim._id,
+            entity_ref: claim.claim_number,
+            metadata: { reason },
+            severity: 'warning',
+            ip_address: ip
+        });
+    }
+
+    static async logInsuranceClaimPaymentProcessed(user, claim, payment, ip) {
+        return this.log({
+            action: 'insurance_claim_payment_processed',
+            category: 'insurance',
+            description: `Payment of PKR ${payment.amount?.toLocaleString() || claim.amount_approved?.toLocaleString()} processed for claim ${claim.claim_number}`,
+            user,
+            entity_type: 'InsuranceClaim',
+            entity_id: claim._id,
+            entity_ref: claim.claim_number,
+            metadata: {
+                payment_method: payment.payment_method,
+                payment_reference: payment.payment_reference,
+                amount: payment.amount || claim.amount_approved
+            },
+            ip_address: ip
+        });
+    }
+
+    static async logInsuranceClaimDocumentUploaded(user, claim, documentType, ip) {
+        return this.log({
+            action: 'insurance_claim_document_uploaded',
+            category: 'insurance',
+            description: `Document (${documentType}) uploaded for claim ${claim.claim_number}`,
+            user,
+            entity_type: 'InsuranceClaim',
+            entity_id: claim._id,
+            entity_ref: claim.claim_number,
+            metadata: { document_type: documentType },
+            ip_address: ip
+        });
+    }
+
+    static async logInsuranceCoverageRequested(user, requestData, ip) {
+        return this.log({
+            action: 'insurance_coverage_requested',
+            category: 'insurance',
+            description: `Insurance coverage requested - Provider: ${requestData.preferred_provider}, Type: ${requestData.coverage_type}`,
+            user,
+            entity_type: 'InsurancePolicy',
+            metadata: {
+                preferred_provider: requestData.preferred_provider,
+                coverage_type: requestData.coverage_type
+            },
+            ip_address: ip
+        });
+    }
+
+    // ====== Alert Logging Helpers ======
+    static async logAlertAcknowledged(user, alert, ip) {
+        return this.log({
+            action: 'alert_acknowledged',
+            category: 'alert',
+            description: `Alert "${alert.title}" acknowledged`,
+            user,
+            entity_type: 'GrainAlert',
+            entity_id: alert._id,
+            entity_ref: alert.alert_id,
+            ip_address: ip
+        });
+    }
+
+    static async logAlertResolved(user, alert, resolutionType, ip) {
+        return this.log({
+            action: 'alert_resolved',
+            category: 'alert',
+            description: `Alert "${alert.title}" resolved (${resolutionType})`,
+            user,
+            entity_type: 'GrainAlert',
+            entity_id: alert._id,
+            entity_ref: alert.alert_id,
+            metadata: { resolution_type: resolutionType },
+            ip_address: ip
+        });
+    }
+
+    static async logAlertEscalated(user, alert, escalatedToName, ip) {
+        return this.log({
+            action: 'alert_escalated',
+            category: 'alert',
+            description: `Alert "${alert.title}" escalated to ${escalatedToName}`,
+            user,
+            entity_type: 'GrainAlert',
+            entity_id: alert._id,
+            entity_ref: alert.alert_id,
+            metadata: { escalated_to: escalatedToName },
+            severity: 'warning',
+            ip_address: ip
+        });
+    }
+
+    // ====== User Management Logging Helpers ======
+    static async logUserManagement(user, action, targetUser, ip) {
+        return this.log({
+            action,
+            category: 'user',
+            description: `User "${targetUser.name || targetUser.email}" — ${action.replace(/_/g, ' ')}`,
+            user,
+            entity_type: 'User',
+            entity_id: targetUser._id,
+            entity_ref: targetUser.email,
+            metadata: {
+                target_role: targetUser.role,
+                target_name: targetUser.name
+            },
+            ip_address: ip
+        });
+    }
+
+    // ====== Subscription Logging Helpers ======
+    static async logSubscriptionEvent(user, action, tenantId, metadata, ip) {
+        return this.log({
+            action,
+            category: 'subscription',
+            description: `Subscription ${action.replace(/subscription_/g, '').replace(/_/g, ' ')}`,
+            user,
+            entity_type: 'Subscription',
+            entity_ref: tenantId?.toString(),
+            metadata: metadata || {},
+            severity: action.includes('expired') || action.includes('cancelled') ? 'critical' : 'info',
+            ip_address: ip
+        });
+    }
+
+    // ====== Settings Logging Helpers ======
+    static async logSettingsUpdated(user, settingType, changes, ip) {
+        return this.log({
+            action: 'settings_updated',
+            category: 'system',
+            description: `${settingType} settings updated`,
+            user,
+            entity_type: 'System',
+            metadata: { setting_type: settingType, changes },
+            ip_address: ip
+        });
+    }
+
     // ====== Report Logging Helpers ======
+    // ====== Silo Logging Helpers ======
+    static async logSiloAction(user, action, silo, ip) {
+        return this.log({
+            action,
+            category: 'silo',
+            description: `Silo "${silo.name || silo.silo_id}" — ${action.replace('silo_', '').replace('_', ' ')}`,
+            user,
+            entity_type: 'Silo',
+            entity_id: silo._id,
+            entity_ref: silo.silo_id,
+            metadata: {
+                capacity: silo.capacity_kg,
+                warehouse_id: silo.warehouse_id
+            },
+            ip_address: ip
+        });
+    }
+
+    // ====== Sensor Logging Helpers ======
+    static async logSensorAction(user, action, sensor, ip) {
+        return this.log({
+            action,
+            category: 'sensor',
+            description: `Sensor "${sensor.device_id || sensor.name}" — ${action.replace('sensor_', '').replace('_', ' ')}`,
+            user,
+            entity_type: 'SensorDevice',
+            entity_id: sensor._id,
+            entity_ref: sensor.device_id,
+            metadata: {
+                silo_id: sensor.silo_id,
+                sensor_type: sensor.sensor_type
+            },
+            ip_address: ip
+        });
+    }
+
     static async logReportGenerated(user, reportType, entityRef, ip) {
         return this.log({
             action: 'batch_report_generated',
@@ -244,6 +523,19 @@ class LoggingService {
             ip_address: ip
         });
     }
+
+    static async logDataExported(user, exportType, filters, ip) {
+        return this.log({
+            action: 'data_exported',
+            category: 'export',
+            description: `${exportType} data exported`,
+            user,
+            entity_type: 'System',
+            metadata: { export_type: exportType, filters },
+            ip_address: ip
+        });
+    }
 }
 
 module.exports = LoggingService;
+

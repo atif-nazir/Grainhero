@@ -9,6 +9,7 @@ const { requirePermission, requireTenantAccess } = require('../middleware/permis
 const { body, validationResult, param, query } = require('express-validator');
 const axios = require('axios');
 const iotDeviceService = require('../services/iotDeviceService');
+const LoggingService = require('../services/loggingService');
 
 /**
  * @swagger
@@ -427,6 +428,11 @@ router.put('/:id', [
         sensor.updated_by = req.user._id;
         await sensor.save();
 
+        // Log sensor update
+        try {
+            await LoggingService.logSensorAction(req.user, 'sensor_updated', sensor, req.ip);
+        } catch (logErr) { console.error('Logging error:', logErr.message); }
+
         res.json({
             message: 'Sensor updated successfully',
             sensor
@@ -644,6 +650,11 @@ router.post('/:id/calibrate', [
         sensor.updated_by = req.user._id;
 
         await sensor.save();
+
+        // Log sensor calibration
+        try {
+            await LoggingService.logSensorAction(req.user, 'sensor_calibrated', sensor, req.ip);
+        } catch (logErr) { console.error('Logging error:', logErr.message); }
 
         res.json({
             message: 'Sensor calibrated successfully',

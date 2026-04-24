@@ -19,8 +19,8 @@ const grainAlertSchema = new mongoose.Schema({
   silo_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Silo',
-    required: [true, "Silo ID is required"],
     index: true
+    // Not required — some alerts (subscription, insurance, user) are not silo-related
   },
   batch_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -54,7 +54,7 @@ const grainAlertSchema = new mongoose.Schema({
       values: Object.values(ALERT_TYPES),
       message: `Alert type must be one of: ${Object.values(ALERT_TYPES).join(", ")}`
     },
-    required: [true, "Alert type is required"]
+    default: 'in-app'
   },
   priority: {
     type: String,
@@ -65,10 +65,10 @@ const grainAlertSchema = new mongoose.Schema({
     required: [true, "Priority is required"]
   },
   
-  // Source information
+  // Source information — expanded to cover all system events
   source: {
     type: String,
-    enum: ['sensor', 'ai', 'manual', 'system', 'threshold'],
+    enum: ['sensor', 'ai', 'manual', 'system', 'threshold', 'insurance', 'subscription', 'batch', 'payment', 'user'],
     required: [true, "Source is required"]
   },
   sensor_type: {

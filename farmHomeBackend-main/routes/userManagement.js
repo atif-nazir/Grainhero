@@ -13,6 +13,7 @@ const User = require("../models/User");
 const Tenant = require("../models/Tenant");
 const { USER_ROLES } = require("../configs/enum");
 const { canManageUser } = require("../configs/role-permissions");
+const LoggingService = require("../services/loggingService");
 
 /**
  * @swagger
@@ -226,6 +227,11 @@ router.post("/users", auth, requireUserCreationPermission, async (req, res) => {
       message: "User created successfully",
       user: userResponse,
     });
+
+    // Log user creation
+    try {
+      await LoggingService.logUserManagement(req.user, 'user_created', user, req.ip);
+    } catch (logErr) { console.error('Logging error:', logErr.message); }
   } catch (err) {
     console.error("Error creating user:", err);
     res.status(500).json({ error: "Server error: " + err.message });
@@ -422,6 +428,11 @@ router.put(
         message: "User updated successfully",
         user: updatedUser,
       });
+
+      // Log user update
+      try {
+        await LoggingService.logUserManagement(req.user, 'user_updated', updatedUser, req.ip);
+      } catch (logErr) { console.error('Logging error:', logErr.message); }
     } catch (err) {
       console.error("Error updating user:", err);
       res.status(500).json({ error: "Server error: " + err.message });
@@ -505,6 +516,11 @@ router.delete(
       // Perform soft delete
       await user.softDelete();
 
+      // Log user deletion
+      try {
+        await LoggingService.logUserManagement(req.user, 'user_deleted', user, req.ip);
+      } catch (logErr) { console.error('Logging error:', logErr.message); }
+
       res.json({ message: "User deleted successfully" });
     } catch (err) {
       console.error("Error deleting user:", err);
@@ -584,6 +600,11 @@ router.patch(
         message: `User ${blocked ? "blocked" : "unblocked"} successfully`,
         user,
       });
+
+      // Log user block status change
+      try {
+        await LoggingService.logUserManagement(req.user, blocked ? 'user_blocked' : 'user_unblocked', user, req.ip);
+      } catch (logErr) { console.error('Logging error:', logErr.message); }
     } catch (err) {
       console.error("Error updating user block status:", err);
       res.status(500).json({ error: "Server error: " + err.message });

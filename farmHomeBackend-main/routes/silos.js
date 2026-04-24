@@ -8,6 +8,7 @@ const {
 } = require("../middleware/permission");
 const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const Silo = require("../models/Silo");
+const LoggingService = require("../services/loggingService");
 
 /**
  * @swagger
@@ -394,6 +395,12 @@ router.post(
       });
 
       await silo.save();
+      
+      // Log silo creation
+      try {
+        await LoggingService.logSiloAction(req.user, 'silo_created', silo, req.ip);
+      } catch (logErr) { console.error('Logging error:', logErr.message); }
+
       const responsePayload = { message: "Silo created successfully", silo };
       if (req._auto_created_warehouse) {
         responsePayload.createdWarehouse = {
@@ -550,6 +557,12 @@ router.put(
       if (status) silo.status = status;
 
       await silo.save();
+
+      // Log silo update
+      try {
+        await LoggingService.logSiloAction(req.user, 'silo_updated', silo, req.ip);
+      } catch (logErr) { console.error('Logging error:', logErr.message); }
+
       res.json({
         message: "Silo updated successfully",
         silo,
@@ -605,6 +618,13 @@ router.delete(
       }
 
       await Silo.findByIdAndDelete(req.params.id);
+
+      // Log silo deletion
+      try {
+        // Create a mock object for logging since it's deleted
+        await LoggingService.logSiloAction(req.user, 'silo_deleted', silo, req.ip);
+      } catch (logErr) { console.error('Logging error:', logErr.message); }
+
       res.json({ message: "Silo deleted successfully" });
     } catch (error) {
       console.error("Delete silo error:", error);
