@@ -349,10 +349,17 @@ async function writeControlState(deviceId, state) {
     const updates = {
       lastControlUpdate: admin.database.ServerValue.TIMESTAMP
     }
-    // Only include fan-related keys if they were explicitly provided
-    if (state.human_requested_fan !== undefined) updates.humanRequestedFan = !!state.human_requested_fan
+    // Fan-related keys (new style for state machine)
+    if (state.human_requested_fan !== undefined) {
+      updates.humanRequestedFan = !!state.human_requested_fan
+      updates.human_requested_fan = !!state.human_requested_fan // alias for ESP32 compat
+    }
     if (state.ml_requested_fan !== undefined) updates.mlRequestedFan = !!state.ml_requested_fan
-    if (state.target_fan_speed !== undefined) updates.targetFanSpeed = state.target_fan_speed || 0
+    if (state.target_fan_speed !== undefined) {
+      updates.targetFanSpeed = state.target_fan_speed || 0
+      updates.target_fan_speed = state.target_fan_speed || 0 // alias
+      updates.pwm = state.target_fan_speed || 0 // backward compat for old firmware
+    }
     if (state.ml_decision !== undefined) updates.mlDecision = state.ml_decision || 'idle'
     // LED states (Arduino reads led2/led3/led4 booleans)
     if (state.led2 !== undefined) updates.led2 = !!state.led2
@@ -360,8 +367,11 @@ async function writeControlState(deviceId, state) {
     if (state.led4 !== undefined) updates.led4 = !!state.led4
     // Alarm state
     if (state.alarm !== undefined) updates.alarm = !!state.alarm
-    // Servo (lid)
+    // Servo (lid) — write both for state machine and direct control compat
     if (state.servo !== undefined) updates.servo = !!state.servo
+    if (state.human_requested_fan !== undefined) {
+      updates.servo = !!state.human_requested_fan // lid follows fan intent
+    }
 
     await ref.update(updates)
     console.log(`✅ Firebase control state updated for ${deviceId}:`, JSON.stringify(updates))

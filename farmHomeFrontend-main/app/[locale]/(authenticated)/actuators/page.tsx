@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,8 +11,6 @@ import { toast } from "sonner"
 import {
   Fan,
   Lightbulb,
-  Volume2,
-  VolumeX,
   Power,
   PowerOff,
   Activity,
@@ -41,6 +40,8 @@ interface LiveTelemetry {
   alarmState: string
   mlDecision: string
   humanOverride: boolean
+  controlAuthority?: string
+  dataSource?: string
   riskIndex: number | null
   dewPoint: number | null
   pressure: number | null
@@ -55,6 +56,7 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
   const [live, setLive] = useState<LiveTelemetry | null>(null)
   const [pwmValue, setPwmValue] = useState(80)
   const [sending, setSending] = useState<string | null>(null)
+  const [controlMode, setControlMode] = useState<'ml' | 'human'>('ml')
 
   // Poll live telemetry from Firebase
   useEffect(() => {
@@ -72,7 +74,25 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
     return () => { mounted = false; clearInterval(i) }
   }, [])
 
+  const switchMode = useCallback(async (mode: 'ml' | 'human') => {
+    setControlMode(mode)
+    // Send mode switch to backend
+    try {
+      await fetch(`${backendUrl}/api/iot/devices/${DEVICE_ID}/control-public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: mode === 'ml' ? 'auto' : 'turn_on', value: pwmValue })
+      })
+      toast.success(mode === 'ml' ? '🤖 Switched to ML Auto mode' : '🧑 Switched to Human Expert mode')
+    } catch { }
+  }, [pwmValue])
+
   const sendControl = useCallback(async (action: string, value?: number, extras?: Record<string, unknown>) => {
+    // Block manual controls when in ML mode (except mode switch)
+    if (controlMode === 'ml' && !['auto'].includes(action)) {
+      toast.error('🤖 Switch to Human Expert mode to control actuators manually')
+      return
+    }
     setSending(action)
     try {
       const body: Record<string, unknown> = { action }
@@ -96,11 +116,41 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
     } finally {
       setSending(null)
     }
-  }, [])
+  }, [controlMode])
 
   const fanIsOn = live?.fanState === 'on' || live?.fanState === 'ON'
   const lidIsOpen = live?.lidState === 'open' || live?.lidState === 'OPEN'
-  const alarmIsOn = live?.alarmState === 'on' || live?.alarmState === 'ON'
+
+  // LED definitions with correct labels and colors
+  const leds = [
+    {
+      key: 'led2' as const,
+      label: 'Risky',
+      description: 'Batch at risk — conditions may cause spoilage',
+      colorDot: '#EAB308',      // yellow
+      colorBg: '#FEF9C3',       // yellow-50
+      colorText: '#A16207',     // yellow-700
+      pin: 14
+    },
+    {
+      key: 'led3' as const,
+      label: 'Good',
+      description: 'Batch in optimal conditions — no spoilage risk',
+      colorDot: '#22C55E',      // green
+      colorBg: '#DCFCE7',       // green-50
+      colorText: '#15803D',     // green-700
+      pin: 12
+    },
+    {
+      key: 'led4' as const,
+      label: 'Spoiled',
+      description: 'Critical — batch spoiled or extreme conditions',
+      colorDot: '#EF4444',      // red
+      colorBg: '#FEE2E2',       // red-50
+      colorText: '#B91C1C',     // red-700
+      pin: 25
+    }
+  ]
 
   return (
     <div className="space-y-6">
@@ -111,14 +161,33 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             Actuator Control Center
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Direct hardware control • Fan, LEDs, Alarm • Device {DEVICE_ID}
+            Direct hardware control • Fan, LEDs • Device {DEVICE_ID}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Mode Dropdown */}
+          <Select value={controlMode} onValueChange={(v) => switchMode(v as 'ml' | 'human')}>
+            <SelectTrigger className={`w-[200px] font-semibold ${
+              controlMode === 'ml'
+                ? 'border-blue-400 bg-blue-50 text-blue-700'
+                : 'border-amber-400 bg-amber-50 text-amber-700'
+            }`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ml">
+                <span className="flex items-center gap-2">🤖 ML Auto Mode</span>
+              </SelectItem>
+              <SelectItem value="human">
+                <span className="flex items-center gap-2">🧑 Human Expert Mode</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
           {live ? (
             <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 gap-1.5 px-3 py-1">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live • {new Date(live.timestamp).toLocaleTimeString()}
+              Live
             </Badge>
           ) : (
             <Badge variant="outline" className="text-muted-foreground gap-1.5">
@@ -130,18 +199,47 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             size="sm"
             className="gap-1.5"
             onClick={() => {
+              // Emergency stop always works regardless of mode
+              const prev = controlMode
+              setControlMode('human')
               sendControl('turn_off')
-              sendControl('alarm_off')
-              sendControl('turn_off', 0, { led: 'led2', ledState: false })
-              sendControl('turn_off', 0, { led: 'led3', ledState: false })
-              sendControl('turn_off', 0, { led: 'led4', ledState: false })
+              sendControl('set_value', 0, { led: 'led2', ledState: false })
+              sendControl('set_value', 0, { led: 'led3', ledState: false })
+              sendControl('set_value', 0, { led: 'led4', ledState: false })
               toast.warning('🚨 Emergency shutdown sent')
+              setControlMode(prev)
             }}
           >
             <AlertTriangle className="h-4 w-4" /> Emergency Stop
           </Button>
         </div>
       </div>
+
+      {/* Mode Banner */}
+      {/* Control Authority Banner — shows WHO is actually driving hardware */}
+      {(() => {
+        const authority = live?.controlAuthority || (controlMode === 'ml' ? 'ML_AUTO' : 'HUMAN')
+        const configs: Record<string, { border: string; bg: string; icon: string; title: string; desc: string; textColor: string; iconBg: string; iconColor: string }> = {
+          'ML_AUTO': { border: 'border-blue-300', bg: 'from-blue-50 to-indigo-50', icon: '🤖', title: 'ML Auto — Controlling Hardware', desc: 'Fan & lid driven by ML model based on sensor thresholds (TVOC > 600 or Humidity > 75%).', textColor: 'text-blue-800', iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
+          'HUMAN': { border: 'border-amber-300', bg: 'from-amber-50 to-orange-50', icon: '🧑', title: 'Human Expert — Manual Override Active', desc: 'You are controlling actuators directly. ML is paused. Click "Return to Auto" to restore ML control.', textColor: 'text-amber-800', iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+          'FAILSAFE': { border: 'border-red-300', bg: 'from-red-50 to-rose-50', icon: '🛡️', title: 'Failsafe Mode — No Backend Connection', desc: 'ESP32 is operating autonomously. Fan activates if TVOC > 600. Reconnect MQTT to restore normal control.', textColor: 'text-red-800', iconBg: 'bg-red-100', iconColor: 'text-red-600' },
+        }
+        const c = configs[authority] || configs['ML_AUTO']
+        return (
+          <div className={`rounded-xl border-2 ${c.border} bg-gradient-to-r ${c.bg} p-4 flex items-center gap-3`}>
+            <div className={`p-2 rounded-lg ${c.iconBg} ${c.iconColor}`}><Activity className="h-5 w-5" /></div>
+            <div className="flex-1">
+              <div className={`font-semibold ${c.textColor}`}>{c.icon} {c.title}</div>
+              <div className={`text-xs ${c.textColor} opacity-75`}>{c.desc}</div>
+            </div>
+            {live?.dataSource && (
+              <Badge variant="outline" className="text-[10px] px-2 py-0.5">
+                via {live.dataSource.toUpperCase()}
+              </Badge>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Live Status Strip */}
       {live && (
@@ -162,9 +260,17 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             <div className="text-[10px] uppercase tracking-wider text-emerald-500 font-medium">ML</div>
             <div className="text-lg font-bold text-emerald-700 capitalize">{live.mlDecision}</div>
           </div>
-          <div className="rounded-xl border p-3 bg-gradient-to-br from-yellow-50 to-yellow-100/50">
-            <div className="text-[10px] uppercase tracking-wider text-yellow-600 font-medium">Override</div>
-            <div className="text-lg font-bold text-yellow-700">{live.humanOverride ? 'MANUAL' : 'AUTO'}</div>
+          <div className={`rounded-xl border p-3 bg-gradient-to-br ${
+            live.controlAuthority === 'HUMAN' ? 'from-amber-50 to-amber-100/50' :
+            live.controlAuthority === 'FAILSAFE' ? 'from-red-50 to-red-100/50' :
+            'from-blue-50 to-blue-100/50'
+          }`}>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Control</div>
+            <div className={`text-lg font-bold ${
+              live.controlAuthority === 'HUMAN' ? 'text-amber-600' :
+              live.controlAuthority === 'FAILSAFE' ? 'text-red-600' :
+              'text-blue-600'
+            }`}>{live.controlAuthority === 'HUMAN' ? '🧑 HUMAN' : live.controlAuthority === 'FAILSAFE' ? '🛡️ SAFE' : '🤖 ML'}</div>
           </div>
           <div className={`rounded-xl border p-3 bg-gradient-to-br ${(live.riskIndex ?? 0) > 70 ? 'from-red-50 to-red-100/50' : (live.riskIndex ?? 0) > 40 ? 'from-amber-50 to-amber-100/50' : 'from-green-50 to-green-100/50'}`}>
             <div className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Risk</div>
@@ -174,7 +280,7 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
       )}
 
       {/* Main Control Grid */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2">
 
         {/* Fan Control */}
         <Card className={`relative overflow-hidden border-2 transition-all duration-300 ${fanIsOn ? 'border-emerald-400 shadow-lg shadow-emerald-100' : 'border-transparent hover:border-gray-200'}`}>
@@ -241,41 +347,46 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
           </CardContent>
         </Card>
 
-        {/* LED Control */}
+        {/* Batch Status Indicators (LEDs) */}
         <Card className="relative overflow-hidden border-2 border-transparent hover:border-gray-200 transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
                 <Lightbulb className="h-5 w-5" />
               </div>
-              Silo Lighting
+              Batch Status Indicators
             </CardTitle>
             <CardDescription>LED 2 (GPIO 14) · LED 3 (GPIO 12) · LED 4 (GPIO 25)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              { key: 'led2', label: 'LED 2 — Inspection', color: 'blue', pin: 14 },
-              { key: 'led3', label: 'LED 3 — Warning', color: 'amber', pin: 12 },
-              { key: 'led4', label: 'LED 4 — Status', color: 'green', pin: 25 }
-            ].map(({ key, label, color, pin }) => (
-              <div key={key} className="flex items-center justify-between p-3 rounded-lg border bg-white/50 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`h-3 w-3 rounded-full ${live?.[`${key}State` as keyof LiveTelemetry] ? `bg-${color}-400 shadow-lg shadow-${color}-200` : 'bg-gray-300'}`} />
-                  <div>
-                    <div className="text-sm font-medium">{label}</div>
-                    <div className="text-[10px] text-muted-foreground">GPIO {pin}</div>
+            {leds.map(({ key, label, description, colorDot, colorBg, colorText, pin }) => {
+              const isOn = !!live?.[`${key}State` as keyof LiveTelemetry]
+              return (
+                <div key={key} className="flex items-center justify-between p-3 rounded-lg border bg-white/50 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-3.5 w-3.5 rounded-full transition-all duration-300"
+                      style={{
+                        backgroundColor: isOn ? colorDot : '#D1D5DB',
+                        boxShadow: isOn ? `0 0 8px ${colorDot}80` : 'none'
+                      }}
+                    />
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: colorText }}>{label}</div>
+                      <div className="text-[10px] text-muted-foreground">GPIO {pin} — {description}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                      onClick={() => sendControl('set_value', 0, { led: key, ledState: true })}
+                    ><Zap className="h-3 w-3" /> On</Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-gray-200 hover:bg-gray-100"
+                      onClick={() => sendControl('set_value', 0, { led: key, ledState: false })}
+                    >Off</Button>
                   </div>
                 </div>
-                <div className="flex gap-1.5">
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-                    onClick={() => sendControl('set_value', 0, { led: key, ledState: true })}
-                  ><Zap className="h-3 w-3" /> On</Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-gray-200 hover:bg-gray-100"
-                    onClick={() => sendControl('set_value', 0, { led: key, ledState: false })}
-                  >Off</Button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
             <div className="flex gap-2 pt-1">
               <Button variant="outline" size="sm" className="flex-1 text-xs gap-1 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
                 onClick={() => {
@@ -294,51 +405,10 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             </div>
           </CardContent>
         </Card>
-
-        {/* Alarm Control */}
-        <Card className={`relative overflow-hidden border-2 transition-all duration-300 ${alarmIsOn ? 'border-red-400 shadow-lg shadow-red-100' : 'border-transparent hover:border-gray-200'}`}>
-          <div className={`absolute inset-0 transition-opacity duration-500 ${alarmIsOn ? 'opacity-100' : 'opacity-0'}`} style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(249,115,22,0.04) 100%)' }} />
-          <CardHeader className="relative">
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <div className={`p-2 rounded-lg ${alarmIsOn ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-500'}`}>
-                  {alarmIsOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-                </div>
-                Audible Alarm
-              </span>
-              <Badge variant={alarmIsOn ? 'destructive' : 'secondary'}>
-                {alarmIsOn ? '🔴 ACTIVE' : 'Silent'}
-              </Badge>
-            </CardTitle>
-            <CardDescription>Buzzer on GPIO 4 — alert staff of dangerous grain conditions</CardDescription>
-          </CardHeader>
-          <CardContent className="relative space-y-3">
-            <div className="flex gap-2">
-              <Button
-                className="flex-1 gap-1.5 bg-red-600 hover:bg-red-700"
-                disabled={sending === 'alarm_on'}
-                onClick={() => sendControl('alarm_on')}
-              >
-                <Volume2 className="h-4 w-4" /> Trigger Alarm
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1 gap-1.5 border-gray-200"
-                disabled={sending === 'alarm_off'}
-                onClick={() => sendControl('alarm_off')}
-              >
-                <VolumeX className="h-4 w-4" /> Silence
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              The alarm will sound continuously until silenced. Use for emergency grain safety alerts, pest detection, or unauthorized access warnings.
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Fan Status</CardTitle>
@@ -354,7 +424,7 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">LED Outputs</CardTitle>
+            <CardTitle className="text-sm font-medium">Batch Indicators</CardTitle>
             <Lightbulb className="h-4 w-4 text-amber-600" />
           </CardHeader>
           <CardContent>
@@ -363,21 +433,6 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             </div>
             <p className="text-xs text-muted-foreground">
               LEDs active
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Alarm</CardTitle>
-            <Volume2 className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${alarmIsOn ? 'text-red-600' : 'text-green-600'}`}>
-              {alarmIsOn ? 'ACTIVE' : 'Silent'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {alarmIsOn ? 'Buzzer sounding' : 'No active alarms'}
             </p>
           </CardContent>
         </Card>
@@ -405,10 +460,10 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center justify-between p-2.5 rounded-lg border">
-              <span className="text-muted-foreground">Current Mode</span>
-              <Badge variant={live?.humanOverride ? 'default' : 'outline'} className={live?.humanOverride ? 'bg-amber-500' : ''}>
-                {live?.humanOverride ? '🧑 Manual Override' : '🤖 Auto (ML)'}
+             <div className="flex items-center justify-between p-2.5 rounded-lg border">
+              <span className="text-muted-foreground">Active Mode</span>
+              <Badge variant='default' className={controlMode === 'human' ? 'bg-amber-500' : 'bg-blue-500'}>
+                {controlMode === 'human' ? '🧑 Human Expert' : '🤖 ML Auto'}
               </Badge>
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-lg border">
@@ -445,19 +500,19 @@ export default function ActuatorsPage({ params: _params }: { params: Promise<{ l
           <CardContent className="space-y-2 text-xs text-muted-foreground">
             <div className="flex items-start gap-2 p-2 rounded bg-blue-50 border border-blue-100">
               <CheckCircle className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
-              <span><strong className="text-blue-700">Lid opens before fan starts</strong> — The ESP32 state machine always opens the lid first, waits 3s, then starts the fan.</span>
+              <span><strong className="text-blue-700">Lid opens before fan starts</strong> — The ESP32 state machine always opens the lid first, waits 1.5s, then starts the fan.</span>
             </div>
             <div className="flex items-start gap-2 p-2 rounded bg-amber-50 border border-amber-100">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-              <span><strong className="text-amber-700">Manual override expires</strong> — After 10 minutes of inactivity, control returns to ML/Auto mode automatically.</span>
+              <span><strong className="text-amber-700">Explicit mode switching</strong> — Use the dropdown to switch between ML Auto and Human Expert. The selected mode stays active until you switch it.</span>
             </div>
             <div className="flex items-start gap-2 p-2 rounded bg-red-50 border border-red-100">
               <Shield className="h-3.5 w-3.5 text-red-500 mt-0.5 flex-shrink-0" />
-              <span><strong className="text-red-700">Guardrails enforced</strong> — Ventilation is blocked if ambient RH &gt; 80%, dew point gap &lt; 1°C, or rainfall detected. The fan command will be ignored by the ESP32.</span>
+              <span><strong className="text-red-700">Guardrails enforced</strong> — Ventilation is blocked if ambient RH &gt; 80%, dew point gap &lt; 1°C, or rainfall detected.</span>
             </div>
             <div className="flex items-start gap-2 p-2 rounded bg-emerald-50 border border-emerald-100">
               <ThermometerSun className="h-3.5 w-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
-              <span><strong className="text-emerald-700">Min run time</strong> — Fan runs for at least 15 seconds before it can be stopped to prevent short-cycling and protect the motor.</span>
+              <span><strong className="text-emerald-700">LED indicators</strong> — Yellow = Risky batch, Green = Good batch, Red = Spoiled/critical batch.</span>
             </div>
           </CardContent>
         </Card>

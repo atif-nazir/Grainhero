@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       const data = await response.json()
       return NextResponse.json(data, { status: response.status })
     } catch {
-      const altUrl = fullUrl.replace('http://localhost:5000', 'http://10.10.20.89:5000')
+      const altUrl = fullUrl.replace('http://localhost:5000', 'http://192.168.100.229:5000')
       const response2 = await fetch(altUrl, {
         method: 'GET',
         headers,
