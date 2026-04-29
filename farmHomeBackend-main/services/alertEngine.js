@@ -15,7 +15,6 @@ class AlertEngine {
      */
     static async createAlert({
         admin_id,
-        admin_id,
         silo_id = null,
         batch_id = null,
         title,

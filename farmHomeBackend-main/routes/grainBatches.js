@@ -5,6 +5,7 @@ const Silo = require("../models/Silo");
 const { auth } = require("../middleware/auth");
 const {
   requirePermission,
+  requireAdminAccess,
 } = require("../middleware/permission");
 const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const { body, validationResult, param, query } = require("express-validator");
@@ -903,7 +904,7 @@ router.post(
       }
 
       // Ensure admin_id is correctly set (for admin users, it's their own _id; for managers/technicians, it's their admin_id)
-      const adminId = req.user.admin_id || req.user._id;
+      // adminId already declared
 
       const buyerQuery = {
         admin_id: adminId,

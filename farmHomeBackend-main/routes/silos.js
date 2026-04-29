@@ -4,6 +4,7 @@ const { body, validationResult } = require("express-validator");
 const { auth } = require("../middleware/auth");
 const {
   requirePermission,
+  requireAdminAccess,
 } = require("../middleware/permission");
 const { requireWarehouseAccess, getWarehouseFilter } = require("../middleware/warehouseAccess");
 const Silo = require("../models/Silo");

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permission');
+const { requirePermission, requireAdminAccess } = require('../middleware/permission');
 const { spawn } = require('child_process');
 const path = require('path');
 const riceDataService = require('../services/riceDataService');

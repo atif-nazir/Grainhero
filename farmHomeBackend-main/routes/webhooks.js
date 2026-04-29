@@ -326,7 +326,9 @@ router.post("/", (request, response) => {
                   created_by: user._id,
                 });
                 await subscription.save();
-              // Don't fail the webhook if subscription creation fails, but log it
+              }
+            } catch (subError) {
+              console.error("Subscription update/creation failed:", subError.message);
             }
 
             // Send payment confirmation email
