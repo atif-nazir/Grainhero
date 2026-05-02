@@ -54,7 +54,19 @@ const notificationSchema = new mongoose.Schema({
 
     // Email/SMS delivery status
     email_sent: { type: Boolean, default: false },
-    sms_sent: { type: Boolean, default: false }
+    sms_sent: { type: Boolean, default: false },
+
+    // Push notification delivery status
+    push: {
+        enabled: { type: Boolean, default: false },
+        sent: { type: Boolean, default: false },
+        sent_at: Date,
+        delivery_status: {
+            type: String,
+            enum: ['pending', 'sent', 'failed', 'expired'],
+            default: 'pending'
+        }
+    }
 
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -64,6 +76,7 @@ const notificationSchema = new mongoose.Schema({
 // Indexes
 notificationSchema.index({ recipient_id: 1, read: 1, created_at: -1 });
 notificationSchema.index({ admin_id: 1, category: 1 });
+notificationSchema.index({ 'push.delivery_status': 1, recipient_id: 1 });
 
 // TTL: auto-delete after 90 days
 notificationSchema.index({ created_at: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });

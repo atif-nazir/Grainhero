@@ -168,6 +168,7 @@ function PlanProvider({ children }: { children: React.ReactNode }) {
 }
 
 import { api } from "@/lib/api"
+import { initializePushNotifications } from "@/lib/push-notifications"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -183,6 +184,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
     setUser(parsedUser)
     setIsLoading(false)
+
+    // Initialize push notifications
+    initializePushNotifications().catch((error) => {
+      console.error('[App] Failed to initialize push notifications:', error);
+    });
 
     // Listen for user updates from other components (e.g., PlansPage)
     const handleUserUpdate = (e: Event) => {

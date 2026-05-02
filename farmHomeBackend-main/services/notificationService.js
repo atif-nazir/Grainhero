@@ -1,6 +1,8 @@
 const NotificationModel = require('../models/Notification');
 const User = require('../models/User');
+const UserPushSubscription = require('../models/UserPushSubscription');
 const sendEmail = require('../utils/emailHelper');
+const pushAdapter = require('./pushNotificationAdapter');
 
 /**
  * Notification Service
@@ -198,6 +200,160 @@ class NotificationService {
             action_url: `/activity-logs`,
             channels: { in_app: true, email: false, sms: false }
         });
+    }
+
+    // ====== Push Notification Methods ======
+
+    /**
+     * Send push notifications to a user
+     */
+    static async sendPushNotification({
+        notification_id,
+        recipient_id,
+        title,
+        message,
+        category = 'system',
+        action_url = '/'
+    }) {
+        try {
+            // Get user's active push subscriptions
+            const subscriptions = await UserPushSubscription.find({
+                user_id: recipient_id,
+                is_active: true,
+                'preferences.push_enabled': true,
+                'preferences.categories.' + category: true,
+                marked_invalid: false
+            });
+
+            if (subscriptions.length === 0) {
+                console.log(`[Push] No active subscriptions for user ${recipient_id}`);
+                return [];
+            }
+
+            const results = [];
+
+            for (const sub of subscriptions) {
+                // Check quiet hours
+                if (this._isInQuietHours(sub.preferences)) {
+                    console.log(`[Push] User ${recipient_id} is in quiet hours, skipping push`);
+                    continue;
+                }
+
+                try {
+                    const result = await pushAdapter.sendPush({
+                        subscription: sub.subscription,
+                        title,
+                        message,
+                        tag: category,
+                        data: {
+                            category,
+                            notification_id: notification_id?.toString()
+                        },
+                        action_url
+                    });
+
+                    if (result.success) {
+                        // Update notification push status
+                        if (notification_id) {
+                            await NotificationModel.updateOne(
+                                { _id: notification_id },
+                                {
+                                    'push.enabled': true,
+                                    'push.sent': true,
+                                    'push.sent_at': new Date(),
+                                    'push.delivery_status': 'sent'
+                                }
+                            );
+                        }
+
+                        sub.last_used = new Date();
+                        sub.failed_attempts = 0;
+                        await sub.save();
+
+                        results.push({ success: true, subscription_id: sub._id });
+                    } else {
+                        // Handle failed push
+                        sub.failed_attempts += 1;
+
+                        if (result.code === 'SUBSCRIPTION_EXPIRED' || sub.failed_attempts > 5) {
+                            sub.marked_invalid = true;
+                            sub.is_active = false;
+                        }
+
+                        await sub.save();
+
+                        if (notification_id) {
+                            await NotificationModel.updateOne(
+                                { _id: notification_id },
+                                {
+                                    'push.delivery_status': 'failed'
+                                }
+                            );
+                        }
+
+                        results.push({
+                            success: false,
+                            subscription_id: sub._id,
+                            error: result.error
+                        });
+                    }
+                } catch (error) {
+                    console.error(`[Push] Error sending to subscription ${sub._id}:`, error.message);
+                    results.push({
+                        success: false,
+                        subscription_id: sub._id,
+                        error: error.message
+                    });
+                }
+            }
+
+            return results;
+        } catch (error) {
+            console.error('[Push] Error in sendPushNotification:', error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Check if user is in quiet hours
+     */
+    static _isInQuietHours(preferences) {
+        if (!preferences.quiet_hours_enabled) return false;
+
+        try {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: preferences.quiet_hours_timezone || 'UTC'
+            });
+
+            const [startHour, startMin] = preferences.quiet_hours_start.split(':').map(Number);
+            const [endHour, endMin] = preferences.quiet_hours_end.split(':').map(Number);
+            const [currentHour, currentMin] = timeStr.split(':').map(Number);
+
+            const startMinutes = startHour * 60 + startMin;
+            const endMinutes = endHour * 60 + endMin;
+            const currentMinutes = currentHour * 60 + currentMin;
+
+            if (startMinutes <= endMinutes) {
+                return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+            } else {
+                // Quiet hours span midnight
+                return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+            }
+        } catch (error) {
+            console.error('[Push] Error checking quiet hours:', error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Get push notification provider info
+     */
+    static getPushProviderInfo() {
+        return pushAdapter.getProviderInfo();
     }
 }
 
